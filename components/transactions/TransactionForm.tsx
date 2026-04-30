@@ -30,6 +30,8 @@ export default function TransactionForm({
       category,
       amount: Number(amount),
       is_fixed: false,
+      is_provision: false,
+      card: type === 'expense' ? 'c6' : null,
     });
 
     setCategory('');

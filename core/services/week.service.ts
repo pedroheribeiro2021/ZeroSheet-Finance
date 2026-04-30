@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { DBWeek } from '@/core/types/database';
+import { DBWeek } from '../models/mappers';
 
 export async function getWeeks(monthId: string) {
   const { data, error } = await supabase
