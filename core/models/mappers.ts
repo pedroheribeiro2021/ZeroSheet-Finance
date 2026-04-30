@@ -1,20 +1,30 @@
-import { DBTransaction, DBWeek } from '../types/database';
-import { Transaction, Week } from '../types/finance';
+import { DBTransaction } from '../types/database';
+import { Transaction } from '../types/finance';
 
 export function mapTransaction(db: DBTransaction): Transaction {
   return {
     id: db.id,
+    monthId: db.month_id,
     type: db.type,
     category: db.category,
-    amount: Number(db.amount),
+    amount: db.amount,
+
     isFixed: db.is_fixed,
+    isProvision: db.is_provision,
+    card: db.card,
   };
 }
 
-export function mapWeek(db: DBWeek): Week {
+export type DBWeek = {
+  id: string;
+  month_id: string;
+  week_number: number;
+};
+
+export function mapWeek(db: DBWeek) {
   return {
+    id: db.id,
+    monthId: db.month_id,
     weekNumber: db.week_number,
-    planned: Number(db.planned),
-    actual: Number(db.actual),
   };
 }

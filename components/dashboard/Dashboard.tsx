@@ -54,15 +54,12 @@ export default function Dashboard() {
       <TransactionList transactions={transactions} />
 
       <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
-        <Card title="Receitas" value={`R$ ${summary.totalIncome}`} />
-        <Card title="Despesas Fixas" value={`R$ ${summary.fixedExpenses}`} />
-        <Card
-          title="Despesas Variáveis"
-          value={`R$ ${summary.variableExpenses}`}
-        />
-        <Card title="Saldo (C6)" value={`R$ ${summary.c6}`} />
+        <Card title="Entradas" value={`R$ ${summary.totalIncome}`} />
+        <Card title="Custos Fixos" value={`R$ ${summary.fixedCosts}`} />
+        <Card title="Gastos Cartão" value={`R$ ${summary.cardSpending}`} />
+        <Card title="Provisões" value={`R$ ${summary.provisions}`} />
+        <Card title="Total do Mês" value={`R$ ${summary.total}`} />
         <Card title="Orçamento Semanal" value={`R$ ${summary.weeklyBudget}`} />
-        <Card title="Restante" value={`R$ ${summary.remaining}`} />
       </div>
     </div>
   );

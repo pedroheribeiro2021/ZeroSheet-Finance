@@ -1,6 +1,5 @@
 import { supabase } from '@/lib/supabase';
 import { DBMonth } from '@/core/types/database';
-
 export async function createMonth(month: number, year: number) {
   const { data, error } = await supabase
     .from('months')
