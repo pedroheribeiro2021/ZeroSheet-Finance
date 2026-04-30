@@ -63,6 +63,8 @@ describe('financial engine v2', () => {
 
     expect(result.totalIncome).toBe(4200);
     expect(result.fixedCosts).toBe(100);
+    expect(result.nubankSpending).toBe(500);
+    expect(result.c6Spending).toBe(0);
     expect(result.cardSpending).toBe(500);
     expect(result.provisions).toBe(300);
 
