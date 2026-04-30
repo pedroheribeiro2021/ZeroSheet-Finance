@@ -1,64 +1,58 @@
 'use client';
 
 import { useEffect } from 'react';
+import { createMonth, getMonths } from '@/core/services/month.service';
+import {
+  createTransaction,
+  getTransactions,
+} from '@/core/services/transaction.service';
 import { calculateSummary } from '@/core/engine/calculations';
-import { Transaction, Week } from '@/core/types/finance';
+import { mapTransaction } from '@/core/models/mappers';
 
 export default function Home() {
   useEffect(() => {
-    const transactions: Transaction[] = [
-      {
-        id: '1',
-        type: 'income',
-        category: 'salario',
-        amount: 4000,
-        isFixed: false,
-      },
-      {
-        id: '2',
-        type: 'income',
-        category: 'extra',
-        amount: 500,
-        isFixed: false,
-      },
+    const run = async () => {
+      try {
+        // 1. Criar mês
+        const month = await createMonth(4, 2026);
 
-      {
-        id: '3',
-        type: 'expense',
-        category: 'nubank',
-        amount: 1000,
-        isFixed: true,
-      },
-      {
-        id: '4',
-        type: 'expense',
-        category: 'seguro',
-        amount: 200,
-        isFixed: true,
-      },
+        // 2. Criar transações
+        await createTransaction({
+          month_id: month.id,
+          type: 'income',
+          category: 'salary',
+          amount: 4000,
+          is_fixed: false,
+        });
 
-      {
-        id: '5',
-        type: 'expense',
-        category: 'gasolina',
-        amount: 400,
-        isFixed: false,
-      },
-    ];
+        await createTransaction({
+          month_id: month.id,
+          type: 'expense',
+          category: 'rent',
+          amount: 1500,
+          is_fixed: true,
+        });
 
-    const weeks: Week[] = [
-      { weekNumber: 1, planned: 0, actual: 200 },
-      { weekNumber: 2, planned: 0, actual: 300 },
-    ];
+        // 3. Buscar dados
+        const transactionsDB = await getTransactions(month.id);
 
-    const summary = calculateSummary(transactions, weeks);
+        const transactions = transactionsDB.map(mapTransaction);
 
-    console.log('SUMMARY:', summary);
+        // 4. Rodar engine
+        const summary = calculateSummary(transactions, []);
+
+        console.log('SUMMARY REAL:', summary);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    run();
   }, []);
 
   return (
     <main className="min-h-screen bg-black text-white flex items-center justify-center">
-      <h1>Engine funcionando</h1>
+      <h1>Database integrado</h1>
     </main>
   );
 }
