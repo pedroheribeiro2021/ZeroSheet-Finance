@@ -12,6 +12,7 @@ export default function TransactionForm({
   const [type, setType] = useState<'income' | 'expense'>('income');
   const [category, setCategory] = useState('');
   const [amount, setAmount] = useState('');
+  const [card, setCard] = useState<'c6' | 'nubank'>('c6');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,7 +32,7 @@ export default function TransactionForm({
       amount: Number(amount),
       is_fixed: false,
       is_provision: false,
-      card: type === 'expense' ? 'c6' : null,
+      card: type === 'expense' ? card : null,
     });
 
     setCategory('');
@@ -67,6 +68,15 @@ export default function TransactionForm({
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
       />
+
+      <select
+        className="w-full mb-2 p-2 bg-zinc-800 text-white rounded"
+        value={card}
+        onChange={(e) => setCard(e.target.value as any)}
+      >
+        <option value="c6">C6</option>
+        <option value="nubank">Nubank</option>
+      </select>
 
       <button className="w-full bg-blue-600 text-white p-2 rounded">
         Salvar

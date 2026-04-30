@@ -4,7 +4,8 @@ export function calculateSummary(transactions: Transaction[], weeks: unknown[]) 
   let totalIncome = 0;
 
   let fixedCosts = 0;
-  let cardSpending = 0;
+  let nubankSpending = 0;
+  let c6Spending = 0;
   let provisions = 0;
 
   for (const t of transactions) {
@@ -13,24 +14,28 @@ export function calculateSummary(transactions: Transaction[], weeks: unknown[]) 
       continue;
     }
 
-    // PROVISÃO (não gasto ainda)
     if (t.isProvision) {
       provisions += t.amount;
       continue;
     }
 
-    // CARTÃO
-    if (t.card === 'nubank' || t.card === 'c6') {
-      cardSpending += t.amount;
+    if (t.card === 'nubank') {
+      nubankSpending += t.amount;
       continue;
     }
 
-    // FIXOS
+    if (t.card === 'c6') {
+      c6Spending += t.amount;
+      continue;
+    }
+
     if (t.isFixed) {
       fixedCosts += t.amount;
       continue;
     }
   }
+
+  const cardSpending = nubankSpending + c6Spending;
 
   const total = totalIncome - fixedCosts - cardSpending - provisions;
 
@@ -39,7 +44,11 @@ export function calculateSummary(transactions: Transaction[], weeks: unknown[]) 
   return {
     totalIncome,
     fixedCosts,
+
+    nubankSpending,
+    c6Spending,
     cardSpending,
+
     provisions,
     total,
     weeklyBudget,

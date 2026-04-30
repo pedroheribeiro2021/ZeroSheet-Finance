@@ -55,10 +55,18 @@ export default function Dashboard() {
 
       <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
         <Card title="Entradas" value={`R$ ${summary.totalIncome}`} />
+
         <Card title="Custos Fixos" value={`R$ ${summary.fixedCosts}`} />
-        <Card title="Gastos Cartão" value={`R$ ${summary.cardSpending}`} />
+
+        <Card title="Nubank" value={`R$ ${summary.nubankSpending}`} />
+        <Card title="C6" value={`R$ ${summary.c6Spending}`} />
+
+        <Card title="Total Cartões" value={`R$ ${summary.cardSpending}`} />
+
         <Card title="Provisões" value={`R$ ${summary.provisions}`} />
+
         <Card title="Total do Mês" value={`R$ ${summary.total}`} />
+
         <Card title="Orçamento Semanal" value={`R$ ${summary.weeklyBudget}`} />
       </div>
     </div>
