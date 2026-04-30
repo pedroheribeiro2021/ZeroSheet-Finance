@@ -21,5 +21,10 @@ export type Transaction = {
 export type Week = {
   id: string;
   monthId: string;
-  weekNumber: number;
+
+  index: number; // semana 1,2,3...
+  budget: number;
+
+  spent: number;
+  remaining: number;
 };

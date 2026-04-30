@@ -12,9 +12,14 @@ import { getWeeks } from '@/core/services/week.service';
 
 import { mapTransaction, mapWeek } from '@/core/models/mappers';
 import { calculateSummary } from '@/core/engine/calculations';
+import { calculateWeeklySpending } from '@/core/engine/weekly';
 
-export default function Dashboard() {
-  const [summary, setSummary] = useState<any>(null);
+export default function Dashboard({
+  summary: summaryProp,
+  weeks: weeksProp,
+}: any) {
+  const [summary, setSummary] = useState<any>(summaryProp ?? null);
+  const [weeks, setWeeks] = useState<any[]>(weeksProp ?? []);
   const [transactions, setTransactions] = useState<any[]>([]);
 
   const load = async () => {
@@ -28,20 +33,24 @@ export default function Dashboard() {
       const weeksDB = await getWeeks(latestMonth.id);
 
       const transactionsMapped = transactionsDB.map(mapTransaction);
-      const weeks = weeksDB.map(mapWeek);
+      const mappedWeeks = weeksDB.map(mapWeek);
 
       setTransactions(transactionsMapped);
 
-      const result = calculateSummary(transactionsMapped, weeks);
+      const result = calculateSummary(transactionsMapped, mappedWeeks);
+      const weeksCalculated = calculateWeeklySpending(transactionsMapped, 4);
+
       setSummary(result);
+      setWeeks(weeksCalculated);
     } catch (err) {
       console.error(err);
     }
   };
 
   useEffect(() => {
+    if (summaryProp && weeksProp) return;
     load();
-  }, []);
+  }, [summaryProp, weeksProp]);
 
   if (!summary) {
     return <div className="text-white p-6">Carregando...</div>;
@@ -68,6 +77,29 @@ export default function Dashboard() {
         <Card title="Total do Mês" value={`R$ ${summary.total}`} />
 
         <Card title="Orçamento Semanal" value={`R$ ${summary.weeklyBudget}`} />
+      </div>
+
+      <div className="mt-6">
+        <h2 className="text-xl font-bold mb-2">Controle Semanal</h2>
+
+        <div className="grid grid-cols-2 gap-4">
+          {weeks.map((week: any) => (
+            <div key={week.id} className="bg-zinc-900 p-4 rounded">
+              <p className="font-bold">Semana {week.index}</p>
+
+              <p>Orçamento: R$ {week.budget.toFixed(2)}</p>
+              <p>Gasto: R$ {week.spent.toFixed(2)}</p>
+
+              <p
+                className={
+                  week.remaining < 0 ? 'text-red-500' : 'text-green-500'
+                }
+              >
+                Restante: R$ {week.remaining.toFixed(2)}
+              </p>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
