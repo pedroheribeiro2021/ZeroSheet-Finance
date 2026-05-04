@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { upsertCardSnapshot } from '@/core/services/cardSnapshot.service';
+import { parseCurrencyInput } from '@/core/utils/number';
 
 export default function CardSnapshotForm({
   monthId,
@@ -16,11 +17,11 @@ export default function CardSnapshotForm({
   const handleSave = async () => {
     try {
       if (nubank) {
-        await upsertCardSnapshot(monthId, 'nubank', Number(nubank));
+        await upsertCardSnapshot(monthId, 'nubank', parseCurrencyInput(nubank));
       }
 
       if (c6) {
-        await upsertCardSnapshot(monthId, 'c6', Number(c6));
+        await upsertCardSnapshot(monthId, 'c6', parseCurrencyInput(c6));
       }
 
       setNubank('');
