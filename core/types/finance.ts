@@ -4,18 +4,17 @@ export type Transaction = {
   id: string;
   monthId: string;
 
-  type: TransactionType;
+  type: 'income' | 'expense';
 
   category: string;
-
   amount: number;
 
-  // NOVO
-  isFixed: boolean; // água, luz, etc
-  isProvision: boolean; // mercado provisão, gasolina provisão
+  isFixed: boolean;
+  isProvision: boolean;
 
-  // NOVO (cartão)
-  card?: 'nubank' | 'c6' | null;
+  card?: 'c6' | 'nubank' | null;
+
+  createdAt: string; // 👈 ESSENCIAL
 };
 
 export type Week = {

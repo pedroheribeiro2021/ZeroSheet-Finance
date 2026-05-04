@@ -38,7 +38,7 @@ export default function Dashboard({
       setTransactions(transactionsMapped);
 
       const result = calculateSummary(transactionsMapped, mappedWeeks);
-      const weeksCalculated = calculateWeeklySpending(transactionsMapped, 4);
+      const weeksCalculated = calculateWeeklySpending(transactionsMapped);
 
       setSummary(result);
       setWeeks(weeksCalculated);
