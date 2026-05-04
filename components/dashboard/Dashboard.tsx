@@ -6,7 +6,7 @@ import Card from '@/components/ui/Card';
 import TransactionForm from '@/components/transactions/TransactionForm';
 import TransactionList from '@/components/transactions/TransactionList';
 
-import { getMonths } from '@/core/services/month.service';
+import { getMonths, createMonth } from '@/core/services/month.service';
 import { getTransactions } from '@/core/services/transaction.service';
 import {
   createWeeks,
@@ -16,7 +16,7 @@ import {
 
 import { mapTransaction, mapWeek } from '@/core/models/mappers';
 import { calculateSummary } from '@/core/engine/calculations';
-import { calculateWeeklySpending } from '@/core/engine/weekly';
+import { calculateWeekly } from '@/core/engine/weekly';
 import { getCardSnapshots } from '@/core/services/cardSnapshot.service';
 import CardSnapshotForm from '../cards/CardSnapshotForm';
 
@@ -31,8 +31,19 @@ export default function Dashboard({
 
   const load = async () => {
     try {
-      const months = await getMonths();
-      if (!months.length) return;
+      let months = await getMonths();
+
+      // 🔥 CRIA MÊS AUTOMATICAMENTE
+      if (!months.length) {
+        const now = new Date();
+
+        const newMonth = await createMonth(
+          now.getMonth() + 1,
+          now.getFullYear(),
+        );
+
+        months = [newMonth];
+      }
 
       const latestMonth = months[months.length - 1];
 
@@ -56,12 +67,25 @@ export default function Dashboard({
 
       let finalWeeks = mappedWeeks;
 
-      if (!mappedWeeks.length) {
-        const calculated = calculateWeeklySpending(transactionsMapped);
+      finalWeeks = calculateWeekly(
+        snapshots,
+        transactionsMapped,
+        result.total,
+        latestMonth.id,
+      );
 
-        await createWeeks(latestMonth.id, calculated);
+      // 🔥 fallback: cria semanas vazias se não houver nada
+      if (!finalWeeks.length) {
+        finalWeeks = Array.from({ length: 4 }).map((_, i) => ({
+          id: crypto.randomUUID(),
+          monthId: latestMonth.id,
+          index: i + 1,
+          budget: result.total / 4,
+          spent: 0,
+          remaining: result.total / 4,
+        }));
 
-        finalWeeks = calculated;
+        await createWeeks(latestMonth.id, finalWeeks);
       }
 
       setSummary(result);
@@ -72,18 +96,22 @@ export default function Dashboard({
   };
 
   useEffect(() => {
-    if (summaryProp && weeksProp) return;
     load();
-  }, [summaryProp, weeksProp]);
+  }, []);
 
-  // 🔥 trava render até tudo estar pronto
   if (!summary || !monthId) {
     return <div className="text-white p-6">Carregando...</div>;
   }
 
+  const formatCurrency = (value: number): string => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(value);
+  };
+
   return (
     <div className="p-6 grid gap-4">
-      {/* só renderiza com monthId válido */}
       <CardSnapshotForm monthId={monthId} onUpdated={load} />
 
       <TransactionForm onCreated={load} />
@@ -91,36 +119,42 @@ export default function Dashboard({
       <TransactionList transactions={transactions} />
 
       <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
-        <Card title="Entradas" value={`R$ ${summary.totalIncome}`} />
+        <Card title="Entradas" value={formatCurrency(summary.totalIncome)} />
 
-        <Card title="Custos Fixos" value={`R$ ${summary.fixedCosts}`} />
+        <Card title="Custos Fixos" value={formatCurrency(summary.fixedCosts)} />
 
-        <Card title="Nubank" value={`R$ ${summary.nubankSpending}`} />
-        <Card title="C6" value={`R$ ${summary.c6Spending}`} />
+        <Card title="Nubank" value={formatCurrency(summary.nubankSpending)} />
+        <Card title="C6" value={formatCurrency(summary.c6Spending)} />
 
-        <Card title="Total Cartões" value={`R$ ${summary.cardSpending}`} />
+        <Card
+          title="Total Cartões"
+          value={formatCurrency(summary.cardSpending)}
+        />
 
         <Card
           title="Planejado (Provisões)"
-          value={`R$ ${summary.provisionPlanned}`}
+          value={formatCurrency(summary.provisionPlanned)}
         />
 
         <Card
           title="Gasto Real (Provisões)"
-          value={`R$ ${summary.provisionUsed}`}
+          value={formatCurrency(summary.provisionUsed)}
         />
 
         <Card
           title="Diferença"
-          value={`R$ ${summary.provisionDiff}`}
+          value={formatCurrency(summary.provisionDiff)}
           className={
             summary.provisionDiff < 0 ? 'border-red-500' : 'border-green-500'
           }
         />
 
-        <Card title="Total do Mês" value={`R$ ${summary.total}`} />
+        <Card title="Total do Mês" value={formatCurrency(summary.total)} />
 
-        <Card title="Orçamento Semanal" value={`R$ ${summary.weeklyBudget}`} />
+        <Card
+          title="Orçamento Semanal"
+          value={formatCurrency(summary.weeklyBudget)}
+        />
       </div>
 
       <div className="mt-6">
@@ -131,30 +165,15 @@ export default function Dashboard({
             <div key={week.id} className="bg-zinc-900 p-4 rounded">
               <p className="font-bold">Semana {week.index}</p>
 
-              <input
-                type="number"
-                value={week.budget}
-                onChange={async (e) => {
-                  const newBudget = Number(e.target.value);
-
-                  await updateWeek(week.id, {
-                    budget: newBudget,
-                    remaining: newBudget - week.spent,
-                  });
-
-                  load();
-                }}
-                className="w-full bg-zinc-800 text-white p-1 rounded"
-              />
-
-              <p>Gasto: R$ {week.spent.toFixed(2)}</p>
+              <p>Orçamento: {formatCurrency(week.budget)}</p>
+              <p>Gasto: {formatCurrency(week.spent)}</p>
 
               <p
                 className={
                   week.remaining < 0 ? 'text-red-500' : 'text-green-500'
                 }
               >
-                Restante: R$ {week.remaining.toFixed(2)}
+                Restante: {formatCurrency(week.remaining)}
               </p>
             </div>
           ))}

@@ -1,4 +1,5 @@
 import { Transaction, Week } from '../types/finance';
+import { toCurrency } from '../utils/number';
 
 export function calculateSummary(
   transactions: Transaction[],
@@ -71,9 +72,12 @@ export function calculateSummary(
 
   const provisionDiff = provisionPlanned - provisionUsed;
 
-  const total = totalIncome - fixedCosts - cardSpending - provisionPlanned;
+  const total = toCurrency(
+    totalIncome - fixedCosts - cardSpending - provisionPlanned,
+  );
 
-  const weeklyBudget = weeks.length > 0 ? total / weeks.length : total;
+  const weeklyBudget =
+    weeks.length > 0 ? toCurrency(total / weeks.length) : total;
 
   return {
     totalIncome,
