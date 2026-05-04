@@ -1,13 +1,16 @@
 type Props = {
   title: string;
-  value: string | number;
+  value: string;
+  className?: string;
 };
 
-export default function Card({ title, value }: Props) {
+export default function Card({ title, value, className }: Props) {
   return (
-    <div className="bg-zinc-900 p-4 rounded-2xl shadow-md w-full">
+    <div
+      className={`bg-zinc-900 p-4 rounded border border-zinc-800 ${className ?? ''}`}
+    >
       <p className="text-sm text-zinc-400">{title}</p>
-      <h2 className="text-2xl font-bold text-white mt-2">{value}</h2>
+      <p className="text-xl font-bold text-white">{value}</p>
     </div>
   );
 }

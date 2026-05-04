@@ -4,9 +4,12 @@ export function calculateSummary(transactions: Transaction[], weeks: unknown[]) 
   let totalIncome = 0;
 
   let fixedCosts = 0;
+
   let nubankSpending = 0;
   let c6Spending = 0;
-  let provisions = 0;
+
+  let provisionPlanned = 0;
+  let provisionUsed = 0;
 
   for (const t of transactions) {
     if (t.type === 'income') {
@@ -14,11 +17,18 @@ export function calculateSummary(transactions: Transaction[], weeks: unknown[]) 
       continue;
     }
 
+    // 🔵 PROVISÃO (planejado)
     if (t.isProvision) {
-      provisions += t.amount;
+      provisionPlanned += t.amount;
       continue;
     }
 
+    // 🔴 GASTO REAL (mercado/gasolina etc)
+    if (!t.isFixed && !t.isProvision && t.type === 'expense') {
+      provisionUsed += t.amount;
+    }
+
+    // cartões separados
     if (t.card === 'nubank') {
       nubankSpending += t.amount;
       continue;
@@ -29,6 +39,7 @@ export function calculateSummary(transactions: Transaction[], weeks: unknown[]) 
       continue;
     }
 
+    // fixos
     if (t.isFixed) {
       fixedCosts += t.amount;
       continue;
@@ -37,7 +48,9 @@ export function calculateSummary(transactions: Transaction[], weeks: unknown[]) 
 
   const cardSpending = nubankSpending + c6Spending;
 
-  const total = totalIncome - fixedCosts - cardSpending - provisions;
+  const provisionDiff = provisionPlanned - provisionUsed;
+
+  const total = totalIncome - fixedCosts - cardSpending - provisionPlanned;
 
   const weeklyBudget = weeks.length > 0 ? total / weeks.length : total;
 
@@ -49,7 +62,10 @@ export function calculateSummary(transactions: Transaction[], weeks: unknown[]) 
     c6Spending,
     cardSpending,
 
-    provisions,
+    provisionPlanned,
+    provisionUsed,
+    provisionDiff,
+
     total,
     weeklyBudget,
   };

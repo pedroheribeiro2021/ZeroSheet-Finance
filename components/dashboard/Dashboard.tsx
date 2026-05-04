@@ -72,6 +72,23 @@ export default function Dashboard({
 
         <Card title="Total Cartões" value={`R$ ${summary.cardSpending}`} />
 
+        <Card
+          title="Planejado (Provisões)"
+          value={`R$ ${summary.provisionPlanned}`}
+        />
+
+        <Card
+          title="Gasto Real (Provisões)"
+          value={`R$ ${summary.provisionUsed}`}
+        />
+
+        <Card
+          title="Diferença"
+          value={`R$ ${summary.provisionDiff}`}
+          className={
+            summary.provisionDiff < 0 ? 'border-red-500' : 'border-green-500'
+          }
+        />
         <Card title="Provisões" value={`R$ ${summary.provisions}`} />
 
         <Card title="Total do Mês" value={`R$ ${summary.total}`} />

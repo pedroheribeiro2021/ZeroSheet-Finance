@@ -13,6 +13,7 @@ export default function TransactionForm({
   const [category, setCategory] = useState('');
   const [amount, setAmount] = useState('');
   const [card, setCard] = useState<'c6' | 'nubank'>('c6');
+  const [isProvision, setIsProvision] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,9 +31,11 @@ export default function TransactionForm({
       type,
       category,
       amount: Number(amount),
+
       is_fixed: false,
-      is_provision: false,
-      card: type === 'expense' ? card : null,
+      is_provision: isProvision,
+
+      card: type === 'expense' && !isProvision ? card : null,
     });
 
     setCategory('');
@@ -60,6 +63,15 @@ export default function TransactionForm({
         value={category}
         onChange={(e) => setCategory(e.target.value)}
       />
+
+      <label className="flex items-center gap-2 text-white">
+        <input
+          type="checkbox"
+          checked={isProvision}
+          onChange={(e) => setIsProvision(e.target.checked)}
+        />
+        Provisão (planejamento)
+      </label>
 
       <input
         className="w-full mb-2 p-2 bg-zinc-800 text-white rounded"
