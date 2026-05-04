@@ -8,11 +8,17 @@ import TransactionList from '@/components/transactions/TransactionList';
 
 import { getMonths } from '@/core/services/month.service';
 import { getTransactions } from '@/core/services/transaction.service';
-import { createWeeks, getWeeks, updateWeek } from '@/core/services/week.service';
+import {
+  createWeeks,
+  getWeeks,
+  updateWeek,
+} from '@/core/services/week.service';
 
 import { mapTransaction, mapWeek } from '@/core/models/mappers';
 import { calculateSummary } from '@/core/engine/calculations';
 import { calculateWeeklySpending } from '@/core/engine/weekly';
+import { getCardSnapshots } from '@/core/services/cardSnapshot.service';
+import CardSnapshotForm from '../cards/CardSnapshotForm';
 
 export default function Dashboard({
   summary: summaryProp,
@@ -21,6 +27,7 @@ export default function Dashboard({
   const [summary, setSummary] = useState<any>(summaryProp ?? null);
   const [weeks, setWeeks] = useState<any[]>(weeksProp ?? []);
   const [transactions, setTransactions] = useState<any[]>([]);
+  const [monthId, setMonthId] = useState<string | null>(null);
 
   const load = async () => {
     try {
@@ -28,6 +35,10 @@ export default function Dashboard({
       if (!months.length) return;
 
       const latestMonth = months[months.length - 1];
+
+      setMonthId(latestMonth.id);
+
+      const snapshots = await getCardSnapshots(latestMonth.id);
 
       const transactionsDB = await getTransactions(latestMonth.id);
       const weeksDB = await getWeeks(latestMonth.id);
@@ -37,7 +48,12 @@ export default function Dashboard({
 
       setTransactions(transactionsMapped);
 
-      const result = calculateSummary(transactionsMapped, mappedWeeks);
+      const result = calculateSummary(
+        transactionsMapped,
+        mappedWeeks,
+        snapshots,
+      );
+
       let finalWeeks = mappedWeeks;
 
       if (!mappedWeeks.length) {
@@ -60,12 +76,16 @@ export default function Dashboard({
     load();
   }, [summaryProp, weeksProp]);
 
-  if (!summary) {
+  // 🔥 trava render até tudo estar pronto
+  if (!summary || !monthId) {
     return <div className="text-white p-6">Carregando...</div>;
   }
 
   return (
     <div className="p-6 grid gap-4">
+      {/* só renderiza com monthId válido */}
+      <CardSnapshotForm monthId={monthId} onUpdated={load} />
+
       <TransactionForm onCreated={load} />
 
       <TransactionList transactions={transactions} />
@@ -97,7 +117,6 @@ export default function Dashboard({
             summary.provisionDiff < 0 ? 'border-red-500' : 'border-green-500'
           }
         />
-        <Card title="Provisões" value={`R$ ${summary.provisions}`} />
 
         <Card title="Total do Mês" value={`R$ ${summary.total}`} />
 
@@ -127,6 +146,7 @@ export default function Dashboard({
                 }}
                 className="w-full bg-zinc-800 text-white p-1 rounded"
               />
+
               <p>Gasto: R$ {week.spent.toFixed(2)}</p>
 
               <p
