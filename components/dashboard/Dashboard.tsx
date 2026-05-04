@@ -8,7 +8,7 @@ import TransactionList from '@/components/transactions/TransactionList';
 
 import { getMonths } from '@/core/services/month.service';
 import { getTransactions } from '@/core/services/transaction.service';
-import { getWeeks } from '@/core/services/week.service';
+import { createWeeks, getWeeks, updateWeek } from '@/core/services/week.service';
 
 import { mapTransaction, mapWeek } from '@/core/models/mappers';
 import { calculateSummary } from '@/core/engine/calculations';
@@ -38,10 +38,18 @@ export default function Dashboard({
       setTransactions(transactionsMapped);
 
       const result = calculateSummary(transactionsMapped, mappedWeeks);
-      const weeksCalculated = calculateWeeklySpending(transactionsMapped);
+      let finalWeeks = mappedWeeks;
+
+      if (!mappedWeeks.length) {
+        const calculated = calculateWeeklySpending(transactionsMapped);
+
+        await createWeeks(latestMonth.id, calculated);
+
+        finalWeeks = calculated;
+      }
 
       setSummary(result);
-      setWeeks(weeksCalculated);
+      setWeeks(finalWeeks);
     } catch (err) {
       console.error(err);
     }
@@ -104,7 +112,21 @@ export default function Dashboard({
             <div key={week.id} className="bg-zinc-900 p-4 rounded">
               <p className="font-bold">Semana {week.index}</p>
 
-              <p>Orçamento: R$ {week.budget.toFixed(2)}</p>
+              <input
+                type="number"
+                value={week.budget}
+                onChange={async (e) => {
+                  const newBudget = Number(e.target.value);
+
+                  await updateWeek(week.id, {
+                    budget: newBudget,
+                    remaining: newBudget - week.spent,
+                  });
+
+                  load();
+                }}
+                className="w-full bg-zinc-800 text-white p-1 rounded"
+              />
               <p>Gasto: R$ {week.spent.toFixed(2)}</p>
 
               <p
