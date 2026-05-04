@@ -27,3 +27,12 @@ export type Week = {
   spent: number;
   remaining: number;
 };
+
+export type Card = 'nubank' | 'c6';
+
+export interface CardSnapshot {
+  id: string;
+  monthId: string;
+  card: Card;
+  amount: number;
+}
