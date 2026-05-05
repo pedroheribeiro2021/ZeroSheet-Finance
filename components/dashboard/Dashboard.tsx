@@ -114,7 +114,7 @@ export default function Dashboard({
     <div className="p-6 grid gap-4">
       <CardSnapshotForm monthId={monthId} onUpdated={load} />
 
-      <TransactionForm onCreated={load} />
+      <TransactionForm monthId={monthId} onCreated={load} />
 
       <TransactionList transactions={transactions} />
 
@@ -163,10 +163,10 @@ export default function Dashboard({
         <div className="grid grid-cols-2 gap-4">
           {weeks.map((week: any) => (
             <div key={week.id} className="bg-zinc-900 p-4 rounded">
-              <p className="font-bold">Semana {week.index}</p>
+              <p className="font-bold text-white">Semana {week.index}</p>
 
-              <p>Orçamento: {formatCurrency(week.budget)}</p>
-              <p>Gasto: {formatCurrency(week.spent)}</p>
+              <p className='text-zinc-400'>Orçamento: {formatCurrency(week.budget)}</p>
+              <p className='text-white'>Gasto: {formatCurrency(week.spent)}</p>
 
               <p
                 className={

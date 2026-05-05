@@ -21,7 +21,7 @@ export default function TransactionList({
   }
 
   return (
-    <div className="bg-zinc-900 p-4 rounded grid gap-2">
+    <div className="bg-zinc-900 p-4 rounded grid gap-2 text-white">
       <h2 className="font-bold mb-2">Transações</h2>
 
       {transactions.map((t) => (

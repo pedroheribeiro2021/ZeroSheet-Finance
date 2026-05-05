@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { createTransaction } from '@/core/services/transaction.service';
 import { parseCurrencyInput } from '@/core/utils/number';
 
-export default function TransactionForm({ onCreated }: any) {
+export default function TransactionForm({ onCreated, monthId }: any) {
   const [amount, setAmount] = useState('');
   const [type, setType] = useState<'income' | 'expense'>('expense');
   const [category, setCategory] = useState('');
@@ -15,17 +15,22 @@ export default function TransactionForm({ onCreated }: any) {
 
   const handleSubmit = async () => {
     try {
+      if (!monthId) {
+        alert('Erro: mês não carregado');
+        return;
+      }
+
       const parsedAmount = parseCurrencyInput(amount);
 
       await createTransaction({
+        month_id: monthId, // ✅ CORREÇÃO PRINCIPAL
         amount: parsedAmount,
         type,
         category,
         is_fixed: isFixed,
         is_recurring: isRecurring,
         is_provision: isProvision,
-        month_id: '',
-        card: null
+        card: null,
       });
 
       // reset
@@ -42,7 +47,7 @@ export default function TransactionForm({ onCreated }: any) {
   };
 
   return (
-    <div className="bg-zinc-900 p-4 rounded grid gap-3">
+    <div className="bg-zinc-900 p-4 rounded grid gap-3 text-white">
       <h2 className="font-bold">Nova Transação</h2>
 
       <input
@@ -70,7 +75,7 @@ export default function TransactionForm({ onCreated }: any) {
         <option value="expense">Despesa</option>
       </select>
 
-      {/* ✅ FLAGS */}
+      {/* FLAGS */}
       <div className="grid gap-2 text-sm">
         <label className="flex items-center gap-2">
           <input
