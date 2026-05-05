@@ -66,7 +66,9 @@ export async function copyRecurringTransactions(
 
   const { error: insertError } = await supabase
     .from('transactions')
-    .insert(payload);
+    .upsert(payload, {
+      onConflict: 'month_id,category',
+    });
 
   if (insertError) throw insertError;
 }
