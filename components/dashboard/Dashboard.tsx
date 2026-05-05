@@ -19,6 +19,8 @@ import { calculateSummary } from '@/core/engine/calculations';
 import { calculateWeekly } from '@/core/engine/weekly';
 import { getCardSnapshots } from '@/core/services/cardSnapshot.service';
 import CardSnapshotForm from '../cards/CardSnapshotForm';
+import { getInstallments } from '@/core/services/installment.service';
+import InstallmentForm from '../transactions/InstallmentForm';
 
 export default function Dashboard({
   summary: summaryProp,
@@ -57,12 +59,15 @@ export default function Dashboard({
       const transactionsMapped = transactionsDB.map(mapTransaction);
       const mappedWeeks = weeksDB.map(mapWeek);
 
+      const installments = await getInstallments();
+
       setTransactions(transactionsMapped);
 
       const result = calculateSummary(
         transactionsMapped,
         mappedWeeks,
         snapshots,
+        installments,
       );
 
       let finalWeeks = mappedWeeks;
@@ -115,7 +120,7 @@ export default function Dashboard({
       <CardSnapshotForm monthId={monthId} onUpdated={load} />
 
       <TransactionForm monthId={monthId} onCreated={load} />
-
+      <InstallmentForm onCreated={load} />
       <TransactionList transactions={transactions} onUpdated={load} />
 
       <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
