@@ -25,6 +25,7 @@ export function mapTransaction(db: DBTransaction): Transaction {
 
     isFixed: db.is_fixed,
     isProvision: db.is_provision,
+    isRecurring: db.is_recurring,
 
     card: db.card,
 

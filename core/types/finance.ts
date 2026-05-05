@@ -11,6 +11,7 @@ export type Transaction = {
 
   isFixed: boolean;
   isProvision: boolean;
+  isRecurring: boolean;
 
   card?: 'c6' | 'nubank' | null;
 

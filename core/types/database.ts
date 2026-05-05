@@ -9,9 +9,12 @@ export type DBTransaction = {
   amount: number;
 
   is_fixed: boolean;
+  is_provision: boolean;
+
+  // ✅ NOVOS CAMPOS
+  is_recurring: boolean;
 
   // 🔥 NOVOS CAMPOS
-  is_provision: boolean;
   card: 'nubank' | 'c6' | null;
 };
 
