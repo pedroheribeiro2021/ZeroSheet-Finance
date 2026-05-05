@@ -1,52 +1,71 @@
 'use client';
 
-import { Transaction } from '@/core/types/finance';
+import { useState } from 'react';
+import { deleteTransaction } from '@/core/services/transaction.service';
+import EditTransactionModal from '../modals/EditTransactionModal';
 
-export default function TransactionList({
-  transactions,
-}: {
-  transactions: Transaction[];
-}) {
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(value);
+export default function TransactionList({ transactions, onUpdated }: any) {
+  const [selected, setSelected] = useState<any>(null);
+
+  const handleDelete = async (id: string) => {
+    const confirmDelete = confirm('Deseja excluir essa transação?');
+
+    if (!confirmDelete) return;
+
+    try {
+      await deleteTransaction(id);
+      onUpdated?.();
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  if (!transactions.length) {
-    return (
-      <div className="text-zinc-400 text-sm">Nenhuma transação cadastrada</div>
-    );
-  }
-
   return (
-    <div className="bg-zinc-900 p-4 rounded grid gap-2 text-white">
-      <h2 className="font-bold mb-2">Transações</h2>
+    <div className="bg-zinc-900 p-4 rounded grid gap-2">
+      <h2 className="text-white font-bold">Transações</h2>
 
-      {transactions.map((t) => (
+      {transactions.map((t: any) => (
         <div
           key={t.id}
-          className="flex justify-between items-center bg-zinc-800 p-2 rounded"
+          className="bg-zinc-800 p-3 rounded flex justify-between items-center"
         >
-          <div className="flex flex-col">
-            <span className="font-medium">{t.category}</span>
+          <div className="text-white">
+            <p className="font-bold">
+              {t.category} - R$ {t.amount}
+            </p>
 
-            {/* ✅ FLAGS AQUI */}
-            <div className="flex gap-2 text-xs text-zinc-400">
-              {t.isFixed && <span>📌 Fixo</span>}
-              {t.isRecurring && <span>🔁 Recorrente</span>}
-              {t.isProvision && <span>📊 Provisão</span>}
+            <div className="text-xs flex gap-2">
+              {t.isFixed && <span>Fixo</span>}
+              {t.isRecurring && <span>🔁</span>}
+              {t.isProvision && <span>📊</span>}
             </div>
           </div>
 
-          <span
-            className={t.type === 'income' ? 'text-green-500' : 'text-red-500'}
-          >
-            {t.type === 'income' ? '+' : '-'} {formatCurrency(t.amount)}
-          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setSelected(t)}
+              className="bg-blue-600 px-2 py-1 rounded text-white text-xs"
+            >
+              Editar
+            </button>
+
+            <button
+              onClick={() => handleDelete(t.id)}
+              className="bg-red-600 px-2 py-1 rounded text-white text-xs"
+            >
+              Excluir
+            </button>
+          </div>
         </div>
       ))}
+
+      {selected && (
+        <EditTransactionModal
+          transaction={selected}
+          onClose={() => setSelected(null)}
+          onUpdated={onUpdated}
+        />
+      )}
     </div>
   );
 }

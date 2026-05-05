@@ -116,7 +116,7 @@ export default function Dashboard({
 
       <TransactionForm monthId={monthId} onCreated={load} />
 
-      <TransactionList transactions={transactions} />
+      <TransactionList transactions={transactions} onUpdated={load} />
 
       <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
         <Card title="Entradas" value={formatCurrency(summary.totalIncome)} />
@@ -165,8 +165,10 @@ export default function Dashboard({
             <div key={week.id} className="bg-zinc-900 p-4 rounded">
               <p className="font-bold text-white">Semana {week.index}</p>
 
-              <p className='text-zinc-400'>Orçamento: {formatCurrency(week.budget)}</p>
-              <p className='text-white'>Gasto: {formatCurrency(week.spent)}</p>
+              <p className="text-zinc-400">
+                Orçamento: {formatCurrency(week.budget)}
+              </p>
+              <p className="text-white">Gasto: {formatCurrency(week.spent)}</p>
 
               <p
                 className={
