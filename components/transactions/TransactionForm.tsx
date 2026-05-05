@@ -2,97 +2,112 @@
 
 import { useState } from 'react';
 import { createTransaction } from '@/core/services/transaction.service';
-import { getMonths } from '@/core/services/month.service';
+import { parseCurrencyInput } from '@/core/utils/number';
 
-export default function TransactionForm({
-  onCreated,
-}: {
-  onCreated: () => void;
-}) {
-  const [type, setType] = useState<'income' | 'expense'>('income');
-  const [category, setCategory] = useState('');
+export default function TransactionForm({ onCreated }: any) {
   const [amount, setAmount] = useState('');
-  const [card, setCard] = useState<'c6' | 'nubank'>('c6');
+  const [type, setType] = useState<'income' | 'expense'>('expense');
+  const [category, setCategory] = useState('');
+
+  const [isFixed, setIsFixed] = useState(false);
+  const [isRecurring, setIsRecurring] = useState(false);
   const [isProvision, setIsProvision] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
+    try {
+      const parsedAmount = parseCurrencyInput(amount);
 
-    const months = await getMonths();
-    const latestMonth = months[months.length - 1];
+      await createTransaction({
+        amount: parsedAmount,
+        type,
+        category,
+        is_fixed: isFixed,
+        is_recurring: isRecurring,
+        is_provision: isProvision,
+        month_id: '',
+        card: null
+      });
 
-    if (!latestMonth) {
-      alert('Crie um mês primeiro');
-      return;
+      // reset
+      setAmount('');
+      setCategory('');
+      setIsFixed(false);
+      setIsRecurring(false);
+      setIsProvision(false);
+
+      onCreated?.();
+    } catch (err) {
+      console.error(err);
     }
-
-    await createTransaction({
-      month_id: latestMonth.id,
-      type,
-      category,
-      amount: Number(amount),
-
-      is_fixed: false,
-      is_provision: isProvision,
-
-      card: type === 'expense' && !isProvision ? card : null,
-    });
-
-    setCategory('');
-    setAmount('');
-
-    onCreated();
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-zinc-900 p-4 rounded-2xl mb-4">
-      <h2 className="text-white font-bold mb-2">Nova Transação</h2>
+    <div className="bg-zinc-900 p-4 rounded grid gap-3">
+      <h2 className="font-bold">Nova Transação</h2>
+
+      <input
+        type="text"
+        placeholder="Valor (ex: 1000,50)"
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        className="bg-zinc-800 p-2 rounded"
+      />
+
+      <input
+        type="text"
+        placeholder="Categoria (ex: Mercado, Água...)"
+        value={category}
+        onChange={(e) => setCategory(e.target.value)}
+        className="bg-zinc-800 p-2 rounded"
+      />
 
       <select
-        className="w-full mb-2 p-2 bg-zinc-800 text-white rounded"
         value={type}
         onChange={(e) => setType(e.target.value as any)}
+        className="bg-zinc-800 p-2 rounded"
       >
-        <option value="income">Receita</option>
+        <option value="income">Entrada</option>
         <option value="expense">Despesa</option>
       </select>
 
-      <input
-        className="w-full mb-2 p-2 bg-zinc-800 text-white rounded"
-        placeholder="Categoria"
-        value={category}
-        onChange={(e) => setCategory(e.target.value)}
-      />
+      {/* ✅ FLAGS */}
+      <div className="grid gap-2 text-sm">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={isFixed}
+            onChange={(e) => setIsFixed(e.target.checked)}
+          />
+          Despesa fixa
+        </label>
 
-      <label className="flex items-center gap-2 text-white">
-        <input
-          type="checkbox"
-          checked={isProvision}
-          onChange={(e) => setIsProvision(e.target.checked)}
-        />
-        Provisão (planejamento)
-      </label>
+        {isFixed && (
+          <label className="flex items-center gap-2 ml-4">
+            <input
+              type="checkbox"
+              checked={isRecurring}
+              onChange={(e) => setIsRecurring(e.target.checked)}
+            />
+            Recorrente mensal
+          </label>
+        )}
 
-      <input
-        className="w-full mb-2 p-2 bg-zinc-800 text-white rounded"
-        placeholder="Valor"
-        type="number"
-        value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-      />
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={isProvision}
+            onChange={(e) => setIsProvision(e.target.checked)}
+          />
+          Provisão (planejamento)
+        </label>
+      </div>
 
-      <select
-        className="w-full mb-2 p-2 bg-zinc-800 text-white rounded"
-        value={card}
-        onChange={(e) => setCard(e.target.value as any)}
+      <button
+        onClick={handleSubmit}
+        className="bg-green-600 p-2 rounded hover:bg-green-700"
       >
-        <option value="c6">C6</option>
-        <option value="nubank">Nubank</option>
-      </select>
-
-      <button className="w-full bg-blue-600 text-white p-2 rounded">
         Salvar
       </button>
-    </form>
+    </div>
   );
 }
