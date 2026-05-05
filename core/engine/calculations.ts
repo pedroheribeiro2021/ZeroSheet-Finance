@@ -1,50 +1,46 @@
 import { Transaction, Week } from '../types/finance';
 import { toCurrency } from '../utils/number';
 
+type Snapshot = {
+  card: string;
+  amount: number;
+};
+
+type Installment = {
+  installment_amount: number;
+};
+
 export function calculateSummary(
   transactions: Transaction[],
   weeks: Week[],
-  snapshots?: { card: string; amount: number }[],
+  snapshots: Snapshot[] = [],
+  installments: Installment[] = [],
 ) {
   let totalIncome = 0;
-
   let fixedCosts = 0;
 
   let provisionPlanned = 0;
   let provisionUsed = 0;
 
-  // 🚫 NÃO somamos cartões aqui
   let nubankSpending = 0;
   let c6Spending = 0;
 
+  // ✅ PROCESSA TRANSAÇÕES
   for (const t of transactions) {
     if (t.type === 'income') {
       totalIncome += t.amount;
       continue;
     }
 
-    // 🔵 PROVISÃO (planejado)
+    // 🟣 PROVISÃO (planejado)
     if (t.isProvision) {
       provisionPlanned += t.amount;
       continue;
     }
 
-    // 🔴 GASTO REAL (mercado/gasolina etc)
+    // 🔴 GASTO REAL
     if (!t.isFixed && !t.isProvision && t.type === 'expense') {
       provisionUsed += t.amount;
-    }
-
-    // 🟣 CARTÕES (SÓ SE NÃO TIVER SNAPSHOT)
-    if (!snapshots || snapshots.length === 0) {
-      if (t.card === 'nubank') {
-        nubankSpending += t.amount;
-        continue;
-      }
-
-      if (t.card === 'c6') {
-        c6Spending += t.amount;
-        continue;
-      }
     }
 
     // ⚫ FIXOS
@@ -52,10 +48,21 @@ export function calculateSummary(
       fixedCosts += t.amount;
       continue;
     }
+
+    // 🟡 CARTÕES (fallback se não houver snapshot)
+    if (snapshots.length === 0) {
+      if (t.card === 'nubank') {
+        nubankSpending += t.amount;
+      }
+
+      if (t.card === 'c6') {
+        c6Spending += t.amount;
+      }
+    }
   }
 
-  // 🟡 SNAPSHOT SOBRESCREVE
-  if (snapshots && snapshots.length > 0) {
+  // ✅ SNAPSHOT SOBRESCREVE CARTÕES
+  if (snapshots.length > 0) {
     const nubankSnapshot = snapshots.find((s) => s.card === 'nubank');
     const c6Snapshot = snapshots.find((s) => s.card === 'c6');
 
@@ -70,14 +77,21 @@ export function calculateSummary(
 
   const cardSpending = nubankSpending + c6Spending;
 
-  const provisionDiff = provisionPlanned - provisionUsed;
-
-  const total = toCurrency(
-    totalIncome - fixedCosts - cardSpending - provisionPlanned,
+  // ✅ PARCELAS
+  const installmentSpending = installments.reduce(
+    (acc, i) => acc + (i.installment_amount || 0),
+    0,
   );
 
-  const weeklyBudget =
-    weeks.length > 0 ? toCurrency(total / weeks.length) : total;
+  // ✅ TOTAL FINAL (AGORA CORRETO)
+  const total =
+    totalIncome -
+    fixedCosts -
+    cardSpending -
+    provisionPlanned -
+    installmentSpending;
+
+  const weeklyBudget = weeks.length > 0 ? total / weeks.length : total;
 
   return {
     totalIncome,
@@ -89,9 +103,11 @@ export function calculateSummary(
 
     provisionPlanned,
     provisionUsed,
-    provisionDiff,
+    provisionDiff: provisionPlanned - provisionUsed,
 
-    total,
-    weeklyBudget,
+    installmentSpending,
+
+    total: toCurrency(total),
+    weeklyBudget: toCurrency(weeklyBudget),
   };
 }
