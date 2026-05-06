@@ -2,46 +2,69 @@
 
 import { deleteInstallment } from '@/core/services/installment.service';
 
-export default function InstallmentList({ installments, onUpdated }: any) {
-  const formatCurrency = (v: number) =>
-    new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(v);
+export default function InstallmentList({
+  installments,
+  months,
+  currentMonthId,
+  onUpdated,
+}: any) {
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteInstallment(id);
+      onUpdated?.();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const getInstallmentProgress = (installment: any) => {
+    const currentIndex = months.findIndex((m: any) => m.id === currentMonthId);
+
+    const startIndex = months.findIndex(
+      (m: any) => m.id === installment.start_month_id,
+    );
+
+    if (currentIndex === -1 || startIndex === -1) return null;
+
+    const currentInstallment = currentIndex - startIndex + 1;
+
+    return `${currentInstallment}/${installment.total_installments}`;
+  };
 
   return (
-    <div className="bg-zinc-900 p-4 rounded grid gap-3">
-      <h2 className="font-bold text-white">Parcelamentos</h2>
+    <div className="bg-zinc-900 p-4 rounded grid gap-2">
+      <h2 className="font-bold text-white">Parcelas</h2>
 
-      {installments.map((i: any) => (
-        <div
-          key={i.id}
-          className="bg-zinc-800 p-3 rounded flex justify-between items-center"
-        >
-          <div>
-            <p className="text-white font-bold">{i.name}</p>
+      {installments.map((i: any) => {
+        const progress = getInstallmentProgress(i);
 
-            <p className="text-sm text-zinc-400">
-              {formatCurrency(i.installment_amount)} • {i.current_installment}/
-              {i.total_installments}
-            </p>
-
-            <p className="text-xs text-zinc-500">
-              {i.card.toUpperCase()} {i.is_recurring && '🔁'}
-            </p>
-          </div>
-
-          <button
-            onClick={async () => {
-              await deleteInstallment(i.id);
-              onUpdated?.();
-            }}
-            className="text-red-400"
+        return (
+          <div
+            key={i.id}
+            className="flex justify-between items-center bg-zinc-800 p-2 rounded"
           >
-            Excluir
-          </button>
-        </div>
-      ))}
+            <div>
+              <p className="text-white font-medium">
+                {i.description}{' '}
+                {progress && (
+                  <span className="text-zinc-400 text-sm">({progress})</span>
+                )}
+              </p>
+
+              <p className="text-zinc-400 text-sm">
+                R$ {Number(i.installment_amount).toFixed(2)} • {i.card}
+              </p>
+            </div>
+
+            <button
+              onClick={() => handleDelete(i.id)}
+              className="text-red-500 hover:text-red-700 text-sm"
+            >
+              Remover
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }
