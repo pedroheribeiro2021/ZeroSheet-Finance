@@ -14,27 +14,26 @@ import { mapTransaction, mapWeek } from '@/core/models/mappers';
 import { calculateSummary } from '@/core/engine/calculations';
 import { calculateWeekly } from '@/core/engine/weekly';
 import { getCardSnapshots } from '@/core/services/cardSnapshot.service';
+
 import CardSnapshotForm from '../cards/CardSnapshotForm';
+
 import { getInstallments } from '@/core/services/installment.service';
 import InstallmentForm from '../installments/InstallmentForm';
 import InstallmentList from '../installments/InstallmentList';
 
-export default function Dashboard({
-  summary: summaryProp,
-  weeks: weeksProp,
-}: any) {
-  const [summary, setSummary] = useState<any>(summaryProp ?? null);
-  const [weeks, setWeeks] = useState<any[]>(weeksProp ?? []);
+export default function Dashboard() {
+  const [summary, setSummary] = useState<any>(null);
+  const [weeks, setWeeks] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [monthId, setMonthId] = useState<string | null>(null);
   const [installments, setInstallments] = useState<any[]>([]);
+  const [months, setMonths] = useState<any[]>([]);
 
   const load = async () => {
     try {
-      let months = await getMonths();
+      let monthsData = await getMonths();
 
-      // 🔥 CRIA MÊS AUTOMATICAMENTE
-      if (!months.length) {
+      if (!monthsData.length) {
         const now = new Date();
 
         const newMonth = await createMonth(
@@ -42,15 +41,15 @@ export default function Dashboard({
           now.getFullYear(),
         );
 
-        months = [newMonth];
+        monthsData = [newMonth];
       }
 
-      const latestMonth = months[months.length - 1];
+      setMonths(monthsData);
 
+      const latestMonth = monthsData[monthsData.length - 1];
       setMonthId(latestMonth.id);
 
       const snapshots = await getCardSnapshots(latestMonth.id);
-
       const transactionsDB = await getTransactions(latestMonth.id);
       const weeksDB = await getWeeks(latestMonth.id);
 
@@ -58,8 +57,8 @@ export default function Dashboard({
       const mappedWeeks = weeksDB.map(mapWeek);
 
       const installmentsDB = await getInstallments(latestMonth.id);
-      setInstallments(installmentsDB);
 
+      setInstallments(installmentsDB);
       setTransactions(transactionsMapped);
 
       const result = calculateSummary(
@@ -69,16 +68,13 @@ export default function Dashboard({
         installmentsDB,
       );
 
-      let finalWeeks = mappedWeeks;
-
-      finalWeeks = calculateWeekly(
+      let finalWeeks = calculateWeekly(
         snapshots,
         transactionsMapped,
         result.total,
         latestMonth.id,
       );
 
-      // 🔥 fallback: cria semanas vazias se não houver nada
       if (!finalWeeks.length) {
         finalWeeks = Array.from({ length: 4 }).map((_, i) => ({
           id: crypto.randomUUID(),
@@ -116,21 +112,25 @@ export default function Dashboard({
 
   return (
     <div className="p-6 grid gap-4">
-      {/* ✅ PARCELAS */}
+      {/* PARCELAS */}
       <InstallmentForm monthId={monthId} onCreated={load} />
-      <InstallmentList installments={installments} onUpdated={load} />
+      <InstallmentList
+        installments={installments}
+        months={months}
+        currentMonthId={monthId}
+        onUpdated={load}
+      />
 
-      {/* ✅ SNAPSHOT CARTÕES */}
+      {/* CARTÕES */}
       <CardSnapshotForm monthId={monthId} onUpdated={load} />
 
-      {/* ✅ TRANSAÇÕES */}
+      {/* TRANSAÇÕES */}
       <TransactionForm monthId={monthId} onCreated={load} />
       <TransactionList transactions={transactions} onUpdated={load} />
 
-      {/* ✅ CARDS */}
+      {/* CARDS */}
       <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
         <Card title="Entradas" value={formatCurrency(summary.totalIncome)} />
-
         <Card title="Custos Fixos" value={formatCurrency(summary.fixedCosts)} />
 
         <Card title="Nubank" value={formatCurrency(summary.nubankSpending)} />
@@ -167,7 +167,7 @@ export default function Dashboard({
         />
       </div>
 
-      {/* ✅ SEMANAS */}
+      {/* SEMANAS */}
       <div className="mt-6">
         <h2 className="text-xl font-bold mb-2 text-white">Controle Semanal</h2>
 
