@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 
 import Card from '@/components/ui/Card';
+import Modal from '@/components/ui/Modal';
 import TransactionForm from '@/components/transactions/TransactionForm';
 import TransactionList from '@/components/transactions/TransactionList';
 
@@ -28,6 +29,38 @@ export default function Dashboard() {
   const [monthId, setMonthId] = useState<string | null>(null);
   const [installments, setInstallments] = useState<any[]>([]);
   const [months, setMonths] = useState<any[]>([]);
+  const [selectedCard, setSelectedCard] = useState<string | null>(null);
+  const [filteredTransactions, setFilteredTransactions] = useState<any[]>([]);
+
+  const handleCardClick = (type: string) => {
+    let filtered: any[] = [];
+
+    switch (type) {
+      case 'income':
+        filtered = transactions.filter((t) => t.type === 'income');
+        break;
+
+      case 'fixed':
+        filtered = transactions.filter((t) => t.isFixed);
+        break;
+
+      case 'provision':
+        filtered = transactions.filter((t) => t.isProvision);
+        break;
+
+      case 'real':
+        filtered = transactions.filter(
+          (t) => t.type === 'expense' && !t.isFixed && !t.isProvision,
+        );
+        break;
+
+      default:
+        filtered = [];
+    }
+
+    setFilteredTransactions(filtered);
+    setSelectedCard(type);
+  };
 
   const load = async () => {
     try {
@@ -130,8 +163,17 @@ export default function Dashboard() {
 
       {/* CARDS */}
       <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
-        <Card title="Entradas" value={formatCurrency(summary.totalIncome)} />
-        <Card title="Custos Fixos" value={formatCurrency(summary.fixedCosts)} />
+        <Card
+          title="Entradas"
+          value={formatCurrency(summary.totalIncome)}
+          onClick={() => handleCardClick('income')}
+        />
+
+        <Card
+          title="Custos Fixos"
+          value={formatCurrency(summary.fixedCosts)}
+          onClick={() => handleCardClick('fixed')}
+        />
 
         <Card title="Nubank" value={formatCurrency(summary.nubankSpending)} />
         <Card title="C6" value={formatCurrency(summary.c6Spending)} />
@@ -144,11 +186,13 @@ export default function Dashboard() {
         <Card
           title="Planejado (Provisões)"
           value={formatCurrency(summary.provisionPlanned)}
+          onClick={() => handleCardClick('provision')}
         />
 
         <Card
           title="Gasto Real (Provisões)"
           value={formatCurrency(summary.provisionUsed)}
+          onClick={() => handleCardClick('real')}
         />
 
         <Card
@@ -193,6 +237,26 @@ export default function Dashboard() {
           ))}
         </div>
       </div>
+
+      <Modal
+        open={!!selectedCard}
+        onClose={() => setSelectedCard(null)}
+        title="Detalhamento"
+      >
+        {filteredTransactions.length === 0 && (
+          <p className="text-zinc-400">Nenhum registro</p>
+        )}
+
+        {filteredTransactions.map((t) => (
+          <div
+            key={t.id}
+            className="flex justify-between border-b border-zinc-800 py-2"
+          >
+            <span className="text-white">{t.category}</span>
+            <span className="text-zinc-400">{formatCurrency(t.amount)}</span>
+          </div>
+        ))}
+      </Modal>
     </div>
   );
 }
