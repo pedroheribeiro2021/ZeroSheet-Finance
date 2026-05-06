@@ -1,20 +1,13 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Transaction, Week } from '../types/finance';
 import { toCurrency } from '../utils/number';
-
-type Snapshot = {
-  card: string;
-  amount: number;
-};
-
-type Installment = {
-  installment_amount: number;
-};
+import { normalizeCategory } from '../utils/category';
 
 export function calculateSummary(
   transactions: Transaction[],
   weeks: Week[],
-  snapshots: Snapshot[] = [],
-  installments: Installment[] = [],
+  snapshots?: { card: string; amount: number }[],
+  installments: any[] = [],
 ) {
   let totalIncome = 0;
   let fixedCosts = 0;
@@ -25,22 +18,49 @@ export function calculateSummary(
   let nubankSpending = 0;
   let c6Spending = 0;
 
-  // ✅ PROCESSA TRANSAÇÕES
+  const provisionByCategory: Record<string, number> = {};
+  const expenseByCategory: Record<string, number> = {};
+
   for (const t of transactions) {
+    const category = normalizeCategory(t.category);
+
     if (t.type === 'income') {
       totalIncome += t.amount;
       continue;
     }
 
-    // 🟣 PROVISÃO (planejado)
+    // 🟡 PROVISÃO
     if (t.isProvision) {
       provisionPlanned += t.amount;
+
+      if (!provisionByCategory[category]) {
+        provisionByCategory[category] = 0;
+      }
+
+      provisionByCategory[category] += t.amount;
       continue;
     }
 
-    // 🔴 GASTO REAL
-    if (!t.isFixed && !t.isProvision && t.type === 'expense') {
-      provisionUsed += t.amount;
+    // 🔵 GASTO REAL
+    if (!t.isFixed && t.type === 'expense') {
+      if (!expenseByCategory[category]) {
+        expenseByCategory[category] = 0;
+      }
+
+      expenseByCategory[category] += t.amount;
+    }
+
+    // 🟣 CARTÕES
+    if (!snapshots || snapshots.length === 0) {
+      if (t.card === 'nubank') {
+        nubankSpending += t.amount;
+        continue;
+      }
+
+      if (t.card === 'c6') {
+        c6Spending += t.amount;
+        continue;
+      }
     }
 
     // ⚫ FIXOS
@@ -48,50 +68,44 @@ export function calculateSummary(
       fixedCosts += t.amount;
       continue;
     }
-
-    // 🟡 CARTÕES (fallback se não houver snapshot)
-    if (snapshots.length === 0) {
-      if (t.card === 'nubank') {
-        nubankSpending += t.amount;
-      }
-
-      if (t.card === 'c6') {
-        c6Spending += t.amount;
-      }
-    }
   }
 
-  // ✅ SNAPSHOT SOBRESCREVE CARTÕES
-  if (snapshots.length > 0) {
+  // 🔥 PROVISÃO USADA POR CATEGORIA
+  for (const category in provisionByCategory) {
+    const planned = provisionByCategory[category];
+    const used = expenseByCategory[category] || 0;
+
+    provisionUsed += Math.min(used, planned);
+  }
+
+  // SNAPSHOT
+  if (snapshots && snapshots.length > 0) {
     const nubankSnapshot = snapshots.find((s) => s.card === 'nubank');
     const c6Snapshot = snapshots.find((s) => s.card === 'c6');
 
-    if (nubankSnapshot) {
-      nubankSpending = nubankSnapshot.amount;
-    }
-
-    if (c6Snapshot) {
-      c6Spending = c6Snapshot.amount;
-    }
+    if (nubankSnapshot) nubankSpending = nubankSnapshot.amount;
+    if (c6Snapshot) c6Spending = c6Snapshot.amount;
   }
 
   const cardSpending = nubankSpending + c6Spending;
 
-  // ✅ PARCELAS
+  const provisionDiff = provisionPlanned - provisionUsed;
+
   const installmentSpending = installments.reduce(
-    (acc, i) => acc + (i.installment_amount || 0),
+    (acc, i) => acc + i.installment_amount,
     0,
   );
 
-  // ✅ TOTAL FINAL (AGORA CORRETO)
-  const total =
+  const total = toCurrency(
     totalIncome -
-    fixedCosts -
-    cardSpending -
-    provisionPlanned -
-    installmentSpending;
+      fixedCosts -
+      cardSpending -
+      provisionPlanned -
+      installmentSpending,
+  );
 
-  const weeklyBudget = weeks.length > 0 ? total / weeks.length : total;
+  const weeklyBudget =
+    weeks.length > 0 ? toCurrency(total / weeks.length) : total;
 
   return {
     totalIncome,
@@ -103,11 +117,12 @@ export function calculateSummary(
 
     provisionPlanned,
     provisionUsed,
-    provisionDiff: provisionPlanned - provisionUsed,
+    provisionDiff,
 
-    installmentSpending,
+    total,
+    weeklyBudget,
 
-    total: toCurrency(total),
-    weeklyBudget: toCurrency(weeklyBudget),
+    provisionByCategory,
+    expenseByCategory,
   };
 }
