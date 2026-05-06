@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Transaction, Week } from '../types/finance';
 import { toCurrency } from '../utils/number';
-import { normalizeCategory } from '../utils/category';
+import { normalizeCategory } from '../utils/normalize';
 
 export function calculateSummary(
   transactions: Transaction[],
@@ -18,8 +18,7 @@ export function calculateSummary(
   let nubankSpending = 0;
   let c6Spending = 0;
 
-  const provisionByCategory: Record<string, number> = {};
-  const expenseByCategory: Record<string, number> = {};
+  const provisionMap: Record<string, number> = {};
 
   for (const t of transactions) {
     const category = normalizeCategory(t.category);
@@ -29,28 +28,17 @@ export function calculateSummary(
       continue;
     }
 
-    // 🟡 PROVISÃO
     if (t.isProvision) {
       provisionPlanned += t.amount;
-
-      if (!provisionByCategory[category]) {
-        provisionByCategory[category] = 0;
-      }
-
-      provisionByCategory[category] += t.amount;
+      provisionMap[category] = (provisionMap[category] || 0) + t.amount;
       continue;
     }
 
-    // 🔵 GASTO REAL
-    if (!t.isFixed && t.type === 'expense') {
-      if (!expenseByCategory[category]) {
-        expenseByCategory[category] = 0;
-      }
-
-      expenseByCategory[category] += t.amount;
+    if (!t.isFixed && !t.isProvision && t.type === 'expense') {
+      provisionUsed += t.amount;
+      provisionMap[category] = (provisionMap[category] || 0) - t.amount;
     }
 
-    // 🟣 CARTÕES
     if (!snapshots || snapshots.length === 0) {
       if (t.card === 'nubank') {
         nubankSpending += t.amount;
@@ -63,19 +51,10 @@ export function calculateSummary(
       }
     }
 
-    // ⚫ FIXOS
     if (t.isFixed) {
       fixedCosts += t.amount;
       continue;
     }
-  }
-
-  // 🔥 PROVISÃO USADA POR CATEGORIA
-  for (const category in provisionByCategory) {
-    const planned = provisionByCategory[category];
-    const used = expenseByCategory[category] || 0;
-
-    provisionUsed += Math.min(used, planned);
   }
 
   // SNAPSHOT
@@ -122,7 +101,6 @@ export function calculateSummary(
     total,
     weeklyBudget,
 
-    provisionByCategory,
-    expenseByCategory,
+    provisionMap,
   };
 }
