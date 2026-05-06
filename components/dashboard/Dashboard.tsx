@@ -8,11 +8,7 @@ import TransactionList from '@/components/transactions/TransactionList';
 
 import { getMonths, createMonth } from '@/core/services/month.service';
 import { getTransactions } from '@/core/services/transaction.service';
-import {
-  createWeeks,
-  getWeeks,
-  updateWeek,
-} from '@/core/services/week.service';
+import { createWeeks, getWeeks } from '@/core/services/week.service';
 
 import { mapTransaction, mapWeek } from '@/core/models/mappers';
 import { calculateSummary } from '@/core/engine/calculations';
@@ -20,7 +16,8 @@ import { calculateWeekly } from '@/core/engine/weekly';
 import { getCardSnapshots } from '@/core/services/cardSnapshot.service';
 import CardSnapshotForm from '../cards/CardSnapshotForm';
 import { getInstallments } from '@/core/services/installment.service';
-import InstallmentForm from '../transactions/InstallmentForm';
+import InstallmentForm from '../installments/InstallmentForm';
+import InstallmentList from '../installments/InstallmentList';
 
 export default function Dashboard({
   summary: summaryProp,
@@ -30,6 +27,7 @@ export default function Dashboard({
   const [weeks, setWeeks] = useState<any[]>(weeksProp ?? []);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [monthId, setMonthId] = useState<string | null>(null);
+  const [installments, setInstallments] = useState<any[]>([]);
 
   const load = async () => {
     try {
@@ -59,7 +57,8 @@ export default function Dashboard({
       const transactionsMapped = transactionsDB.map(mapTransaction);
       const mappedWeeks = weeksDB.map(mapWeek);
 
-      const installments = await getInstallments();
+      const installmentsDB = await getInstallments(latestMonth.id);
+      setInstallments(installmentsDB);
 
       setTransactions(transactionsMapped);
 
@@ -67,7 +66,7 @@ export default function Dashboard({
         transactionsMapped,
         mappedWeeks,
         snapshots,
-        installments,
+        installmentsDB,
       );
 
       let finalWeeks = mappedWeeks;
@@ -117,12 +116,18 @@ export default function Dashboard({
 
   return (
     <div className="p-6 grid gap-4">
+      {/* ✅ PARCELAS */}
+      <InstallmentForm monthId={monthId} onCreated={load} />
+      <InstallmentList installments={installments} onUpdated={load} />
+
+      {/* ✅ SNAPSHOT CARTÕES */}
       <CardSnapshotForm monthId={monthId} onUpdated={load} />
 
+      {/* ✅ TRANSAÇÕES */}
       <TransactionForm monthId={monthId} onCreated={load} />
-      <InstallmentForm onCreated={load} />
       <TransactionList transactions={transactions} onUpdated={load} />
 
+      {/* ✅ CARDS */}
       <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
         <Card title="Entradas" value={formatCurrency(summary.totalIncome)} />
 
@@ -162,8 +167,9 @@ export default function Dashboard({
         />
       </div>
 
+      {/* ✅ SEMANAS */}
       <div className="mt-6">
-        <h2 className="text-xl font-bold mb-2">Controle Semanal</h2>
+        <h2 className="text-xl font-bold mb-2 text-white">Controle Semanal</h2>
 
         <div className="grid grid-cols-2 gap-4">
           {weeks.map((week: any) => (
@@ -173,6 +179,7 @@ export default function Dashboard({
               <p className="text-zinc-400">
                 Orçamento: {formatCurrency(week.budget)}
               </p>
+
               <p className="text-white">Gasto: {formatCurrency(week.spent)}</p>
 
               <p
