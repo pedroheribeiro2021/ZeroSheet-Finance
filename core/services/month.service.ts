@@ -1,14 +1,18 @@
-import { getCurrentUserId } from '@/lib/auth';
+import { getCurrentUser } from './auth.service';
 import { supabase } from '@/lib/supabase';
 import { copyRecurringTransactions } from './transaction.service';
 
 export async function getMonths() {
-  const userId = await getCurrentUserId();
+  const user = await getCurrentUser();
+
+  if (!user) {
+    throw new Error('Usuário não autenticado');
+  }
 
   const { data, error } = await supabase
     .from('months')
     .select('*')
-    .eq('user_id', userId)
+    .eq('user_id', user.id)
     .order('year')
     .order('month');
 
@@ -18,12 +22,16 @@ export async function getMonths() {
 }
 
 export async function createMonth(month: number, year: number) {
-  const userId = await getCurrentUserId();
+  const user = await getCurrentUser();
+
+  if (!user) {
+    throw new Error('Usuário não autenticado');
+  }
 
   const { data: existingMonths, error: existingMonthsError } = await supabase
     .from('months')
     .select('*')
-    .eq('user_id', userId)
+    .eq('user_id', user.id)
     .order('created_at');
 
   if (existingMonthsError) throw existingMonthsError;
@@ -32,7 +40,7 @@ export async function createMonth(month: number, year: number) {
 
   const { data, error } = await supabase
     .from('months')
-    .insert({ month, year, user_id: userId })
+    .insert({ month, year, user_id: user.id })
     .select()
     .single();
 

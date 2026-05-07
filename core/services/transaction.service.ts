@@ -1,15 +1,19 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { getCurrentUserId } from '@/lib/auth';
+import { getCurrentUser } from './auth.service';
 import { supabase } from '@/lib/supabase';
 
 export async function getTransactions(monthId: string) {
-  const userId = await getCurrentUserId();
+  const user = await getCurrentUser();
+
+  if (!user) {
+    throw new Error('Usuário não autenticado');
+  }
 
   const { data, error } = await supabase
     .from('transactions')
     .select('*')
+    .eq('user_id', user.id)
     .eq('month_id', monthId)
-    .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
   if (error) throw error;
@@ -18,38 +22,56 @@ export async function getTransactions(monthId: string) {
 }
 
 export async function createTransaction(data: any) {
-  const userId = await getCurrentUserId();
+  const user = await getCurrentUser();
 
-  const { error } = await supabase.from('transactions').insert([
-    {
-      ...data,
-      user_id: userId,
-    },
-  ]);
+  if (!user) {
+    throw new Error('Usuário não autenticado');
+  }
+
+  const { data: created, error } = await supabase
+    .from('transactions')
+    .insert([
+      {
+        ...data,
+        user_id: user.id,
+      },
+    ])
+    .select()
+    .single();
 
   if (error) throw error;
+
+  return created;
 }
 
 export async function updateTransaction(id: string, data: any) {
-  const userId = await getCurrentUserId();
+  const user = await getCurrentUser();
+
+  if (!user) {
+    throw new Error('Usuário não autenticado');
+  }
 
   const { error } = await supabase
     .from('transactions')
     .update(data)
     .eq('id', id)
-    .eq('user_id', userId);
+    .eq('user_id', user.id);
 
   if (error) throw error;
 }
 
 export async function deleteTransaction(id: string) {
-  const userId = await getCurrentUserId();
+  const user = await getCurrentUser();
+
+  if (!user) {
+    throw new Error('Usuário não autenticado');
+  }
 
   const { error } = await supabase
     .from('transactions')
     .delete()
     .eq('id', id)
-    .eq('user_id', userId);
+    .eq('user_id', user.id);
 
   if (error) throw error;
 }
@@ -58,13 +80,17 @@ export async function copyRecurringTransactions(
   fromMonthId: string,
   toMonthId: string,
 ) {
-  const userId = await getCurrentUserId();
+  const user = await getCurrentUser();
+
+  if (!user) {
+    throw new Error('Usuário não autenticado');
+  }
 
   const { data, error } = await supabase
     .from('transactions')
     .select('*')
     .eq('month_id', fromMonthId)
-    .eq('user_id', userId)
+    .eq('user_id', user.id)
     .eq('is_recurring', true);
 
   if (error) throw error;
@@ -73,7 +99,7 @@ export async function copyRecurringTransactions(
 
   const payload = data.map((t) => ({
     month_id: toMonthId,
-    user_id: userId,
+    user_id: user.id,
     type: t.type,
     category: t.category,
     amount: t.amount,

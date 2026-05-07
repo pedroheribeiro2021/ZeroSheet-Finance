@@ -1,13 +1,17 @@
-import { getCurrentUserId } from '@/lib/auth';
+import { getCurrentUser } from './auth.service';
 import { supabase } from '@/lib/supabase';
 
 export async function getInstallments(monthId: string) {
-  const userId = await getCurrentUserId();
+  const user = await getCurrentUser();
+
+  if (!user) {
+    throw new Error('Usuário não autenticado');
+  }
 
   const { data: months, error: monthsError } = await supabase
     .from('months')
     .select('*')
-    .eq('user_id', userId)
+    .eq('user_id', user.id)
     .order('year', { ascending: true })
     .order('month', { ascending: true });
 
@@ -19,7 +23,7 @@ export async function getInstallments(monthId: string) {
   const { data: installments, error } = await supabase
     .from('installments')
     .select('*')
-    .eq('user_id', userId)
+    .eq('user_id', user.id)
     .order('created_at', { ascending: false });
 
   if (error) throw error;
@@ -45,7 +49,11 @@ export async function createInstallment(data: {
   total_installments: number;
   start_month_id: string;
 }) {
-  const userId = await getCurrentUserId();
+  const user = await getCurrentUser();
+
+  if (!user) {
+    throw new Error('Usuário não autenticado');
+  }
 
   const { error } = await supabase.from('installments').insert([
     {
@@ -56,7 +64,7 @@ export async function createInstallment(data: {
       total_installments: data.total_installments,
       current_installment: 1,
       start_month_id: data.start_month_id,
-      user_id: userId,
+      user_id: user.id,
     },
   ]);
 
@@ -64,13 +72,17 @@ export async function createInstallment(data: {
 }
 
 export async function deleteInstallment(id: string) {
-  const userId = await getCurrentUserId();
+  const user = await getCurrentUser();
+
+  if (!user) {
+    throw new Error('Usuário não autenticado');
+  }
 
   const { error } = await supabase
     .from('installments')
     .delete()
     .eq('id', id)
-    .eq('user_id', userId);
+    .eq('user_id', user.id);
 
   if (error) throw error;
 }
