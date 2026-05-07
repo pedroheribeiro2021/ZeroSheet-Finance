@@ -1,11 +1,14 @@
+import { getCurrentUserId } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { copyRecurringTransactions } from './transaction.service';
-// import { copyRecurringTransactions } from './transaction.service';
 
 export async function getMonths() {
+  const userId = await getCurrentUserId();
+
   const { data, error } = await supabase
     .from('months')
     .select('*')
+    .eq('user_id', userId)
     .order('year')
     .order('month');
 
@@ -15,24 +18,26 @@ export async function getMonths() {
 }
 
 export async function createMonth(month: number, year: number) {
-  // 🔍 pega último mês
-  const { data: existingMonths } = await supabase
+  const userId = await getCurrentUserId();
+
+  const { data: existingMonths, error: existingMonthsError } = await supabase
     .from('months')
     .select('*')
+    .eq('user_id', userId)
     .order('created_at');
+
+  if (existingMonthsError) throw existingMonthsError;
 
   const lastMonth = existingMonths?.[existingMonths.length - 1];
 
-  // 🆕 cria novo mês
   const { data, error } = await supabase
     .from('months')
-    .insert({ month, year })
+    .insert({ month, year, user_id: userId })
     .select()
     .single();
 
   if (error) throw error;
 
-  // 🔁 copia recorrentes do mês anterior
   if (lastMonth) {
     await copyRecurringTransactions(lastMonth.id, data.id);
   }
