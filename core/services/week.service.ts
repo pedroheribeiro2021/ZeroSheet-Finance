@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { getCurrentUserId } from '@/lib/auth';
+import { getCurrentUser } from './auth.service';
 import { supabase } from '@/lib/supabase';
 
 export type WeekDB = {
@@ -13,13 +13,17 @@ export type WeekDB = {
 };
 
 export async function getWeeks(monthId: string): Promise<WeekDB[]> {
-  const userId = await getCurrentUserId();
+  const user = await getCurrentUser();
+
+  if (!user) {
+    throw new Error('Usuário não autenticado');
+  }
 
   const { data, error } = await supabase
     .from('weeks')
     .select('*')
     .eq('month_id', monthId)
-    .eq('user_id', userId)
+    .eq('user_id', user.id)
     .order('index', { ascending: true });
 
   if (error) throw error;
@@ -28,11 +32,15 @@ export async function getWeeks(monthId: string): Promise<WeekDB[]> {
 }
 
 export async function createWeeks(monthId: string, weeks: any[]) {
-  const userId = await getCurrentUserId();
+  const user = await getCurrentUser();
+
+  if (!user) {
+    throw new Error('Usuário não autenticado');
+  }
 
   const payload = weeks.map((w) => ({
     month_id: monthId,
-    user_id: userId,
+    user_id: user.id,
     index: w.index,
     budget: Number(w.budget ?? 0),
     spent: Number(w.spent ?? 0),
@@ -54,7 +62,12 @@ export async function updateWeek(
     remaining?: number;
   },
 ) {
-  const userId = await getCurrentUserId();
+  const user = await getCurrentUser();
+
+  if (!user) {
+    throw new Error('Usuário não autenticado');
+  }
+
   const payload: any = {};
 
   if (data.budget !== undefined) payload.budget = data.budget;
@@ -65,7 +78,7 @@ export async function updateWeek(
     .from('weeks')
     .update(payload)
     .eq('id', id)
-    .eq('user_id', userId)
+    .eq('user_id', user.id)
     .select()
     .single();
 

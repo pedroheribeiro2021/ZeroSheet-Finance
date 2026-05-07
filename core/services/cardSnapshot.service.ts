@@ -1,4 +1,4 @@
-import { getCurrentUserId } from '@/lib/auth';
+import { getCurrentUser } from './auth.service';
 import { supabase } from '@/lib/supabase';
 
 export async function upsertCardSnapshot(
@@ -6,14 +6,18 @@ export async function upsertCardSnapshot(
   card: 'nubank' | 'c6',
   amount: number,
 ) {
-  const userId = await getCurrentUserId();
+  const user = await getCurrentUser();
+
+  if (!user) {
+    throw new Error('Usuário não autenticado');
+  }
 
   const { data, error } = await supabase
     .from('card_snapshots')
     .upsert(
       {
         month_id: monthId,
-        user_id: userId,
+        user_id: user.id,
         card,
         amount,
       },
@@ -29,13 +33,17 @@ export async function upsertCardSnapshot(
 }
 
 export async function getCardSnapshots(monthId: string) {
-  const userId = await getCurrentUserId();
+  const user = await getCurrentUser();
+
+  if (!user) {
+    throw new Error('Usuário não autenticado');
+  }
 
   const { data, error } = await supabase
     .from('card_snapshots')
     .select('*')
     .eq('month_id', monthId)
-    .eq('user_id', userId);
+    .eq('user_id', user.id);
 
   if (error) throw error;
 
