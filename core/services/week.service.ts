@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { getCurrentUserId } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
 export type WeekDB = {
@@ -8,15 +9,17 @@ export type WeekDB = {
   budget: number;
   spent: number;
   remaining: number;
-  created_at: string; // ✅ ADICIONADO
+  created_at: string;
 };
 
-// 🔍 GET
 export async function getWeeks(monthId: string): Promise<WeekDB[]> {
+  const userId = await getCurrentUserId();
+
   const { data, error } = await supabase
     .from('weeks')
     .select('*')
     .eq('month_id', monthId)
+    .eq('user_id', userId)
     .order('index', { ascending: true });
 
   if (error) throw error;
@@ -24,10 +27,12 @@ export async function getWeeks(monthId: string): Promise<WeekDB[]> {
   return data ?? [];
 }
 
-// 🧱 CREATE
 export async function createWeeks(monthId: string, weeks: any[]) {
+  const userId = await getCurrentUserId();
+
   const payload = weeks.map((w) => ({
     month_id: monthId,
+    user_id: userId,
     index: w.index,
     budget: Number(w.budget ?? 0),
     spent: Number(w.spent ?? 0),
@@ -41,7 +46,6 @@ export async function createWeeks(monthId: string, weeks: any[]) {
   return data;
 }
 
-// ✏️ UPDATE
 export async function updateWeek(
   id: string,
   data: {
@@ -50,6 +54,7 @@ export async function updateWeek(
     remaining?: number;
   },
 ) {
+  const userId = await getCurrentUserId();
   const payload: any = {};
 
   if (data.budget !== undefined) payload.budget = data.budget;
@@ -60,6 +65,7 @@ export async function updateWeek(
     .from('weeks')
     .update(payload)
     .eq('id', id)
+    .eq('user_id', userId)
     .select()
     .single();
 

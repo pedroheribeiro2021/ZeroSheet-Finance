@@ -1,12 +1,13 @@
+import { getCurrentUserId } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
-//
-// ✅ GET INSTALLMENTS (baseado no mês atual)
-//
 export async function getInstallments(monthId: string) {
+  const userId = await getCurrentUserId();
+
   const { data: months, error: monthsError } = await supabase
     .from('months')
     .select('*')
+    .eq('user_id', userId)
     .order('year', { ascending: true })
     .order('month', { ascending: true });
 
@@ -18,6 +19,7 @@ export async function getInstallments(monthId: string) {
   const { data: installments, error } = await supabase
     .from('installments')
     .select('*')
+    .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
   if (error) throw error;
@@ -35,9 +37,6 @@ export async function getInstallments(monthId: string) {
   return activeInstallments;
 }
 
-//
-// ✅ CREATE INSTALLMENT
-//
 export async function createInstallment(data: {
   description: string;
   card: string;
@@ -46,6 +45,8 @@ export async function createInstallment(data: {
   total_installments: number;
   start_month_id: string;
 }) {
+  const userId = await getCurrentUserId();
+
   const { error } = await supabase.from('installments').insert([
     {
       description: data.description,
@@ -55,17 +56,21 @@ export async function createInstallment(data: {
       total_installments: data.total_installments,
       current_installment: 1,
       start_month_id: data.start_month_id,
+      user_id: userId,
     },
   ]);
 
   if (error) throw error;
 }
 
-//
-// ✅ DELETE
-//
 export async function deleteInstallment(id: string) {
-  const { error } = await supabase.from('installments').delete().eq('id', id);
+  const userId = await getCurrentUserId();
+
+  const { error } = await supabase
+    .from('installments')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', userId);
 
   if (error) throw error;
 }

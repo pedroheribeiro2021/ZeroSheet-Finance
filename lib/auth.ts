@@ -24,3 +24,15 @@ export async function getUser() {
 
   return user;
 }
+
+export async function getCurrentUserId() {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user?.id) {
+    throw new Error('Usuário não autenticado');
+  }
+
+  return user.id;
+}
