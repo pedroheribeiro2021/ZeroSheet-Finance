@@ -1,55 +1,63 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-
-const items = [
-  {
-    label: 'Dashboard',
-    href: '/dashboard',
-  },
-  {
-    label: 'Transações',
-    href: '/transactions',
-  },
-  {
-    label: 'Parcelas',
-    href: '/installments',
-  },
-  {
-    label: 'Cartões',
-    href: '/cards',
-  },
-];
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 
 export default function Sidebar() {
-  const pathname = usePathname();
+  const router = useRouter();
 
-  if (pathname === '/login') {
-    return null;
-  }
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+
+    router.push('/login');
+    router.refresh();
+  };
 
   return (
-    <div className="w-64 bg-zinc-950 border-r border-zinc-800 min-h-screen p-4">
-      <h1 className="text-white text-xl font-bold mb-8">
-        ZeroSheet
-      </h1>
+    <aside className="w-64 bg-zinc-950 border-r border-zinc-800 min-h-screen p-4 flex flex-col">
+      <h1 className="text-2xl font-bold text-white mb-8">ZeroSheet</h1>
 
-      <div className="grid gap-2">
-        {items.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`p-3 rounded text-sm transition ${
-              pathname === item.href
-                ? 'bg-zinc-800 text-white'
-                : 'text-zinc-400 hover:bg-zinc-900'
-            }`}
-          >
-            {item.label}
-          </Link>
-        ))}
-      </div>
-    </div>
+      <nav className="flex flex-col gap-2">
+        <Link href="/" className="text-zinc-300 hover:text-white transition">
+          Dashboard
+        </Link>
+
+        <Link
+          href="/transactions"
+          className="text-zinc-300 hover:text-white transition"
+        >
+          Transações
+        </Link>
+
+        <Link
+          href="/installments"
+          className="text-zinc-300 hover:text-white transition"
+        >
+          Parcelamentos
+        </Link>
+
+        <Link
+          href="/cards"
+          className="text-zinc-300 hover:text-white transition"
+        >
+          Cartões
+        </Link>
+
+        <Link
+          href="/settings"
+          className="text-zinc-300 hover:text-white transition"
+        >
+          Configurações
+        </Link>
+      </nav>
+
+      <button
+        onClick={handleLogout}
+        className="mt-auto bg-red-600 hover:bg-red-700 text-white rounded p-2"
+      >
+        Logout
+      </button>
+    </aside>
   );
 }
