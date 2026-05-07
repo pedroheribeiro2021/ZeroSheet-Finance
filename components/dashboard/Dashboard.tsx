@@ -15,6 +15,7 @@ import { mapTransaction, mapWeek } from '@/core/models/mappers';
 import { calculateSummary } from '@/core/engine/calculations';
 import { calculateWeekly } from '@/core/engine/weekly';
 import { getCardSnapshots } from '@/core/services/cardSnapshot.service';
+import { groupTransactionsByCategory } from '@/core/utils/groupTransactions';
 
 import CardSnapshotForm from '../cards/CardSnapshotForm';
 
@@ -31,6 +32,8 @@ export default function Dashboard() {
   const [months, setMonths] = useState<any[]>([]);
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
   const [filteredTransactions, setFilteredTransactions] = useState<any[]>([]);
+  const groupedTransactions =
+    groupTransactionsByCategory(filteredTransactions);
 
   const handleCardClick = (type: string) => {
     let filtered: any[] = [];
@@ -247,15 +250,46 @@ export default function Dashboard() {
           <p className="text-zinc-400">Nenhum registro</p>
         )}
 
-        {filteredTransactions.map((t) => (
-          <div
-            key={t.id}
-            className="flex justify-between border-b border-zinc-800 py-2"
-          >
-            <span className="text-white">{t.category}</span>
-            <span className="text-zinc-400">{formatCurrency(t.amount)}</span>
-          </div>
-        ))}
+        <div className="grid gap-2">
+          {groupedTransactions.map((item: any) => {
+            const total = filteredTransactions.reduce(
+              (acc, t) => acc + Number(t.amount),
+              0,
+            );
+
+            const percent =
+              total > 0 ? ((item.total / total) * 100).toFixed(1) : '0';
+
+            return (
+              <div
+                key={item.category}
+                className="bg-zinc-800 rounded p-3"
+              >
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="text-white font-bold">
+                      {item.category}
+                    </p>
+
+                    <p className="text-zinc-400 text-sm">
+                      {item.count} lançamento(s)
+                    </p>
+                  </div>
+
+                  <div className="text-right">
+                    <p className="text-white font-bold">
+                      {formatCurrency(item.total)}
+                    </p>
+
+                    <p className="text-zinc-400 text-sm">
+                      {percent}%
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </Modal>
     </div>
   );
