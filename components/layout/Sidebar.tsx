@@ -52,9 +52,20 @@ export default function Sidebar({
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-40 flex w-72 -translate-x-full flex-col border-r border-zinc-800 bg-zinc-950 p-4 transition-transform duration-300 md:w-auto md:translate-x-0 ${
-        mobileOpen ? 'translate-x-0' : ''
-      } ${collapsed ? 'md:w-20' : 'md:w-64'}`}
+      className={`
+    fixed inset-y-0 left-0 z-40
+    flex flex-col
+    border-r border-zinc-800
+    bg-zinc-950
+    p-4
+    transition-all duration-300
+
+    ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
+
+    md:translate-x-0
+    ${collapsed ? 'md:w-20' : 'md:w-64'}
+    w-64
+  `}
     >
       <div className="mb-8 flex items-center justify-between gap-3">
         <div className="min-w-0">
