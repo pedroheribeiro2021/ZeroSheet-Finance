@@ -4,8 +4,6 @@ import { useEffect, useState } from 'react';
 
 import Card from '@/components/ui/Card';
 import Modal from '@/components/ui/Modal';
-import TransactionForm from '@/components/transactions/TransactionForm';
-import TransactionList from '@/components/transactions/TransactionList';
 
 import { getMonths, createMonth } from '@/core/services/month.service';
 import { getTransactions } from '@/core/services/transaction.service';
@@ -17,19 +15,12 @@ import { calculateWeekly } from '@/core/engine/weekly';
 import { getCardSnapshots } from '@/core/services/cardSnapshot.service';
 import { groupTransactionsByCategory } from '@/core/utils/groupTransactions';
 
-import CardSnapshotForm from '../cards/CardSnapshotForm';
-
 import { getInstallments } from '@/core/services/installment.service';
-import InstallmentForm from '../installments/InstallmentForm';
-import InstallmentList from '../installments/InstallmentList';
 
 export default function Dashboard() {
   const [summary, setSummary] = useState<any>(null);
   const [weeks, setWeeks] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
-  const [monthId, setMonthId] = useState<string | null>(null);
-  const [installments, setInstallments] = useState<any[]>([]);
-  const [months, setMonths] = useState<any[]>([]);
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
   const [filteredTransactions, setFilteredTransactions] = useState<any[]>([]);
   const groupedTransactions =
@@ -80,10 +71,7 @@ export default function Dashboard() {
         monthsData = [newMonth];
       }
 
-      setMonths(monthsData);
-
       const latestMonth = monthsData[monthsData.length - 1];
-      setMonthId(latestMonth.id);
 
       const snapshots = await getCardSnapshots(latestMonth.id);
       const transactionsDB = await getTransactions(latestMonth.id);
@@ -94,7 +82,6 @@ export default function Dashboard() {
 
       const installmentsDB = await getInstallments(latestMonth.id);
 
-      setInstallments(installmentsDB);
       setTransactions(transactionsMapped);
 
       const result = calculateSummary(
@@ -135,7 +122,7 @@ export default function Dashboard() {
     load();
   }, []);
 
-  if (!summary || !monthId) {
+  if (!summary) {
     return <div className="text-white p-6">Carregando...</div>;
   }
 
@@ -148,23 +135,6 @@ export default function Dashboard() {
 
   return (
     <div className="p-6 grid gap-4">
-      {/* PARCELAS */}
-      <InstallmentForm monthId={monthId} onCreated={load} />
-      <InstallmentList
-        installments={installments}
-        months={months}
-        currentMonthId={monthId}
-        onUpdated={load}
-      />
-
-      {/* CARTÕES */}
-      <CardSnapshotForm monthId={monthId} onUpdated={load} />
-
-      {/* TRANSAÇÕES */}
-      <TransactionForm monthId={monthId} onCreated={load} />
-      <TransactionList transactions={transactions} onUpdated={load} />
-
-      {/* CARDS */}
       <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
         <Card
           title="Entradas"
@@ -214,7 +184,6 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* SEMANAS */}
       <div className="mt-6">
         <h2 className="text-xl font-bold mb-2 text-white">Controle Semanal</h2>
 
@@ -261,15 +230,10 @@ export default function Dashboard() {
               total > 0 ? ((item.total / total) * 100).toFixed(1) : '0';
 
             return (
-              <div
-                key={item.category}
-                className="bg-zinc-800 rounded p-3"
-              >
+              <div key={item.category} className="bg-zinc-800 rounded p-3">
                 <div className="flex justify-between items-center">
                   <div>
-                    <p className="text-white font-bold">
-                      {item.category}
-                    </p>
+                    <p className="text-white font-bold">{item.category}</p>
 
                     <p className="text-zinc-400 text-sm">
                       {item.count} lançamento(s)
@@ -281,9 +245,7 @@ export default function Dashboard() {
                       {formatCurrency(item.total)}
                     </p>
 
-                    <p className="text-zinc-400 text-sm">
-                      {percent}%
-                    </p>
+                    <p className="text-zinc-400 text-sm">{percent}%</p>
                   </div>
                 </div>
               </div>
