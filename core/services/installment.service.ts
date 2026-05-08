@@ -22,7 +22,15 @@ export async function getInstallments(monthId: string) {
 
   const { data: installments, error } = await supabase
     .from('installments')
-    .select('*')
+    .select(
+      `
+    *,
+    cards (
+      id,
+      name
+    )
+  `,
+    )
     .eq('user_id', user.id)
     .order('created_at', { ascending: false });
 
@@ -43,7 +51,7 @@ export async function getInstallments(monthId: string) {
 
 export async function createInstallment(data: {
   description: string;
-  card: string;
+  card_id: string;
   total_amount: number;
   installment_amount: number;
   total_installments: number;
@@ -58,7 +66,7 @@ export async function createInstallment(data: {
   const { error } = await supabase.from('installments').insert([
     {
       description: data.description,
-      card: data.card,
+      card_id: data.card_id,
       total_amount: data.total_amount,
       installment_amount: data.installment_amount,
       total_installments: data.total_installments,

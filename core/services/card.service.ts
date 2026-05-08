@@ -14,20 +14,18 @@ export async function getCards() {
     .eq('user_id', user.id)
     .order('created_at');
 
-  if (error) {
-    throw error;
-  }
+  if (error) throw error;
 
   return data;
 }
 
-export async function createCard(input: {
+export async function createCard(data: {
   name: string;
-  brand?: string;
-  limit_amount: number;
-  closing_day: number;
-  due_day: number;
+  slug: string;
   color?: string;
+  limit_amount?: number;
+  closing_day?: number;
+  due_day?: number;
 }) {
   const user = await getCurrentUser();
 
@@ -35,18 +33,45 @@ export async function createCard(input: {
     throw new Error('Usuário não autenticado');
   }
 
-  const { data, error } = await supabase
+  const { data: created, error } = await supabase
     .from('cards')
     .insert({
-      ...input,
+      ...data,
       user_id: user.id,
     })
     .select()
     .single();
 
-  if (error) {
-    throw error;
-  }
+  if (error) throw error;
 
-  return data;
+  return created;
+}
+
+export async function updateCard(
+  id: string,
+  data: {
+    name?: string;
+    slug?: string;
+    color?: string;
+    limit_amount?: number;
+    closing_day?: number;
+    due_day?: number;
+  },
+) {
+  const { data: updated, error } = await supabase
+    .from('cards')
+    .update(data)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  return updated;
+}
+
+export async function deleteCard(id: string) {
+  const { error } = await supabase.from('cards').delete().eq('id', id);
+
+  if (error) throw error;
 }

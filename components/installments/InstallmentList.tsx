@@ -52,7 +52,7 @@ export default function InstallmentList({
               </p>
 
               <p className="text-zinc-400 text-sm">
-                R$ {Number(i.installment_amount).toFixed(2)} • {i.card}
+                R$ {Number(i.installment_amount).toFixed(2)} • {i.cards?.name}
               </p>
             </div>
 
