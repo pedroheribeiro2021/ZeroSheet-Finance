@@ -16,6 +16,7 @@ import { getCardSnapshots } from '@/core/services/cardSnapshot.service';
 import { groupTransactionsByCategory } from '@/core/utils/groupTransactions';
 
 import { getInstallments } from '@/core/services/installment.service';
+import { getCards } from '@/core/services/card.service';
 
 export default function Dashboard() {
   const [summary, setSummary] = useState<any>(null);
@@ -23,8 +24,9 @@ export default function Dashboard() {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
   const [filteredTransactions, setFilteredTransactions] = useState<any[]>([]);
-  const groupedTransactions =
-    groupTransactionsByCategory(filteredTransactions);
+  const groupedTransactions = groupTransactionsByCategory(filteredTransactions);
+  const [cards, setCards] = useState<any[]>([]);
+  const [snapshots, setSnapshots] = useState<any[]>([]);
 
   const handleCardClick = (type: string) => {
     let filtered: any[] = [];
@@ -73,7 +75,11 @@ export default function Dashboard() {
 
       const latestMonth = monthsData[monthsData.length - 1];
 
-      const snapshots = await getCardSnapshots(latestMonth.id);
+      const snapshotsData = await getCardSnapshots(latestMonth.id);
+      setSnapshots(snapshotsData);
+      const cardsDB = await getCards();
+
+      setCards(cardsDB);
       const transactionsDB = await getTransactions(latestMonth.id);
       const weeksDB = await getWeeks(latestMonth.id);
 
@@ -87,12 +93,12 @@ export default function Dashboard() {
       const result = calculateSummary(
         transactionsMapped,
         mappedWeeks,
-        snapshots,
+        snapshotsData,
         installmentsDB,
       );
 
       let finalWeeks = calculateWeekly(
-        snapshots,
+        snapshotsData,
         transactionsMapped,
         result.total,
         latestMonth.id,
@@ -148,8 +154,19 @@ export default function Dashboard() {
           onClick={() => handleCardClick('fixed')}
         />
 
-        <Card title="Nubank" value={formatCurrency(summary.nubankSpending)} />
-        <Card title="C6" value={formatCurrency(summary.c6Spending)} />
+        {cards.map((card) => {
+          const snapshot = snapshots.find(
+            (s: any) => s.card === card.slug,
+          );
+
+          return (
+            <Card
+              key={card.id}
+              title={card.name}
+              value={formatCurrency(Number(snapshot?.amount ?? 0))}
+            />
+          );
+        })}
 
         <Card
           title="Total Cartões"
