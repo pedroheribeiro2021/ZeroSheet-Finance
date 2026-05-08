@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 
 import { createInstallment } from '@/core/services/installment.service';
-import { getCards } from '@/core/services/card.service';
 import { parseCurrencyInput } from '@/core/utils/number';
+import { getCards } from '@/core/services/card.service';
 
 export default function InstallmentForm({ monthId, onCreated }: any) {
   const [description, setDescription] = useState('');
@@ -12,22 +12,18 @@ export default function InstallmentForm({ monthId, onCreated }: any) {
   const [totalInstallments, setTotalInstallments] = useState(1);
 
   const [cards, setCards] = useState<any[]>([]);
-  const [selectedCardId, setSelectedCardId] = useState('');
+  const [cardId, setCardId] = useState('');
 
   useEffect(() => {
-    const loadCards = async () => {
-      try {
-        const cardsData = await getCards();
+    async function loadCards() {
+      const data = await getCards();
 
-        setCards(cardsData);
+      setCards(data);
 
-        if (cardsData.length > 0) {
-          setSelectedCardId(cardsData[0].id);
-        }
-      } catch (err) {
-        console.error(err);
+      if (data.length > 0) {
+        setCardId(data[0].id);
       }
-    };
+    }
 
     loadCards();
   }, []);
@@ -38,7 +34,7 @@ export default function InstallmentForm({ monthId, onCreated }: any) {
 
       await createInstallment({
         description,
-        card_id: selectedCardId,
+        card_id: cardId,
         total_amount: parsed * totalInstallments,
         installment_amount: parsed,
         total_installments: totalInstallments,
@@ -60,14 +56,14 @@ export default function InstallmentForm({ monthId, onCreated }: any) {
       <h2 className="font-bold text-white">Nova Parcela</h2>
 
       <input
-        placeholder="Nome (ex: Notebook)"
+        placeholder="Nome"
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         className="bg-zinc-800 p-2 rounded text-white"
       />
 
       <input
-        placeholder="Valor (ex: 277,92)"
+        placeholder="Valor"
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
         className="bg-zinc-800 p-2 rounded text-white"
@@ -81,21 +77,18 @@ export default function InstallmentForm({ monthId, onCreated }: any) {
       />
 
       <select
-        value={selectedCardId}
-        onChange={(e) => setSelectedCardId(e.target.value)}
+        value={cardId}
+        onChange={(e) => setCardId(e.target.value)}
         className="bg-zinc-800 p-2 rounded text-white"
       >
-        {cards.map((card) => (
-          <option key={card.id} value={card.id}>
-            {card.name}
+        {cards.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
           </option>
         ))}
       </select>
 
-      <button
-        onClick={handleSubmit}
-        className="bg-blue-600 p-2 rounded hover:bg-blue-700"
-      >
+      <button onClick={handleSubmit} className="bg-blue-600 p-2 rounded">
         Salvar
       </button>
     </div>

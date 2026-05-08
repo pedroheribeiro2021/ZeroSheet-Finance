@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 
 export async function upsertCardSnapshot(
   monthId: string,
-  card: 'nubank' | 'c6',
+  card: string,
   amount: number,
 ) {
   const user = await getCurrentUser();

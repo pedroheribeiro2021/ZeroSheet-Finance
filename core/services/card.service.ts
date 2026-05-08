@@ -71,7 +71,17 @@ export async function updateCard(
 }
 
 export async function deleteCard(id: string) {
-  const { error } = await supabase.from('cards').delete().eq('id', id);
+  const user = await getCurrentUser();
+
+  if (!user) {
+    throw new Error('Usuário não autenticado');
+  }
+
+  const { error } = await supabase
+    .from('cards')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', user.id);
 
   if (error) throw error;
 }

@@ -15,8 +15,7 @@ export function calculateSummary(
   let provisionPlanned = 0;
   let provisionUsed = 0;
 
-  let nubankSpending = 0;
-  let c6Spending = 0;
+  let cardSpending = 0;
 
   const provisionMap: Record<string, number> = {};
 
@@ -40,13 +39,8 @@ export function calculateSummary(
     }
 
     if (!snapshots || snapshots.length === 0) {
-      if (t.card === 'nubank') {
-        nubankSpending += t.amount;
-        continue;
-      }
-
-      if (t.card === 'c6') {
-        c6Spending += t.amount;
+      if (t.card) {
+        cardSpending += t.amount;
         continue;
       }
     }
@@ -59,14 +53,8 @@ export function calculateSummary(
 
   // SNAPSHOT
   if (snapshots && snapshots.length > 0) {
-    const nubankSnapshot = snapshots.find((s) => s.card === 'nubank');
-    const c6Snapshot = snapshots.find((s) => s.card === 'c6');
-
-    if (nubankSnapshot) nubankSpending = nubankSnapshot.amount;
-    if (c6Snapshot) c6Spending = c6Snapshot.amount;
+    cardSpending = snapshots.reduce((acc, s) => acc + Number(s.amount), 0);
   }
-
-  const cardSpending = nubankSpending + c6Spending;
 
   const provisionDiff = provisionPlanned - provisionUsed;
 
@@ -90,8 +78,6 @@ export function calculateSummary(
     totalIncome,
     fixedCosts,
 
-    nubankSpending,
-    c6Spending,
     cardSpending,
 
     provisionPlanned,
