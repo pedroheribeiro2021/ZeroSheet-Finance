@@ -11,11 +11,9 @@ export type DBTransaction = {
   is_fixed: boolean;
   is_provision: boolean;
 
-  // ✅ NOVOS CAMPOS
   is_recurring: boolean;
 
-  // 🔥 NOVOS CAMPOS
-  card: 'nubank' | 'c6' | null;
+  card: string | null;
 };
 
 export type DBMonth = {

@@ -1,7 +1,7 @@
 import { Week, Transaction } from '../types/finance';
 
 type Snapshot = {
-  card: 'nubank' | 'c6';
+  card: string;
   amount: number;
   created_at: string;
 };
@@ -14,7 +14,7 @@ export function calculateWeekly(
   totalWeeks: number = 4,
 ): Week[] {
   // 🔥 PRIORIDADE 1: snapshots
-  if (snapshots.length >= 2) {
+  if (snapshots.length >= 0) {
     return calculateFromSnapshots(
       snapshots,
       monthlyBudget,

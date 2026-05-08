@@ -13,7 +13,7 @@ export type Transaction = {
   isProvision: boolean;
   isRecurring: boolean;
 
-  card?: 'c6' | 'nubank' | null;
+  card?: string | null;
 
   createdAt: string; // 👈 ESSENCIAL
 };
@@ -29,11 +29,9 @@ export type Week = {
   remaining: number;
 };
 
-export type Card = 'nubank' | 'c6';
-
 export interface CardSnapshot {
   id: string;
   monthId: string;
-  card: Card;
+  card: string;
   amount: number;
 }

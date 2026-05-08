@@ -1,31 +1,39 @@
 'use client';
 
 import { useState } from 'react';
+
 import { upsertCardSnapshot } from '@/core/services/cardSnapshot.service';
 import { parseCurrencyInput } from '@/core/utils/number';
 
 export default function CardSnapshotForm({
   monthId,
+  cards,
   onUpdated,
 }: {
   monthId: string;
+  cards: any[];
   onUpdated: () => void;
 }) {
-  const [nubank, setNubank] = useState('');
-  const [c6, setC6] = useState('');
+  const [values, setValues] = useState<Record<string, string>>({});
+
+  const handleChange = (cardName: string, value: string) => {
+    setValues((prev) => ({
+      ...prev,
+      [cardName]: value,
+    }));
+  };
 
   const handleSave = async () => {
     try {
-      if (nubank) {
-        await upsertCardSnapshot(monthId, 'nubank', parseCurrencyInput(nubank));
+      for (const card of cards) {
+        const value = values[card.name];
+
+        if (!value) continue;
+
+        await upsertCardSnapshot(monthId, card.name, parseCurrencyInput(value));
       }
 
-      if (c6) {
-        await upsertCardSnapshot(monthId, 'c6', parseCurrencyInput(c6));
-      }
-
-      setNubank('');
-      setC6('');
+      setValues({});
 
       onUpdated();
     } catch (err) {
@@ -37,20 +45,16 @@ export default function CardSnapshotForm({
     <div className="bg-zinc-900 p-4 rounded mb-4">
       <h2 className="text-white font-bold mb-2">Atualizar Faturas</h2>
 
-      <div className="grid grid-cols-2 gap-2">
-        <input
-          placeholder="Nubank"
-          value={nubank}
-          onChange={(e) => setNubank(e.target.value)}
-          className="p-2 rounded bg-zinc-800 text-white"
-        />
-
-        <input
-          placeholder="C6"
-          value={c6}
-          onChange={(e) => setC6(e.target.value)}
-          className="p-2 rounded bg-zinc-800 text-white"
-        />
+      <div className="grid gap-2">
+        {cards.map((card) => (
+          <input
+            key={card.id}
+            placeholder={card.name}
+            value={values[card.name] || ''}
+            onChange={(e) => handleChange(card.name, e.target.value)}
+            className="p-2 rounded bg-zinc-800 text-white"
+          />
+        ))}
       </div>
 
       <button
