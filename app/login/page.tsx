@@ -68,7 +68,7 @@ export default function LoginPage() {
         </button>
 
         <button
-          onClick={() => router.push('/signup')}
+          onClick={() => router.push('/register')}
           className="text-zinc-400 text-sm"
         >
           Criar conta
