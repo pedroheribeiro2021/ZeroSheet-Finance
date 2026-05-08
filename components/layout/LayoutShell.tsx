@@ -46,7 +46,13 @@ export default function LayoutShell({
     const loadUser = async () => {
       try {
         const user = await getCurrentUser();
-        setUserEmail(user?.email ?? '');
+
+        if (!user) {
+          setUserEmail('');
+          return;
+        }
+
+        setUserEmail(user.email ?? '');
       } catch (err) {
         console.error(err);
       }
@@ -79,19 +85,19 @@ export default function LayoutShell({
       />
 
       <div
-        className={`hidden shrink-0 md:block ${
-          collapsed ? 'w-20' : 'w-64'
-        }`}
-      />
-
-      <div className="flex min-w-0 flex-1 flex-col">
+        className={`
+      flex min-w-0 flex-1 flex-col transition-all duration-300
+      md:ml-20
+      ${collapsed ? 'md:ml-20' : 'md:ml-64'}
+    `}
+      >
         <Topbar
           pageTitle={pageTitle}
           userEmail={userEmail}
           onMenuClick={() => setMobileOpen(true)}
         />
 
-        <main className="min-w-0 flex-1">{children}</main>
+        <main className="flex-1 overflow-x-hidden">{children}</main>
       </div>
     </div>
   );
