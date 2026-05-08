@@ -16,21 +16,21 @@ export default function CardSnapshotForm({
 }) {
   const [values, setValues] = useState<Record<string, string>>({});
 
-  const handleChange = (cardName: string, value: string) => {
+  const handleChange = (cardId: string, value: string) => {
     setValues((prev) => ({
       ...prev,
-      [cardName]: value,
+      [cardId]: value,
     }));
   };
 
   const handleSave = async () => {
     try {
       for (const card of cards) {
-        const value = values[card.name];
+        const value = values[card.id];
 
         if (!value) continue;
 
-        await upsertCardSnapshot(monthId, card.name, parseCurrencyInput(value));
+        await upsertCardSnapshot(monthId, card.id, parseCurrencyInput(value));
       }
 
       setValues({});
@@ -42,16 +42,16 @@ export default function CardSnapshotForm({
   };
 
   return (
-    <div className="bg-zinc-900 p-4 rounded mb-4">
-      <h2 className="text-white font-bold mb-2">Atualizar Faturas</h2>
+    <div className="bg-zinc-900 p-4 rounded">
+      <h2 className="text-white font-bold mb-4">Atualizar Faturas</h2>
 
-      <div className="grid gap-2">
+      <div className="grid gap-3">
         {cards.map((card) => (
           <input
             key={card.id}
             placeholder={card.name}
-            value={values[card.name] || ''}
-            onChange={(e) => handleChange(card.name, e.target.value)}
+            value={values[card.id] ?? ''}
+            onChange={(e) => handleChange(card.id, e.target.value)}
             className="p-2 rounded bg-zinc-800 text-white"
           />
         ))}
@@ -59,7 +59,7 @@ export default function CardSnapshotForm({
 
       <button
         onClick={handleSave}
-        className="mt-3 bg-blue-600 px-4 py-2 rounded text-white"
+        className="mt-4 bg-blue-600 px-4 py-2 rounded text-white hover:bg-blue-700"
       >
         Salvar Faturas
       </button>
