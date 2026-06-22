@@ -22,7 +22,7 @@ export async function upsertCardSnapshot(
         amount,
       },
       {
-        onConflict: 'month_id,card,user_id',
+        onConflict: 'month_id,card_id,user_id',
       },
     )
     .select();

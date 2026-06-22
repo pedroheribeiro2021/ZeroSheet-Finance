@@ -156,7 +156,7 @@ export default function Dashboard() {
 
         {cards.map((card) => {
           const snapshot = snapshots.find(
-            (s: any) => s.card === card.slug,
+            (s: any) => s.card_id === card.id,
           );
 
           return (
