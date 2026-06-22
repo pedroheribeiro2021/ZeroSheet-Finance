@@ -1,4 +1,4 @@
-import { DBTransaction } from '../types/database';
+import { DBTransaction, DBWeek } from '../types/database';
 import { Transaction } from '../types/finance';
 import { Week } from '../types/finance';
 
@@ -29,26 +29,6 @@ export function mapTransaction(db: DBTransaction): Transaction {
 
     card: db.card,
 
-    createdAt: db.created_at, // 👈 AQUI
+    createdAt: db.created_at,
   };
 }
-
-export type DBWeek = {
-  id: string;
-  month_id: string;
-
-  index: number;
-  budget: number;
-  spent: number;
-  remaining: number;
-
-  created_at: string;
-};
-
-// export function mapWeek(db: DBWeek) {
-//   return {
-//     id: db.id,
-//     monthId: db.month_id,
-//     weekNumber: db.week_number,
-//   };
-// }
