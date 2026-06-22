@@ -14,7 +14,7 @@ export function calculateWeekly(
   totalWeeks: number = 4,
 ): Week[] {
   // 🔥 PRIORIDADE 1: snapshots
-  if (snapshots.length >= 0) {
+  if (snapshots.length > 0) {
     return calculateFromSnapshots(
       snapshots,
       monthlyBudget,
