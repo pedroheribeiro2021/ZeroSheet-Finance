@@ -1,5 +1,6 @@
 import { getCurrentUser } from './auth.service';
 import { supabase } from '@/lib/supabase';
+import { filterActiveInstallments } from '@/core/engine/installments';
 
 export async function getInstallments(monthId: string) {
   const user = await getCurrentUser();
@@ -17,9 +18,6 @@ export async function getInstallments(monthId: string) {
 
   if (monthsError) throw monthsError;
 
-  const currentMonthIndex = months.findIndex((m) => m.id === monthId);
-  if (currentMonthIndex === -1) return [];
-
   const { data: installments, error } = await supabase
     .from('installments')
     .select(
@@ -36,17 +34,7 @@ export async function getInstallments(monthId: string) {
 
   if (error) throw error;
 
-  const activeInstallments = installments.filter((i) => {
-    const startIndex = months.findIndex((m) => m.id === i.start_month_id);
-
-    if (startIndex === -1) return false;
-
-    const endIndex = startIndex + i.total_installments - 1;
-
-    return currentMonthIndex >= startIndex && currentMonthIndex <= endIndex;
-  });
-
-  return activeInstallments;
+  return filterActiveInstallments(installments, months, monthId);
 }
 
 export async function createInstallment(data: {
