@@ -18,6 +18,9 @@ export default function EditTransactionModal({
   const [isFixed, setIsFixed] = useState(transaction.isFixed);
   const [isRecurring, setIsRecurring] = useState(transaction.isRecurring);
   const [isProvision, setIsProvision] = useState(transaction.isProvision);
+  const [dueDay, setDueDay] = useState(
+    transaction.dueDay != null ? String(transaction.dueDay) : '',
+  );
 
   const handleSave = async () => {
     try {
@@ -30,6 +33,7 @@ export default function EditTransactionModal({
         is_fixed: isFixed,
         is_recurring: isRecurring,
         is_provision: isProvision,
+        due_day: isRecurring && dueDay ? Number(dueDay) : null,
       });
 
       showToast('Transação atualizada com sucesso');
@@ -85,6 +89,21 @@ export default function EditTransactionModal({
                 onChange={(e) => setIsRecurring(e.target.checked)}
               />{' '}
               Recorrente
+            </label>
+          )}
+
+          {isFixed && isRecurring && (
+            <label className="grid gap-1">
+              Dia de vencimento (opcional)
+              <input
+                type="number"
+                min={1}
+                max={31}
+                placeholder="Ex: 10"
+                value={dueDay}
+                onChange={(e) => setDueDay(e.target.value)}
+                className="bg-zinc-800 p-2 rounded text-white w-24"
+              />
             </label>
           )}
 

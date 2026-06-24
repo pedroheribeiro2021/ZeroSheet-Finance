@@ -1,111 +1,68 @@
-# TODO — Zerosheet (itens ainda não realizados)
+# TODO — Zerosheet
 
 Revisão feita em 2026-06-24 contra o estado atual do código (branch
-`develop`, sincronizada com `origin/develop`). Itens do TODO original que já
-estavam implementados foram removidos desta lista — ver CONTEXT.md §5 para o
-que mudou desde a última revisão. Status de cada item confirmado por leitura
-de código, `npx tsc --noEmit`, `npx vitest run` e smoke test das rotas
-(`/login`, `/register`, `/dashboard`, `/transactions`, `/installments`,
-`/cards` respondendo 200 no dev server).
+`develop`). Todos os itens de prioridade Alta e Média do levantamento
+original já foram implementados — ver seção "Resolvidos" abaixo para o que
+foi feito e onde. O que resta é só de baixa prioridade / decisões de produto.
 
-## Funcionalidades
+## Itens ainda não realizados
 
-### Despesas recorrentes (boletos)
-- [ ] Implementar opção de definir a **data de vencimento** em despesas
-      recorrentes. `TransactionForm.tsx` só tem o toggle `isRecurring`, sem
-      campo de dia/data de vencimento.
-- [ ] Permitir que boletos recorrentes sejam gerados automaticamente
-      considerando o vencimento configurado. `month.service.ts` hoje só copia
-      transações `is_recurring` do mês anterior sem ajustar data de
-      vencimento.
+### Baixa prioridade
+- [ ] Decidir formalmente se a atualização do valor da fatura do cartão
+      (`CardSnapshotForm.tsx`) continua manual ou se algum dia o cálculo
+      passa a ser automático (somando transações no cartão). Hoje é manual
+      e funciona; isso é só uma decisão de produto, não um bug.
 
-### Cartões de crédito
-- [ ] Adicionar campo de **dia de vencimento** (`due_day`) no formulário de
-      criação de cartão (`CardForm.tsx`). O campo já existe na tabela `cards`
-      e em `card.service.ts`, e já é exibido em `app/cards/page.tsx`/
-      `CardList.tsx` — falta só a UI para definir/editar.
-- [ ] Adicionar campos de **cor** (`color`) e **limite** (`limit_amount`) no
-      formulário de cartão — mesma situação do `due_day`: suportados no
-      service, sem UI.
-- [ ] Criar um formulário/fluxo de **edição** de cartão. Hoje só existe criar
-      (`CardForm`) e remover (`CardList`/página de cartões); `updateCard()`
-      em `card.service.ts` não é chamado em nenhum lugar da UI.
-- [ ] Melhorar o campo de **dia de fechamento** do cartão, tornando-o mais
-      claro para o usuário. Hoje é um `<input type="number">` sem label
-      (`CardForm.tsx`), só identificável pelo contexto.
-
-## Experiência do usuário (UX)
-
-### Feedback visual
-- [ ] Adicionar notificações (toast) após lançamentos, salvamentos,
-      atualizações, exclusões e demais ações importantes. Não há nenhuma
-      lib de toast no projeto; o feedback de erro atual é `alert()` /
-      `console.error()` (`CardForm`, `CardSnapshotForm`, `RegisterPage`,
-      `LoginPage` etc.).
-
-### Autenticação
-- [ ] Adicionar botão na tela de cadastro (`app/register/page.tsx`) para
-      voltar à tela de login. Hoje só existe redirect automático para
-      `/login` depois que a conta é criada com sucesso — não há como voltar
-      antes disso.
-- [ ] Corrigir o problema do usuário autenticado não atualizar ao trocar de
-      conta sem recarregar a aplicação. Confirmado em código:
-      `components/layout/LayoutShell.tsx` busca o usuário atual uma única vez
-      em `useEffect(() => {...}, [])`, sem um listener de
-      `supabase.auth.onAuthStateChange` — trocar de conta na mesma aba não
-      atualiza o e-mail mostrado na Topbar.
-
-## Correções
-
-### Sessão do usuário
-- [ ] Mesmo item da seção de autenticação acima — contexto de auth não é
-      atualizado corretamente após troca de usuário sem reload.
-
-## Infraestrutura
-
-### Deploy
-- [ ] Verificar se já existe ambiente publicado. Não há `vercel.json`,
-      `netlify.toml` ou pasta `.vercel` no repositório, então isso **não é
-      verificável a partir do código** — precisa ser checado direto no painel
-      do provedor de hosting (Vercel/outro) ou perguntando à pessoa
-      responsável pelo deploy.
-- [ ] Se não existir: deploy do frontend, deploy do backend (se aplicável —
-      hoje toda a lógica de servidor é Supabase, então "backend" aqui é
-      essencialmente configurar o projeto Supabase de produção), validar
-      variáveis de ambiente (`NEXT_PUBLIC_SUPABASE_URL`,
-      `NEXT_PUBLIC_SUPABASE_ANON_KEY`), autenticação e conexão com o banco.
+Nada mais ficou pendente da lista original. Itens novos que aparecerem
+devem ser adicionados aqui.
 
 ---
 
-## Itens do TODO original já resolvidos (fora desta lista)
+## Resolvidos
 
-- "Reavaliar atualização manual do valor do cartão, pois o campo não está mais
-  disponível" — **a premissa não é mais verdadeira**: `CardSnapshotForm.tsx`
-  existe, está renderizado em `app/cards/page.tsx` e funciona (upsert de
-  fatura por cartão/mês). A decisão formal de manter manual vs. tornar o
-  cálculo automático ainda não foi tomada, mas o campo em si voltou.
-- Bug de matching cartão↔fatura no Dashboard (`snapshot.card === card.slug`
-  vs. `card_id`) — corrigido (`fix(cards): match card snapshots by card_id
-  instead of legacy slug`).
-- Duplicação de `normalizeCategory()` em `core/utils/category.ts` — arquivo
-  removido.
-- `core/engine/installments.ts` como placeholder não usado — refatorado para
-  `filterActiveInstallments()` e agora é de fato usado por
-  `installment.service.ts`.
-- Falta de CI — workflow adicionado em `.github/workflows/ci.yml`.
+### Alta prioridade (PR #47 — `feature/toasts-card-fields-and-auth-fix`)
+- Sessão do usuário não atualizava ao trocar de conta sem reload —
+  `LayoutShell.tsx` agora usa `supabase.auth.onAuthStateChange`.
+- Cartão: `due_day`, `color` e `limit_amount` agora têm UI em `CardForm`,
+  além de um fluxo de edição (`EditCardModal.tsx` + `CardList.tsx`, que
+  estava morto e foi revivido).
+- Feedback visual (toasts) — `components/ui/ToastProvider.tsx`, plugado em
+  transações, parcelamentos, cartões, registro e logout.
 
-## Prioridade sugerida (ajustada)
+### Média prioridade (PR atual — `feature/recurring-transaction-due-day`)
+- Vencimento em despesas recorrentes: `TransactionForm.tsx` e
+  `EditTransactionModal.tsx` ganharam um campo "Dia de vencimento" quando a
+  transação é recorrente (coluna `due_day` adicionada à tabela
+  `transactions` via migration); `TransactionList.tsx` exibe o dia junto do
+  ícone 🔁.
+- **Bug real encontrado e corrigido durante o teste end-to-end desta
+  feature**: `copyRecurringTransactions()` (em `transaction.service.ts`)
+  fazia `.upsert(payload, { onConflict: 'month_id,category,user_id' })`,
+  mas não existe (e não deveria existir — categorias se repetem entre
+  transações do mesmo mês) nenhuma constraint única nessas colunas. Isso
+  fazia a cópia de recorrentes para o mês novo falhar com
+  `42P10 (no unique or exclusion constraint matching the ON CONFLICT
+  specification)` sempre que havia ao menos uma transação recorrente —
+  ou seja, **criar um novo mês com recorrências configuradas estava
+  quebrado em produção antes desta correção**. Trocado para `.insert()`
+  simples; validado de ponta a ponta contra o banco real (criar
+  recorrente com vencimento → copiar para o mês seguinte → vencimento
+  preservado).
+- Botão de voltar para o login na tela de cadastro (`app/register/page.tsx`).
+- Clareza do campo de dia de fechamento do cartão — resolvido como parte do
+  trabalho de campos de cartão do PR #47 (labels adicionados a todos os
+  campos do formulário).
 
-### Alta
-- Corrigir atualização do usuário logado ao trocar de conta.
-- Adicionar campos de cartão faltantes (`due_day`, `color`, `limit_amount`) +
-  fluxo de edição.
-- Adicionar feedback visual (toasts).
+### Infraestrutura
+- Deploy: aplicação publicada em produção na Vercel —
+  https://zerosheet-finance.vercel.app (projeto `zerosheet-finance`,
+  conectado ao repositório GitHub, branch de produção `develop`). Env vars
+  `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY` configuradas.
 
-### Média
-- Implementar vencimento em despesas recorrentes (campo + geração automática).
-- Adicionar botão de voltar para login no Register.
-- Melhorar clareza do campo de dia de fechamento do cartão.
-
-### Baixa
-- Verificar/decidir sobre deploy (depende de informação externa ao repo).
+### Já resolvidos antes desta revisão (ver CONTEXT.md §5)
+- Bug de matching cartão↔fatura no Dashboard (`card_id` em vez de `slug`).
+- Duplicação de `normalizeCategory()`.
+- `core/engine/installments.ts` como placeholder não usado.
+- Falta de CI (`.github/workflows/ci.yml`).
+- "Atualização manual do valor do cartão não está mais disponível" — a
+  premissa estava errada, o campo nunca saiu do ar.

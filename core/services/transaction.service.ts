@@ -106,14 +106,13 @@ export async function copyRecurringTransactions(
     is_fixed: t.is_fixed,
     is_recurring: t.is_recurring,
     is_provision: t.is_provision,
+    due_day: t.due_day ?? null,
     card: t.card ?? null,
   }));
 
   const { error: insertError } = await supabase
     .from('transactions')
-    .upsert(payload, {
-      onConflict: 'month_id,category,user_id',
-    });
+    .insert(payload);
 
   if (insertError) throw insertError;
 }
