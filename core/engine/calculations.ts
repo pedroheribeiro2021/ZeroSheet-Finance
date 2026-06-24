@@ -11,16 +11,15 @@ export function calculateSummary(
 ) {
   let totalIncome = 0;
   let fixedCosts = 0;
-
-  let provisionPlanned = 0;
-  let provisionUsed = 0;
-
   let cardSpending = 0;
 
-  const provisionMap: Record<string, number> = {};
+  const provisionPlanned: Record<string, number> = {};
+  const realizedSpend: Record<string, number> = {};
+
+  const hasSnapshots = !!snapshots && snapshots.length > 0;
 
   for (const t of transactions) {
-    const category = normalizeCategory(t.category);
+    const cat = normalizeCategory(t.category);
 
     if (t.type === 'income') {
       totalIncome += t.amount;
@@ -28,35 +27,51 @@ export function calculateSummary(
     }
 
     if (t.isProvision) {
-      provisionPlanned += t.amount;
-      provisionMap[category] = (provisionMap[category] || 0) + t.amount;
+      provisionPlanned[cat] = (provisionPlanned[cat] ?? 0) + t.amount;
       continue;
-    }
-
-    if (!t.isFixed && !t.isProvision && t.type === 'expense') {
-      provisionUsed += t.amount;
-      provisionMap[category] = (provisionMap[category] || 0) - t.amount;
-    }
-
-    if (!snapshots || snapshots.length === 0) {
-      if (t.card) {
-        cardSpending += t.amount;
-        continue;
-      }
     }
 
     if (t.isFixed) {
       fixedCosts += t.amount;
       continue;
     }
+
+    if (!hasSnapshots && t.card) {
+      cardSpending += t.amount;
+      continue;
+    }
+
+    if (hasSnapshots && t.card) {
+      continue;
+    }
+
+    realizedSpend[cat] = (realizedSpend[cat] ?? 0) + t.amount;
   }
 
-  // SNAPSHOT
-  if (snapshots && snapshots.length > 0) {
-    cardSpending = snapshots.reduce((acc, s) => acc + Number(s.amount), 0);
+  if (hasSnapshots) {
+    cardSpending = snapshots!.reduce((acc, s) => acc + Number(s.amount), 0);
   }
 
-  const provisionDiff = provisionPlanned - provisionUsed;
+  // ENVELOPE: por categoria, vale o MAIOR entre planejado e realizado
+  let envelopeSpending = 0;
+  const provisionMap: Record<string, number> = {};
+  let plannedTotal = 0;
+  let usedTotal = 0;
+
+  const categories = new Set([
+    ...Object.keys(provisionPlanned),
+    ...Object.keys(realizedSpend),
+  ]);
+
+  for (const cat of categories) {
+    const planned = provisionPlanned[cat] ?? 0;
+    const realized = realizedSpend[cat] ?? 0;
+
+    envelopeSpending += Math.max(planned, realized);
+    provisionMap[cat] = planned - realized;
+    plannedTotal += planned;
+    usedTotal += realized;
+  }
 
   const installmentSpending = installments.reduce(
     (acc, i) => acc + i.installment_amount,
@@ -67,7 +82,7 @@ export function calculateSummary(
     totalIncome -
       fixedCosts -
       cardSpending -
-      provisionPlanned -
+      envelopeSpending -
       installmentSpending,
   );
 
@@ -80,9 +95,10 @@ export function calculateSummary(
 
     cardSpending,
 
-    provisionPlanned,
-    provisionUsed,
-    provisionDiff,
+    provisionPlanned: plannedTotal,
+    provisionUsed: usedTotal,
+    provisionDiff: plannedTotal - usedTotal,
+    envelopeSpending,
 
     total,
     weeklyBudget,
