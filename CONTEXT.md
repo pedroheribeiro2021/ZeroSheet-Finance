@@ -125,53 +125,72 @@ tests/
 
 ## 5. Estado atual do desenvolvimento
 
-Branch atual: `feature/cards-normalization` (à frente da `main`).
+Branch atual: `develop` (sincronizada com `origin/develop`; é a branch base
+para as `feature/*` — `main` recebe merges a partir dela).
 
 ### O que está pronto e funcionando
 - Autenticação multiusuário (login/registro) com isolamento de dados por RLS.
 - CRUD completo de transações, parcelamentos e cartões.
-- Cartões e suas faturas (`card_snapshots`) foram migrados de valores
-  mockados/hardcoded (Nubank, C6...) para uma tabela dinâmica `cards` por
-  usuário — esse foi o trabalho do commit mais recente
-  (`feat(cards): normalize card relations and replace mocked credit card system`).
+- Cartões e suas faturas (`card_snapshots`) usam a tabela dinâmica `cards` por
+  usuário (sem mais valores mockados/hardcoded de Nubank, C6 etc.).
+- **Bug de matching cartão↔fatura corrigido**: `Dashboard.tsx` agora casa
+  snapshot e cartão via `snapshot.card_id === card.id`, igual ao resto do app
+  (`fix(cards): match card snapshots by card_id instead of legacy slug`).
 - Dashboard agrega receitas, custos fixos, provisões (planejado vs. realizado),
   gasto em cartões e parcelas, e quebra o orçamento do mês em semanas.
 - Recorrência: ao criar um novo mês, transações marcadas `is_recurring` são
-  copiadas automaticamente do mês anterior.
+  copiadas automaticamente do mês anterior (sem suporte a dia de vencimento —
+  ver TODO.md).
+- `core/engine/installments.ts` deixou de ser placeholder: agora exporta
+  `filterActiveInstallments()`, função pura testada
+  (`tests/engine/installments.test.ts`) e efetivamente usada por
+  `core/services/installment.service.ts:getInstallments`.
+- `core/utils/category.ts` (duplicata de `normalizeCategory`) e o código morto
+  de `core/models/mappers.ts` foram removidos
+  (`chore: remove dead code left from cards normalization migration`).
+- CI configurado em `.github/workflows/ci.yml`: typecheck (`tsc --noEmit`),
+  `vitest run`, lint (`continue-on-error: true`) e `next build` em PRs/pushes
+  para `develop` e `main`.
+- Cobertura de testes ampliada: 3 arquivos / 12 testes
+  (`calculations.test.ts`, `weekly.test.ts`, `installments.test.ts`) —
+  confirmado rodando localmente (`npx vitest run` → 12 passed) e
+  `npx tsc --noEmit` limpo.
 
 ### Trabalho em andamento / inconsistências conhecidas
-- **Dashboard ainda não foi 100% migrado para a normalização de cartões**:
-  `components/dashboard/Dashboard.tsx` (linha ~159) ainda casa snapshot com
-  cartão via `snapshot.card === card.slug`, enquanto o resto do app
-  (`app/cards/page.tsx`, `core/services/cardSnapshot.service.ts`) já usa
-  `snapshot.card_id === card.id`. Isso provavelmente faz o card de fatura por
-  cartão no dashboard nunca casar com o snapshot certo — próximo passo natural
-  da normalização de cartões.
-- `core/utils/normalize.ts` e `core/utils/category.ts` têm a mesma função
-  `normalizeCategory()` duplicada — um dos dois deveria ser removido.
-- `core/engine/installments.ts` (`getInstallmentsForMonth`) é um placeholder
-  comentado como "simplificado por enquanto" e não parece ser usado pelo
-  Dashboard — a lógica real de parcela ativa no mês está em
-  `core/services/installment.service.ts:getInstallments`, que já considera o
-  índice do mês na timeline.
-- `core/models/mappers.ts` tem um tipo `DBWeek` duplicado (já existe em
-  `core/types/database.ts`) e um bloco de código morto comentado no final do
-  arquivo.
-- Tipagem solta: vários `any[]`/`any` em `Dashboard.tsx`,
-  `transaction.service.ts`, `week.service.ts` etc. — o projeto está em modo
-  TS `strict`, mas essas áreas escapam dele via `any` explícito (alguns
-  arquivos têm `/* eslint-disable @typescript-eslint/no-explicit-any */` no
-  topo).
-- Cobertura de testes é mínima: só `calculateSummary()` tem teste
-  (`tests/engine/calculations.test.ts`). `calculateWeekly`, os services e os
-  componentes não têm testes ainda.
-- Não há workflow de CI configurado (`.github/` não existe no repo).
+- Tipagem solta: `any[]`/`any` ainda generalizado em `Dashboard.tsx`,
+  `transaction.service.ts`, `week.service.ts`, `groupTransactions.ts` e na
+  maioria dos componentes (`TransactionForm`, `InstallmentForm`,
+  `InstallmentList`, `CardList`, `CardSnapshotForm`, `Modal`, `Card` etc.).
+  Várias dessas áreas têm
+  `/* eslint-disable @typescript-eslint/no-explicit-any */` no topo do
+  arquivo — não houve progresso aqui desde a última revisão.
+- Cobertura de testes ainda é só de `core/engine/*` (funções puras) — services,
+  hooks e componentes continuam sem teste.
+- `components/cards/CardList.tsx` não é importado em lugar nenhum
+  (`app/cards/page.tsx` renderiza a lista de cartões inline) — candidato a
+  remoção ou a voltar a ser usado.
+- `CardForm.tsx` (criação de cartão) só coleta `name` e `closing_day`, embora
+  `cards` (tabela e `card.service.ts`) já suportem `due_day`, `color` e
+  `limit_amount` — esses campos não têm UI nenhuma para serem definidos, e não
+  existe formulário de edição de cartão (só criar e remover). Ver TODO.md.
+- Bug de sessão confirmado por leitura de código: `LayoutShell.tsx` busca o
+  usuário atual uma única vez em `useEffect(..., [])`, sem listener
+  `supabase.auth.onAuthStateChange`. Trocar de conta na mesma aba sem recarregar
+  a página não atualiza o e-mail exibido na Topbar. Ver TODO.md.
+- Não há sistema de toast/notificação (`alert()`/`console.error` ainda é o
+  feedback usado em `CardForm`, `CardSnapshotForm`, `RegisterPage` etc.).
+- Não há arquivo `vercel.json`/`netlify.toml`/`.vercel` no repo — não é
+  possível confirmar pela árvore de arquivos se existe um ambiente publicado;
+  isso só é verificável no painel do provedor de hosting.
 
-### Histórico recente (branches já mergeadas na `main`, mais novas primeiro)
-multi-user + RLS → register/login → sidebar/layout → split de rotas por
-módulo → fluxo modal-driven → renderização dinâmica de cartões → cartões
-dinâmicos por usuário (substituindo hardcode) → parcelamentos migrados para
-cartões dinâmicos → normalização de relações de cartão (commit atual, HEAD).
+### Histórico recente (mais novo primeiro, a partir do que o CONTEXT.md anterior já cobria)
+refactor: extrai filtro de parcelas ativas para `core/engine` → chore: workflow
+de CI (typecheck/test/build) → chore: remoção de código morto da normalização
+de cartões → fix: teste de `calculateSummary` defasado + bug de fallback em
+`calculateWeekly` → fix: matching de fatura por `card_id` em vez do `slug`
+legado → docs: CONTEXT.md inicial → normalização de relações de cartão →
+cartões dinâmicos por usuário (substituindo hardcode) → parcelamentos
+migrados para cartões dinâmicos.
 
 Há muitas outras branches `feature/*` antigas no repositório remoto que já
 foram incorporadas via merge e podem ser candidatas a limpeza
