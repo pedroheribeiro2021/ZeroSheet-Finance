@@ -55,6 +55,13 @@ export default function RegisterPage() {
         >
           Criar conta
         </button>
+
+        <button
+          onClick={() => router.push('/login')}
+          className="text-zinc-400 text-sm"
+        >
+          Voltar para o login
+        </button>
       </div>
     </div>
   );

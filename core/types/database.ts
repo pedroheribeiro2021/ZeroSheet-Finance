@@ -12,6 +12,7 @@ export type DBTransaction = {
   is_provision: boolean;
 
   is_recurring: boolean;
+  due_day: number | null;
 
   card: string | null;
 };

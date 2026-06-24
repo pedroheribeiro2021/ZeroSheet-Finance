@@ -40,7 +40,9 @@ export default function TransactionList({ transactions, onUpdated }: any) {
 
             <div className="text-xs flex gap-2">
               {t.isFixed && <span>Fixo</span>}
-              {t.isRecurring && <span>🔁</span>}
+              {t.isRecurring && (
+                <span>🔁{t.dueDay ? ` vence dia ${t.dueDay}` : ''}</span>
+              )}
               {t.isProvision && <span>📊</span>}
             </div>
           </div>

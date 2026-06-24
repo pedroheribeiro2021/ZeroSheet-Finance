@@ -18,6 +18,7 @@ export default function TransactionForm({ onCreated, monthId }: any) {
   const [isFixed, setIsFixed] = useState(false);
   const [isRecurring, setIsRecurring] = useState(false);
   const [isProvision, setIsProvision] = useState(false);
+  const [dueDay, setDueDay] = useState('');
 
   const isCustom = selectedCategory === '__custom__';
 
@@ -45,6 +46,7 @@ export default function TransactionForm({ onCreated, monthId }: any) {
         is_fixed: isFixed,
         is_recurring: isRecurring,
         is_provision: isProvision,
+        due_day: isRecurring && dueDay ? Number(dueDay) : null,
         card: null,
       });
 
@@ -55,6 +57,7 @@ export default function TransactionForm({ onCreated, monthId }: any) {
       setIsFixed(false);
       setIsRecurring(false);
       setIsProvision(false);
+      setDueDay('');
 
       showToast('Transação salva com sucesso');
       onCreated?.();
@@ -132,6 +135,21 @@ export default function TransactionForm({ onCreated, monthId }: any) {
               onChange={(e) => setIsRecurring(e.target.checked)}
             />
             Recorrente mensal
+          </label>
+        )}
+
+        {isFixed && isRecurring && (
+          <label className="grid gap-1 ml-4">
+            Dia de vencimento (opcional)
+            <input
+              type="number"
+              min={1}
+              max={31}
+              placeholder="Ex: 10"
+              value={dueDay}
+              onChange={(e) => setDueDay(e.target.value)}
+              className="bg-zinc-800 p-2 rounded text-white w-24"
+            />
           </label>
         )}
 

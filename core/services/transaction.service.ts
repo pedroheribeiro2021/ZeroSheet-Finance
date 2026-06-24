@@ -106,6 +106,7 @@ export async function copyRecurringTransactions(
     is_fixed: t.is_fixed,
     is_recurring: t.is_recurring,
     is_provision: t.is_provision,
+    due_day: t.due_day ?? null,
     card: t.card ?? null,
   }));
 

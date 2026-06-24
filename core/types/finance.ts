@@ -12,6 +12,7 @@ export type Transaction = {
   isFixed: boolean;
   isProvision: boolean;
   isRecurring: boolean;
+  dueDay?: number | null;
 
   card?: string | null;
 
