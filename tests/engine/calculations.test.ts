@@ -316,4 +316,24 @@ describe('calculateSummary', () => {
     expect(result.reserveSpending).toBe(1000);
     expect(result.total).toBe(4000);
   });
+
+  it('switches the weekly budget formula via weeklyBudgetVariant', () => {
+    const totalVariant = calculateSummary(transactions, weeks);
+    const incomeMinusFixedVariant = calculateSummary(
+      transactions,
+      weeks,
+      undefined,
+      [],
+      'incomeMinusFixed',
+    );
+
+    // total já desconta cartão/envelope/etc.; (receita - fixos) não — devem
+    // divergir sempre que houver outras deduções além de fixedCosts.
+    expect(incomeMinusFixedVariant.weeklyBudget).not.toBe(
+      totalVariant.weeklyBudget,
+    );
+    expect(incomeMinusFixedVariant.weeklyBudget).toBe(
+      (4200 - 100) / weeks.length,
+    );
+  });
 });

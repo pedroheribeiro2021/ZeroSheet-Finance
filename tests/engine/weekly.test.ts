@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateWeekly } from '@/core/engine/weekly';
+import { calculateWeekly, getWeeksInMonth } from '@/core/engine/weekly';
 import { Transaction } from '@/core/types/finance';
 
 const transactions: Transaction[] = [
@@ -62,5 +62,26 @@ describe('calculateWeekly', () => {
 
     expect(weeks[0]).toMatchObject({ index: 1, spent: 100 });
     expect(weeks[1]).toMatchObject({ index: 2, spent: 150 });
+  });
+
+  it('respects a real (non-default) number of weeks when passed explicitly', () => {
+    const weeks = calculateWeekly([], [], 500, 'm1', 5);
+
+    expect(weeks).toHaveLength(5);
+    expect(weeks[4]).toMatchObject({ index: 5, budget: 100 });
+  });
+});
+
+describe('getWeeksInMonth', () => {
+  it('returns 4 for a 28-day February', () => {
+    expect(getWeeksInMonth(2, 2026)).toBe(4); // 2026 não é bissexto
+  });
+
+  it('returns 5 for a 31-day month', () => {
+    expect(getWeeksInMonth(1, 2026)).toBe(5); // Janeiro, 31 dias
+  });
+
+  it('returns 5 for a 30-day month', () => {
+    expect(getWeeksInMonth(4, 2026)).toBe(5); // Abril, 30 dias
   });
 });

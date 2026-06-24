@@ -8,6 +8,7 @@ export function calculateSummary(
   weeks: Week[],
   snapshots?: { card: string; amount: number }[],
   installments: any[] = [],
+  weeklyBudgetVariant: 'total' | 'incomeMinusFixed' = 'total',
 ) {
   let totalIncome = 0;
   let fixedCosts = 0;
@@ -98,8 +99,15 @@ export function calculateSummary(
       reserveSpending,
   );
 
+  const weeklyBudgetBase =
+    weeklyBudgetVariant === 'incomeMinusFixed'
+      ? totalIncome - fixedCosts
+      : total;
+
   const weeklyBudget =
-    weeks.length > 0 ? toCurrency(total / weeks.length) : total;
+    weeks.length > 0
+      ? toCurrency(weeklyBudgetBase / weeks.length)
+      : toCurrency(weeklyBudgetBase);
 
   return {
     totalIncome,
