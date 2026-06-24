@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
-import { getCurrentUser } from '@/core/services/auth.service';
+import { supabase } from '@/lib/supabase';
 
 const pageTitles: Record<string, string> = {
   '/dashboard': 'Dashboard',
@@ -43,22 +43,15 @@ export default function LayoutShell({
   }, [pathname]);
 
   useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const user = await getCurrentUser();
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setUserEmail(session?.user?.email ?? '');
+      },
+    );
 
-        if (!user) {
-          setUserEmail('');
-          return;
-        }
-
-        setUserEmail(user.email ?? '');
-      } catch (err) {
-        console.error(err);
-      }
+    return () => {
+      listener.subscription.unsubscribe();
     };
-
-    loadUser();
   }, []);
 
   if (isAuthPage) {

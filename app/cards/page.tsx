@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 
 import CardForm from '@/components/cards/CardForm';
 import CardSnapshotForm from '@/components/cards/CardSnapshotForm';
+import CardList from '@/components/cards/CardList';
 
 import { getCards } from '@/core/services/card.service';
 import { getCardSnapshots } from '@/core/services/cardSnapshot.service';
@@ -60,49 +61,7 @@ export default function CardsPage() {
 
       <CardSnapshotForm monthId={monthId} cards={cards} onUpdated={load} />
 
-      <div className="grid gap-3">
-        {cards.map((card) => {
-          const snapshot = snapshots.find((s) => s.card_id === card.id);
-
-          return (
-            <div
-              key={card.id}
-              className="bg-zinc-900 rounded p-4 border border-zinc-800"
-            >
-              <div className="flex justify-between items-start">
-                <div>
-                  <h2 className="text-white font-bold text-lg">{card.name}</h2>
-
-                  <p className="text-zinc-400 text-sm">
-                    Fecha dia {card.closing_day}
-                  </p>
-
-                  <p className="text-zinc-400 text-sm">
-                    Vence dia {card.due_day ?? '-'}
-                  </p>
-                </div>
-
-                <div className="text-right">
-                  <p className="text-zinc-500 text-sm">Fatura Atual</p>
-
-                  <p className="text-white text-xl font-bold">
-                    {new Intl.NumberFormat('pt-BR', {
-                      style: 'currency',
-                      currency: 'BRL',
-                    }).format(Number(snapshot?.amount ?? 0))}
-                  </p>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-
-        {cards.length === 0 && (
-          <div className="bg-zinc-900 rounded p-4 text-zinc-400">
-            Nenhum cartão cadastrado
-          </div>
-        )}
-      </div>
+      <CardList cards={cards} snapshots={snapshots} onUpdated={load} />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
 import { supabase } from '@/lib/supabase';
+import { useToast } from '@/components/ui/ToastProvider';
 
 const items = [
   {
@@ -43,9 +44,11 @@ export default function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const { showToast } = useToast();
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    showToast('Sessão encerrada');
     router.push('/login');
     router.refresh();
   };

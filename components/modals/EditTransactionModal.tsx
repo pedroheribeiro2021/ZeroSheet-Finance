@@ -3,12 +3,14 @@
 import { useState } from 'react';
 import { updateTransaction } from '@/core/services/transaction.service';
 import { parseCurrencyInput } from '@/core/utils/number';
+import { useToast } from '@/components/ui/ToastProvider';
 
 export default function EditTransactionModal({
   transaction,
   onClose,
   onUpdated,
 }: any) {
+  const { showToast } = useToast();
   const [amount, setAmount] = useState(String(transaction.amount));
   const [category, setCategory] = useState(transaction.category);
   const [type, setType] = useState(transaction.type);
@@ -30,10 +32,12 @@ export default function EditTransactionModal({
         is_provision: isProvision,
       });
 
+      showToast('Transação atualizada com sucesso');
       onUpdated?.();
       onClose();
     } catch (err) {
       console.error(err);
+      showToast('Erro ao atualizar transação', 'error');
     }
   };
 

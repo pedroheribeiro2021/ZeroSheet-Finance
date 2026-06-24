@@ -3,8 +3,10 @@
 import { useState } from 'react';
 import { deleteTransaction } from '@/core/services/transaction.service';
 import EditTransactionModal from '../modals/EditTransactionModal';
+import { useToast } from '@/components/ui/ToastProvider';
 
 export default function TransactionList({ transactions, onUpdated }: any) {
+  const { showToast } = useToast();
   const [selected, setSelected] = useState<any>(null);
 
   const handleDelete = async (id: string) => {
@@ -14,9 +16,11 @@ export default function TransactionList({ transactions, onUpdated }: any) {
 
     try {
       await deleteTransaction(id);
+      showToast('Transação excluída');
       onUpdated?.();
     } catch (err) {
       console.error(err);
+      showToast('Erro ao excluir transação', 'error');
     }
   };
 

@@ -4,8 +4,11 @@ import { useState } from 'react';
 import { createTransaction } from '@/core/services/transaction.service';
 import { parseCurrencyInput } from '@/core/utils/number';
 import { DEFAULT_CATEGORIES } from '@/core/constants/categories';
+import { useToast } from '@/components/ui/ToastProvider';
 
 export default function TransactionForm({ onCreated, monthId }: any) {
+  const { showToast } = useToast();
+
   const [amount, setAmount] = useState('');
   const [type, setType] = useState<'income' | 'expense'>('expense');
 
@@ -21,7 +24,7 @@ export default function TransactionForm({ onCreated, monthId }: any) {
   const handleSubmit = async () => {
     try {
       if (!monthId) {
-        alert('Erro: mês não carregado');
+        showToast('Erro: mês não carregado', 'error');
         return;
       }
 
@@ -30,7 +33,7 @@ export default function TransactionForm({ onCreated, monthId }: any) {
       const finalCategory = isCustom ? customCategory : selectedCategory;
 
       if (!finalCategory) {
-        alert('Informe uma categoria');
+        showToast('Informe uma categoria', 'error');
         return;
       }
 
@@ -53,9 +56,11 @@ export default function TransactionForm({ onCreated, monthId }: any) {
       setIsRecurring(false);
       setIsProvision(false);
 
+      showToast('Transação salva com sucesso');
       onCreated?.();
     } catch (err) {
       console.error(err);
+      showToast('Erro ao salvar transação', 'error');
     }
   };
 

@@ -3,9 +3,11 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { useToast } from '@/components/ui/ToastProvider';
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { showToast } = useToast();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -17,11 +19,11 @@ export default function RegisterPage() {
     });
 
     if (error) {
-      alert(error.message);
+      showToast(error.message, 'error');
       return;
     }
 
-    alert('Conta criada com sucesso!');
+    showToast('Conta criada com sucesso!');
 
     router.push('/login');
   };

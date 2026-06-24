@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { upsertCardSnapshot } from '@/core/services/cardSnapshot.service';
 import { parseCurrencyInput } from '@/core/utils/number';
+import { useToast } from '@/components/ui/ToastProvider';
 
 export default function CardSnapshotForm({
   monthId,
@@ -14,6 +15,7 @@ export default function CardSnapshotForm({
   cards: any[];
   onUpdated: () => void;
 }) {
+  const { showToast } = useToast();
   const [values, setValues] = useState<Record<string, string>>({});
 
   const handleChange = (cardId: string, value: string) => {
@@ -35,9 +37,11 @@ export default function CardSnapshotForm({
 
       setValues({});
 
+      showToast('Fatura(s) atualizada(s) com sucesso');
       onUpdated();
     } catch (err) {
       console.error(err);
+      showToast('Erro ao salvar fatura', 'error');
     }
   };
 
