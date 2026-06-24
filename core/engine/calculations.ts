@@ -12,6 +12,7 @@ export function calculateSummary(
   let totalIncome = 0;
   let fixedCosts = 0;
   let cardSpending = 0;
+  let reimbursementIncome = 0;
 
   const provisionPlanned: Record<string, number> = {};
   const realizedSpend: Record<string, number> = {};
@@ -22,7 +23,11 @@ export function calculateSummary(
     const cat = normalizeCategory(t.category);
 
     if (t.type === 'income') {
-      totalIncome += t.amount;
+      if (t.isReimbursement) {
+        reimbursementIncome += t.amount;
+      } else {
+        totalIncome += t.amount;
+      }
       continue;
     }
 
@@ -94,6 +99,7 @@ export function calculateSummary(
     fixedCosts,
 
     cardSpending,
+    reimbursementIncome,
 
     provisionPlanned: plannedTotal,
     provisionUsed: usedTotal,

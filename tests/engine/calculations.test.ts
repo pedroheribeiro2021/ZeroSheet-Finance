@@ -240,4 +240,44 @@ describe('calculateSummary', () => {
     expect(result.envelopeSpending).toBe(500);
     expect(result.total).toBe(1000 - 500);
   });
+
+  it('keeps a reimbursement income out of totalIncome and the final total', () => {
+    const tx: Transaction[] = [
+      {
+        id: '1',
+        monthId: 'm1',
+        type: 'income',
+        category: 'salary',
+        amount: 1000,
+        isFixed: false,
+        isProvision: false,
+        isRecurring: false,
+        card: null,
+        createdAt: '2024-01-01',
+      },
+      {
+        id: '2',
+        monthId: 'm1',
+        type: 'income',
+        category: 'reembolso',
+        amount: 465.92,
+        isFixed: false,
+        isProvision: false,
+        isRecurring: false,
+        isReimbursement: true,
+        card: null,
+        createdAt: '2024-01-02',
+      },
+    ];
+
+    const withoutReimbursement = calculateSummary(
+      tx.filter((t) => !t.isReimbursement),
+      [],
+    );
+    const withReimbursement = calculateSummary(tx, []);
+
+    expect(withReimbursement.totalIncome).toBe(1000);
+    expect(withReimbursement.reimbursementIncome).toBe(465.92);
+    expect(withReimbursement.total).toBe(withoutReimbursement.total);
+  });
 });

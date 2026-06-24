@@ -14,6 +14,9 @@ export type Transaction = {
   isRecurring: boolean;
   dueDay?: number | null;
 
+  /** Receita que aparece no resumo mas não soma no total (ex.: reembolso). */
+  isReimbursement?: boolean;
+
   card?: string | null;
 
   createdAt: string; // 👈 ESSENCIAL
