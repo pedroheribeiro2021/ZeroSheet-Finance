@@ -280,4 +280,40 @@ describe('calculateSummary', () => {
     expect(withReimbursement.reimbursementIncome).toBe(465.92);
     expect(withReimbursement.total).toBe(withoutReimbursement.total);
   });
+
+  it('deducts a reserve from the total but keeps it out of fixedCosts', () => {
+    const tx: Transaction[] = [
+      {
+        id: '1',
+        monthId: 'm1',
+        type: 'income',
+        category: 'salary',
+        amount: 5000,
+        isFixed: false,
+        isProvision: false,
+        isRecurring: false,
+        card: null,
+        createdAt: '2024-01-01',
+      },
+      {
+        id: '2',
+        monthId: 'm1',
+        type: 'expense',
+        category: 'reserva',
+        amount: 1000,
+        isFixed: true,
+        isProvision: false,
+        isRecurring: false,
+        isReserve: true,
+        card: null,
+        createdAt: '2024-01-02',
+      },
+    ];
+
+    const result = calculateSummary(tx, []);
+
+    expect(result.fixedCosts).toBe(0);
+    expect(result.reserveSpending).toBe(1000);
+    expect(result.total).toBe(4000);
+  });
 });

@@ -17,6 +17,9 @@ export type Transaction = {
   /** Receita que aparece no resumo mas não soma no total (ex.: reembolso). */
   isReimbursement?: boolean;
 
+  /** Reserva/poupança: abate do total, mas separado de custos fixos. */
+  isReserve?: boolean;
+
   card?: string | null;
 
   createdAt: string; // 👈 ESSENCIAL

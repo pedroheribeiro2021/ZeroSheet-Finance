@@ -13,6 +13,7 @@ export function calculateSummary(
   let fixedCosts = 0;
   let cardSpending = 0;
   let reimbursementIncome = 0;
+  let reserveSpending = 0;
 
   const provisionPlanned: Record<string, number> = {};
   const realizedSpend: Record<string, number> = {};
@@ -33,6 +34,11 @@ export function calculateSummary(
 
     if (t.isProvision) {
       provisionPlanned[cat] = (provisionPlanned[cat] ?? 0) + t.amount;
+      continue;
+    }
+
+    if (t.isReserve) {
+      reserveSpending += t.amount;
       continue;
     }
 
@@ -88,7 +94,8 @@ export function calculateSummary(
       fixedCosts -
       cardSpending -
       envelopeSpending -
-      installmentSpending,
+      installmentSpending -
+      reserveSpending,
   );
 
   const weeklyBudget =
@@ -100,6 +107,7 @@ export function calculateSummary(
 
     cardSpending,
     reimbursementIncome,
+    reserveSpending,
 
     provisionPlanned: plannedTotal,
     provisionUsed: usedTotal,

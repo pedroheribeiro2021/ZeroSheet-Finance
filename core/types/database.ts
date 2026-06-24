@@ -21,6 +21,9 @@ export type DBTransaction = {
    */
   is_reimbursement?: boolean | null;
 
+  /** Idem is_reimbursement: ainda não existe no schema (item 3). */
+  is_reserve?: boolean | null;
+
   card: string | null;
 };
 
