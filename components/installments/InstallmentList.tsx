@@ -1,6 +1,7 @@
 'use client';
 
 import { deleteInstallment } from '@/core/services/installment.service';
+import { useToast } from '@/components/ui/ToastProvider';
 
 export default function InstallmentList({
   installments,
@@ -8,12 +9,16 @@ export default function InstallmentList({
   currentMonthId,
   onUpdated,
 }: any) {
+  const { showToast } = useToast();
+
   const handleDelete = async (id: string) => {
     try {
       await deleteInstallment(id);
+      showToast('Parcelamento excluído');
       onUpdated?.();
     } catch (err) {
       console.error(err);
+      showToast('Erro ao excluir parcelamento', 'error');
     }
   };
 

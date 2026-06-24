@@ -5,8 +5,10 @@ import { useEffect, useState } from 'react';
 import { createInstallment } from '@/core/services/installment.service';
 import { parseCurrencyInput } from '@/core/utils/number';
 import { getCards } from '@/core/services/card.service';
+import { useToast } from '@/components/ui/ToastProvider';
 
 export default function InstallmentForm({ monthId, onCreated }: any) {
+  const { showToast } = useToast();
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [totalInstallments, setTotalInstallments] = useState(1);
@@ -45,9 +47,11 @@ export default function InstallmentForm({ monthId, onCreated }: any) {
       setAmount('');
       setTotalInstallments(1);
 
+      showToast('Parcelamento salvo com sucesso');
       onCreated?.();
     } catch (err) {
       console.error(err);
+      showToast('Erro ao salvar parcelamento', 'error');
     }
   };
 
