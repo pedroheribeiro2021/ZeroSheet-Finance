@@ -19,6 +19,8 @@ import { getInstallments } from '@/core/services/installment.service';
 import { getCards } from '@/core/services/card.service';
 import { DBCard, DBCardSnapshot } from '@/core/types/database';
 import { Transaction, Week } from '@/core/types/finance';
+import WeeklyBarChart from './WeeklyBarChart';
+import CategoryBarChart from './CategoryBarChart';
 
 export default function Dashboard() {
   const [summary, setSummary] = useState<ReturnType<
@@ -208,29 +210,22 @@ export default function Dashboard() {
         />
       </div>
 
-      <div className="mt-6">
-        <h2 className="text-xl font-bold mb-2 text-white">Controle Semanal</h2>
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <div className="bg-zinc-900 p-5 rounded-xl">
+          <h2 className="text-base font-semibold text-white mb-4">
+            Orçamento × Gasto por Semana
+          </h2>
+          <WeeklyBarChart weeks={weeks} formatCurrency={formatCurrency} />
+        </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          {weeks.map((week) => (
-            <div key={week.id} className="bg-zinc-900 p-4 rounded">
-              <p className="font-bold text-white">Semana {week.index}</p>
-
-              <p className="text-zinc-400">
-                Orçamento: {formatCurrency(week.budget)}
-              </p>
-
-              <p className="text-white">Gasto: {formatCurrency(week.spent)}</p>
-
-              <p
-                className={
-                  week.remaining < 0 ? 'text-red-500' : 'text-green-500'
-                }
-              >
-                Restante: {formatCurrency(week.remaining)}
-              </p>
-            </div>
-          ))}
+        <div className="bg-zinc-900 p-5 rounded-xl">
+          <h2 className="text-base font-semibold text-white mb-4">
+            Despesas por Categoria
+          </h2>
+          <CategoryBarChart
+            transactions={transactions}
+            formatCurrency={formatCurrency}
+          />
         </div>
       </div>
 

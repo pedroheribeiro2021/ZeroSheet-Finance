@@ -7,20 +7,19 @@ indicado entre parênteses). Itens novos vão sempre no topo da seção
 ## Pendentes
 
 ### Produto / decisão
-- [ ] Decidir formalmente se a atualização do valor da fatura do cartão
+- [x] Decidir formalmente se a atualização do valor da fatura do cartão
       (`CardSnapshotForm.tsx`) continua manual ou se algum dia o cálculo
-      passa a ser automático (somando transações no cartão). Hoje é manual
-      e funciona — isso é só uma decisão de produto, não um bug. Calcular
-      automático exigiria primeiro corrigir `transactions.card`, que ainda
-      tem o `CHECK` legado (`'nubank'`/`'c6'`) e nunca é preenchido pela UI
-      atual (`TransactionForm` sempre envia `card: null`).
+      passa a ser automático (somando transações no cartão).
+      **Decisão (2026-06-25): fica manual.** O usuário atualiza o valor
+      conforme queira. Não há plano de automatizar.
 
 ### Dashboard
-- [ ] **Dashboard mais moderna, com gráficos.** Pedido do usuário
+- [x] **Dashboard mais moderna, com gráficos.** Pedido do usuário
       (2026-06-25). Hoje `components/dashboard/Dashboard.tsx` só mostra
       cards de métrica e uma lista de semanas; sem nenhuma visualização
       gráfica (evolução do saldo, gasto por categoria, etc). Precisa de
       definição de biblioteca de gráficos antes de implementar.
+      (branch `feat/dashboard-charts`, Recharts: WeeklyBarChart + CategoryBarChart)
 
 ### Qualidade interna (sem impacto visível pro usuário)
 - [x] Modelar tipos de domínio reais para `Card`/`CardSnapshot`/`Installment`
