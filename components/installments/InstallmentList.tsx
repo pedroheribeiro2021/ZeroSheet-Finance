@@ -3,12 +3,7 @@
 import { deleteInstallment } from '@/core/services/installment.service';
 import { useToast } from '@/components/ui/ToastProvider';
 
-export default function InstallmentList({
-  installments,
-  months,
-  currentMonthId,
-  onUpdated,
-}: any) {
+export default function InstallmentList({ installments, onUpdated }: any) {
   const { showToast } = useToast();
 
   const handleDelete = async (id: string) => {
@@ -22,26 +17,14 @@ export default function InstallmentList({
     }
   };
 
-  const getInstallmentProgress = (installment: any) => {
-    const currentIndex = months.findIndex((m: any) => m.id === currentMonthId);
-
-    const startIndex = months.findIndex(
-      (m: any) => m.id === installment.start_month_id,
-    );
-
-    if (currentIndex === -1 || startIndex === -1) return null;
-
-    const currentInstallment = currentIndex - startIndex + 1;
-
-    return `${currentInstallment}/${installment.total_installments}`;
-  };
-
   return (
     <div className="bg-zinc-900 p-4 rounded grid gap-2">
       <h2 className="font-bold text-white">Parcelas</h2>
 
       {installments.map((i: any) => {
-        const progress = getInstallmentProgress(i);
+        const progress = i.currentInstallment
+          ? `${i.currentInstallment}/${i.total_installments}`
+          : null;
 
         return (
           <div

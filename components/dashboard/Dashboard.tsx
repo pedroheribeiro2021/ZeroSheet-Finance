@@ -11,7 +11,7 @@ import { createWeeks, getWeeks } from '@/core/services/week.service';
 
 import { mapTransaction, mapWeek } from '@/core/models/mappers';
 import { calculateSummary } from '@/core/engine/calculations';
-import { calculateWeekly } from '@/core/engine/weekly';
+import { calculateWeekly, getWeeksInMonth } from '@/core/engine/weekly';
 import { getCardSnapshots } from '@/core/services/cardSnapshot.service';
 import { groupTransactionsByCategory } from '@/core/utils/groupTransactions';
 
@@ -97,21 +97,24 @@ export default function Dashboard() {
         installmentsDB,
       );
 
+      const weeksInMonth = getWeeksInMonth(latestMonth.month, latestMonth.year);
+
       let finalWeeks = calculateWeekly(
         snapshotsData,
         transactionsMapped,
         result.total,
         latestMonth.id,
+        weeksInMonth,
       );
 
       if (!finalWeeks.length) {
-        finalWeeks = Array.from({ length: 4 }).map((_, i) => ({
+        finalWeeks = Array.from({ length: weeksInMonth }).map((_, i) => ({
           id: crypto.randomUUID(),
           monthId: latestMonth.id,
           index: i + 1,
-          budget: result.total / 4,
+          budget: result.total / weeksInMonth,
           spent: 0,
-          remaining: result.total / 4,
+          remaining: result.total / weeksInMonth,
         }));
 
         await createWeeks(latestMonth.id, finalWeeks);
