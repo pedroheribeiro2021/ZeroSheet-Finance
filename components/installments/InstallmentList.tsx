@@ -2,8 +2,14 @@
 
 import { deleteInstallment } from '@/core/services/installment.service';
 import { useToast } from '@/components/ui/ToastProvider';
+import { DBInstallment } from '@/core/types/database';
 
-export default function InstallmentList({ installments, onUpdated }: any) {
+type Props = {
+  installments: (DBInstallment & { currentInstallment: number })[];
+  onUpdated?: () => void;
+};
+
+export default function InstallmentList({ installments, onUpdated }: Props) {
   const { showToast } = useToast();
 
   const handleDelete = async (id: string) => {
@@ -21,7 +27,7 @@ export default function InstallmentList({ installments, onUpdated }: any) {
     <div className="bg-zinc-900 p-4 rounded grid gap-2">
       <h2 className="font-bold text-white">Parcelas</h2>
 
-      {installments.map((i: any) => {
+      {installments.map((i) => {
         const progress = i.currentInstallment
           ? `${i.currentInstallment}/${i.total_installments}`
           : null;

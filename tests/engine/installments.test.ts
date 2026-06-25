@@ -85,4 +85,12 @@ describe('filterActiveInstallments', () => {
 
     expect(result[0].currentInstallment).toBe(1);
   });
+
+  it('excludes an installment with a null start_month_id instead of crashing', () => {
+    const installments = [
+      { id: 'i1', start_month_id: null, total_installments: 3 },
+    ];
+
+    expect(filterActiveInstallments(installments, months, 'm3')).toEqual([]);
+  });
 });

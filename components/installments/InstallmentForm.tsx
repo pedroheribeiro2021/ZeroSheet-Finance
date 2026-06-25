@@ -6,14 +6,20 @@ import { createInstallment } from '@/core/services/installment.service';
 import { parseCurrencyInput } from '@/core/utils/number';
 import { getCards } from '@/core/services/card.service';
 import { useToast } from '@/components/ui/ToastProvider';
+import { DBCard } from '@/core/types/database';
 
-export default function InstallmentForm({ monthId, onCreated }: any) {
+type Props = {
+  monthId: string;
+  onCreated?: () => void;
+};
+
+export default function InstallmentForm({ monthId, onCreated }: Props) {
   const { showToast } = useToast();
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [totalInstallments, setTotalInstallments] = useState(1);
 
-  const [cards, setCards] = useState<any[]>([]);
+  const [cards, setCards] = useState<DBCard[]>([]);
   const [cardId, setCardId] = useState('');
 
   useEffect(() => {

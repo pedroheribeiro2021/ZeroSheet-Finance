@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { upsertCardSnapshot } from '@/core/services/cardSnapshot.service';
 import { parseCurrencyInput } from '@/core/utils/number';
 import { useToast } from '@/components/ui/ToastProvider';
+import { DBCard } from '@/core/types/database';
 
 export default function CardSnapshotForm({
   monthId,
@@ -12,7 +13,7 @@ export default function CardSnapshotForm({
   onUpdated,
 }: {
   monthId: string;
-  cards: any[];
+  cards: DBCard[];
   onUpdated: () => void;
 }) {
   const { showToast } = useToast();

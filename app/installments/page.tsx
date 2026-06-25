@@ -6,10 +6,13 @@ import InstallmentForm from '@/components/installments/InstallmentForm';
 import InstallmentList from '@/components/installments/InstallmentList';
 import { getInstallments } from '@/core/services/installment.service';
 import { createMonth, getMonths } from '@/core/services/month.service';
+import { DBInstallment } from '@/core/types/database';
 
 export default function InstallmentsPage() {
   const [monthId, setMonthId] = useState<string | null>(null);
-  const [installments, setInstallments] = useState<any[]>([]);
+  const [installments, setInstallments] = useState<
+    (DBInstallment & { currentInstallment: number })[]
+  >([]);
 
   const load = async () => {
     try {
