@@ -27,8 +27,9 @@ indicado entre parênteses). Itens novos vão sempre no topo da seção
       em vez de ler linhas do Supabase como `any`/loosely-typed em vários
       lugares — hoje só `Transaction`/`Week` têm tipo de domínio
       (`core/types/finance.ts`). (branch `chore/domain-types-cards-installments`)
-- [ ] Cobertura de teste de services/componentes ainda é zero — só
-      `core/engine/*` tem teste (`tests/engine/`).
+- [x] Cobertura de teste de services/componentes ainda é zero — só
+      `core/engine/*` tem teste (`tests/engine/`). (branch `chore/service-tests`,
+      testa `copyRecurringTransactions` e `createMonth`)
 - [ ] Corrigir o `CHECK` legado em `transactions.card`
       (`'nubank'`/`'c6'` apenas) — sobra da migração de cartões mockados,
       hoje inofensivo porque a UI nunca preenche esse campo, mas bloqueia
