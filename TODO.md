@@ -30,10 +30,11 @@ indicado entre parênteses). Itens novos vão sempre no topo da seção
 - [x] Cobertura de teste de services/componentes ainda é zero — só
       `core/engine/*` tem teste (`tests/engine/`). (branch `chore/service-tests`,
       testa `copyRecurringTransactions` e `createMonth`)
-- [ ] Corrigir o `CHECK` legado em `transactions.card`
+- [x] Corrigir o `CHECK` legado em `transactions.card`
       (`'nubank'`/`'c6'` apenas) — sobra da migração de cartões mockados,
       hoje inofensivo porque a UI nunca preenche esse campo, mas bloqueia
       qualquer feature futura que precise ligar transação a cartão.
+      (branch `chore/drop-card-check-constraint`, migration aplicada em produção)
 
 ---
 
