@@ -68,15 +68,21 @@ indicado entre parênteses). Itens novos vão sempre no topo da seção
 - [x] Reserva (`isReserve`) abate o total separada de custos fixos —
       mesma observação: tipo/engine prontos, falta migration + UI.
 - [x] Número real de semanas do mês (`getWeeksInMonth`) + variante de
-      orçamento `(receita - fixos) / semanas` — implementado no engine,
-      **ainda não consumido pelo Dashboard** (próxima tarefa natural).
+      orçamento `(receita - fixos) / semanas` — implementado no engine.
 - [x] Número da parcela atual (`currentInstallment`) exposto por
-      `filterActiveInstallments` — **ainda não consumido por
-      `InstallmentList`**, que recalcula o mesmo número localmente
-      (próxima tarefa natural, depois do merge do PR #49).
+      `filterActiveInstallments`.
 - [x] Normalização de categoria robusta a espaços internos duplicados.
 - [x] Split com valor sinalizado (`resolveSplitAmount` + toggle no
       `TransactionForm`), sem precisar de tipo de transação novo.
+
+### Consumo do engine de paridade na UI (`feature/wire-parity-engine-into-ui`)
+- [x] `Dashboard.tsx` agora usa `getWeeksInMonth(month, year)` ao chamar
+      `calculateWeekly`, em vez de assumir 4 semanas fixas (também no
+      fallback que cria as semanas na primeira vez).
+- [x] `InstallmentList.tsx` usa `currentInstallment` retornado por
+      `filterActiveInstallments` em vez de recalcular o mesmo número
+      localmente — removeu a duplicação e as props `months`/
+      `currentMonthId`, que ficaram sem uso.
 
 ### Infraestrutura
 - [x] Deploy em produção na Vercel —
