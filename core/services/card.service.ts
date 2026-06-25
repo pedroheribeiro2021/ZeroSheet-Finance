@@ -1,7 +1,8 @@
 import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from './auth.service';
+import { DBCard } from '@/core/types/database';
 
-export async function getCards() {
+export async function getCards(): Promise<DBCard[]> {
   const user = await getCurrentUser();
 
   if (!user) {
@@ -16,7 +17,7 @@ export async function getCards() {
 
   if (error) throw error;
 
-  return data;
+  return (data ?? []) as DBCard[];
 }
 
 export async function createCard(data: {
@@ -26,7 +27,7 @@ export async function createCard(data: {
   limit_amount?: number;
   closing_day?: number;
   due_day?: number;
-}) {
+}): Promise<DBCard> {
   const user = await getCurrentUser();
 
   if (!user) {
@@ -44,7 +45,7 @@ export async function createCard(data: {
 
   if (error) throw error;
 
-  return created;
+  return created as DBCard;
 }
 
 export async function updateCard(
@@ -57,7 +58,7 @@ export async function updateCard(
     closing_day?: number;
     due_day?: number;
   },
-) {
+): Promise<DBCard> {
   const { data: updated, error } = await supabase
     .from('cards')
     .update(data)
@@ -67,7 +68,7 @@ export async function updateCard(
 
   if (error) throw error;
 
-  return updated;
+  return updated as DBCard;
 }
 
 export async function deleteCard(id: string) {

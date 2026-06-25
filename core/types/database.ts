@@ -45,3 +45,46 @@ export type DBWeek = {
 
   created_at: string;
 };
+
+export type DBCard = {
+  id: string;
+  user_id: string;
+
+  name: string;
+  slug: string | null;
+  color: string | null;
+  limit_amount: number;
+  closing_day: number | null;
+  due_day: number | null;
+
+  created_at: string | null;
+};
+
+export type DBCardSnapshot = {
+  id: string;
+  month_id: string | null;
+  card_id: string | null;
+  user_id: string | null;
+
+  amount: number;
+
+  created_at: string | null;
+};
+
+export type DBInstallment = {
+  id: string;
+  user_id: string | null;
+  card_id: string | null;
+
+  description: string;
+  total_amount: number;
+  installment_amount: number;
+  total_installments: number;
+  current_installment: number | null;
+  start_month_id: string | null;
+
+  created_at: string | null;
+
+  /** Relação trazida pelo select de installment.service.ts (`cards (id, name)`). */
+  cards?: { id: string; name: string } | null;
+};

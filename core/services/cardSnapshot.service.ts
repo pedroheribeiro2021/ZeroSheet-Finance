@@ -1,11 +1,12 @@
 import { getCurrentUser } from './auth.service';
 import { supabase } from '@/lib/supabase';
+import { DBCardSnapshot } from '@/core/types/database';
 
 export async function upsertCardSnapshot(
   monthId: string,
   cardId: string,
   amount: number,
-) {
+): Promise<DBCardSnapshot[]> {
   const user = await getCurrentUser();
 
   if (!user) {
@@ -29,10 +30,12 @@ export async function upsertCardSnapshot(
 
   if (error) throw error;
 
-  return data;
+  return (data ?? []) as DBCardSnapshot[];
 }
 
-export async function getCardSnapshots(monthId: string) {
+export async function getCardSnapshots(
+  monthId: string,
+): Promise<DBCardSnapshot[]> {
   const user = await getCurrentUser();
 
   if (!user) {
@@ -47,5 +50,5 @@ export async function getCardSnapshots(monthId: string) {
 
   if (error) throw error;
 
-  return data;
+  return (data ?? []) as DBCardSnapshot[];
 }

@@ -6,7 +6,7 @@ import { normalizeCategory } from '../utils/normalize';
 export function calculateSummary(
   transactions: Transaction[],
   weeks: Week[],
-  snapshots?: { card: string; amount: number }[],
+  snapshots?: { amount: number }[],
   installments: any[] = [],
   weeklyBudgetVariant: 'total' | 'incomeMinusFixed' = 'total',
 ) {

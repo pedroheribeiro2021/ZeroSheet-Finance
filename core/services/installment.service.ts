@@ -1,8 +1,11 @@
 import { getCurrentUser } from './auth.service';
 import { supabase } from '@/lib/supabase';
 import { filterActiveInstallments } from '@/core/engine/installments';
+import { DBInstallment, DBMonth } from '@/core/types/database';
 
-export async function getInstallments(monthId: string) {
+export async function getInstallments(
+  monthId: string,
+): Promise<(DBInstallment & { currentInstallment: number })[]> {
   const user = await getCurrentUser();
 
   if (!user) {
@@ -34,7 +37,11 @@ export async function getInstallments(monthId: string) {
 
   if (error) throw error;
 
-  return filterActiveInstallments(installments, months, monthId);
+  return filterActiveInstallments(
+    installments as DBInstallment[],
+    months as DBMonth[],
+    monthId,
+  );
 }
 
 export async function createInstallment(data: {
