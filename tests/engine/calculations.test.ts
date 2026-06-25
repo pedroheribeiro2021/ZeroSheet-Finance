@@ -336,4 +336,39 @@ describe('calculateSummary', () => {
       (4200 - 100) / weeks.length,
     );
   });
+
+  it('matches provisioned and realized spend under the same envelope regardless of case/accent', () => {
+    const tx: Transaction[] = [
+      {
+        id: '1',
+        monthId: 'm1',
+        type: 'expense',
+        category: 'Mercado',
+        amount: 300,
+        isFixed: false,
+        isProvision: true,
+        isRecurring: false,
+        card: null,
+        createdAt: '2024-01-01',
+      },
+      {
+        id: '2',
+        monthId: 'm1',
+        type: 'expense',
+        category: 'MERCADO',
+        amount: 416,
+        isFixed: false,
+        isProvision: false,
+        isRecurring: false,
+        card: null,
+        createdAt: '2024-01-05',
+      },
+    ];
+
+    const result = calculateSummary(tx, []);
+
+    // se não casassem no mesmo envelope, envelopeSpending seria 300 + 416
+    expect(result.envelopeSpending).toBe(416);
+    expect(Object.keys(result.provisionMap)).toEqual(['mercado']);
+  });
 });
