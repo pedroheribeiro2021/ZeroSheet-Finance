@@ -5,16 +5,17 @@ import { useState } from 'react';
 import { deleteCard } from '@/core/services/card.service';
 import EditCardModal from '../modals/EditCardModal';
 import { useToast } from '@/components/ui/ToastProvider';
+import { DBCard, DBCardSnapshot } from '@/core/types/database';
 
 type Props = {
-  cards: any[];
-  snapshots?: any[];
+  cards: DBCard[];
+  snapshots?: DBCardSnapshot[];
   onUpdated: () => void;
 };
 
 export default function CardList({ cards, snapshots = [], onUpdated }: Props) {
   const { showToast } = useToast();
-  const [selected, setSelected] = useState<any>(null);
+  const [selected, setSelected] = useState<DBCard | null>(null);
 
   const handleDelete = async (id: string) => {
     const confirmDelete = confirm('Deseja remover esse cartão?');

@@ -17,19 +17,25 @@ import { groupTransactionsByCategory } from '@/core/utils/groupTransactions';
 
 import { getInstallments } from '@/core/services/installment.service';
 import { getCards } from '@/core/services/card.service';
+import { DBCard, DBCardSnapshot } from '@/core/types/database';
+import { Transaction, Week } from '@/core/types/finance';
 
 export default function Dashboard() {
-  const [summary, setSummary] = useState<any>(null);
-  const [weeks, setWeeks] = useState<any[]>([]);
-  const [transactions, setTransactions] = useState<any[]>([]);
+  const [summary, setSummary] = useState<ReturnType<
+    typeof calculateSummary
+  > | null>(null);
+  const [weeks, setWeeks] = useState<Week[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
-  const [filteredTransactions, setFilteredTransactions] = useState<any[]>([]);
+  const [filteredTransactions, setFilteredTransactions] = useState<
+    Transaction[]
+  >([]);
   const groupedTransactions = groupTransactionsByCategory(filteredTransactions);
-  const [cards, setCards] = useState<any[]>([]);
-  const [snapshots, setSnapshots] = useState<any[]>([]);
+  const [cards, setCards] = useState<DBCard[]>([]);
+  const [snapshots, setSnapshots] = useState<DBCardSnapshot[]>([]);
 
   const handleCardClick = (type: string) => {
-    let filtered: any[] = [];
+    let filtered: Transaction[] = [];
 
     switch (type) {
       case 'income':
@@ -158,9 +164,7 @@ export default function Dashboard() {
         />
 
         {cards.map((card) => {
-          const snapshot = snapshots.find(
-            (s: any) => s.card_id === card.id,
-          );
+          const snapshot = snapshots.find((s) => s.card_id === card.id);
 
           return (
             <Card
@@ -208,7 +212,7 @@ export default function Dashboard() {
         <h2 className="text-xl font-bold mb-2 text-white">Controle Semanal</h2>
 
         <div className="grid grid-cols-2 gap-4">
-          {weeks.map((week: any) => (
+          {weeks.map((week) => (
             <div key={week.id} className="bg-zinc-900 p-4 rounded">
               <p className="font-bold text-white">Semana {week.index}</p>
 
@@ -240,7 +244,7 @@ export default function Dashboard() {
         )}
 
         <div className="grid gap-2">
-          {groupedTransactions.map((item: any) => {
+          {groupedTransactions.map((item) => {
             const total = filteredTransactions.reduce(
               (acc, t) => acc + Number(t.amount),
               0,

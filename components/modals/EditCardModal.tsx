@@ -5,8 +5,15 @@ import { useState } from 'react';
 import { updateCard } from '@/core/services/card.service';
 import { parseCurrencyInput } from '@/core/utils/number';
 import { useToast } from '@/components/ui/ToastProvider';
+import { DBCard } from '@/core/types/database';
 
-export default function EditCardModal({ card, onClose, onUpdated }: any) {
+type Props = {
+  card: DBCard;
+  onClose: () => void;
+  onUpdated?: () => void;
+};
+
+export default function EditCardModal({ card, onClose, onUpdated }: Props) {
   const { showToast } = useToast();
 
   const [name, setName] = useState(card.name);

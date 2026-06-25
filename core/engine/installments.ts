@@ -1,7 +1,7 @@
 type MonthRef = { id: string };
 
 type InstallmentRef = {
-  start_month_id: string;
+  start_month_id: string | null;
   total_installments: number;
 };
 

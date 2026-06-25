@@ -10,10 +10,11 @@ import { getCards } from '@/core/services/card.service';
 import { getCardSnapshots } from '@/core/services/cardSnapshot.service';
 
 import { getMonths, createMonth } from '@/core/services/month.service';
+import { DBCard, DBCardSnapshot } from '@/core/types/database';
 
 export default function CardsPage() {
-  const [cards, setCards] = useState<any[]>([]);
-  const [snapshots, setSnapshots] = useState<any[]>([]);
+  const [cards, setCards] = useState<DBCard[]>([]);
+  const [snapshots, setSnapshots] = useState<DBCardSnapshot[]>([]);
   const [monthId, setMonthId] = useState<string | null>(null);
 
   const load = async () => {

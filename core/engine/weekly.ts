@@ -1,9 +1,8 @@
 import { Week, Transaction } from '../types/finance';
 
 type Snapshot = {
-  card: string;
   amount: number;
-  created_at: string;
+  created_at: string | null;
 };
 
 /**
@@ -51,7 +50,8 @@ function calculateFromSnapshots(
 ): Week[] {
   const sorted = [...snapshots].sort(
     (a, b) =>
-      new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      new Date(a.created_at ?? 0).getTime() -
+      new Date(b.created_at ?? 0).getTime(),
   );
 
   const weeks: Week[] = [];
@@ -59,7 +59,7 @@ function calculateFromSnapshots(
 
   for (let i = 1; i <= totalWeeks; i++) {
     const weekSnaps = sorted.filter((s) => {
-      const day = new Date(s.created_at).getDate();
+      const day = new Date(s.created_at ?? 0).getDate();
       return Math.ceil(day / 7) === i;
     });
 
