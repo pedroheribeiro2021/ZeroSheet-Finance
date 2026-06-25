@@ -1,68 +1,94 @@
 # TODO — Zerosheet
 
-Revisão feita em 2026-06-24 contra o estado atual do código (branch
-`develop`). Todos os itens de prioridade Alta e Média do levantamento
-original já foram implementados — ver seção "Resolvidos" abaixo para o que
-foi feito e onde. O que resta é só de baixa prioridade / decisões de produto.
+Atualizado em 2026-06-25. Checkbox marcado = já implementado (commit/PR
+indicado entre parênteses). Itens novos vão sempre no topo da seção
+"Pendentes" da categoria correta.
 
-## Itens ainda não realizados
+## Pendentes
 
-### Baixa prioridade
+### Produto / decisão
 - [ ] Decidir formalmente se a atualização do valor da fatura do cartão
       (`CardSnapshotForm.tsx`) continua manual ou se algum dia o cálculo
       passa a ser automático (somando transações no cartão). Hoje é manual
-      e funciona; isso é só uma decisão de produto, não um bug.
+      e funciona — isso é só uma decisão de produto, não um bug. Calcular
+      automático exigiria primeiro corrigir `transactions.card`, que ainda
+      tem o `CHECK` legado (`'nubank'`/`'c6'`) e nunca é preenchido pela UI
+      atual (`TransactionForm` sempre envia `card: null`).
 
-Nada mais ficou pendente da lista original. Itens novos que aparecerem
-devem ser adicionados aqui.
+### Dashboard
+- [ ] **Dashboard mais moderna, com gráficos.** Pedido do usuário
+      (2026-06-25). Hoje `components/dashboard/Dashboard.tsx` só mostra
+      cards de métrica e uma lista de semanas; sem nenhuma visualização
+      gráfica (evolução do saldo, gasto por categoria, etc). Precisa de
+      definição de biblioteca de gráficos antes de implementar.
+
+### Qualidade interna (sem impacto visível pro usuário)
+- [ ] Modelar tipos de domínio reais para `Card`/`CardSnapshot`/`Installment`
+      em vez de ler linhas do Supabase como `any`/loosely-typed em vários
+      lugares — hoje só `Transaction`/`Week` têm tipo de domínio
+      (`core/types/finance.ts`).
+- [ ] Cobertura de teste de services/componentes ainda é zero — só
+      `core/engine/*` tem teste (`tests/engine/`).
+- [ ] Corrigir o `CHECK` legado em `transactions.card`
+      (`'nubank'`/`'c6'` apenas) — sobra da migração de cartões mockados,
+      hoje inofensivo porque a UI nunca preenche esse campo, mas bloqueia
+      qualquer feature futura que precise ligar transação a cartão.
 
 ---
 
 ## Resolvidos
 
 ### Alta prioridade (PR #47 — `feature/toasts-card-fields-and-auth-fix`)
-- Sessão do usuário não atualizava ao trocar de conta sem reload —
-  `LayoutShell.tsx` agora usa `supabase.auth.onAuthStateChange`.
-- Cartão: `due_day`, `color` e `limit_amount` agora têm UI em `CardForm`,
-  além de um fluxo de edição (`EditCardModal.tsx` + `CardList.tsx`, que
-  estava morto e foi revivido).
-- Feedback visual (toasts) — `components/ui/ToastProvider.tsx`, plugado em
-  transações, parcelamentos, cartões, registro e logout.
+- [x] Sessão do usuário não atualizava ao trocar de conta sem reload —
+      `LayoutShell.tsx` agora usa `supabase.auth.onAuthStateChange`.
+- [x] Cartão: `due_day`, `color` e `limit_amount` agora têm UI em
+      `CardForm`, além de um fluxo de edição (`EditCardModal.tsx` +
+      `CardList.tsx`, que estava morto e foi revivido).
+- [x] Feedback visual (toasts) — `components/ui/ToastProvider.tsx`,
+      plugado em transações, parcelamentos, cartões, registro e logout.
 
-### Média prioridade (PR atual — `feature/recurring-transaction-due-day`)
-- Vencimento em despesas recorrentes: `TransactionForm.tsx` e
-  `EditTransactionModal.tsx` ganharam um campo "Dia de vencimento" quando a
-  transação é recorrente (coluna `due_day` adicionada à tabela
-  `transactions` via migration); `TransactionList.tsx` exibe o dia junto do
-  ícone 🔁.
-- **Bug real encontrado e corrigido durante o teste end-to-end desta
-  feature**: `copyRecurringTransactions()` (em `transaction.service.ts`)
-  fazia `.upsert(payload, { onConflict: 'month_id,category,user_id' })`,
-  mas não existe (e não deveria existir — categorias se repetem entre
-  transações do mesmo mês) nenhuma constraint única nessas colunas. Isso
-  fazia a cópia de recorrentes para o mês novo falhar com
-  `42P10 (no unique or exclusion constraint matching the ON CONFLICT
-  specification)` sempre que havia ao menos uma transação recorrente —
-  ou seja, **criar um novo mês com recorrências configuradas estava
-  quebrado em produção antes desta correção**. Trocado para `.insert()`
-  simples; validado de ponta a ponta contra o banco real (criar
-  recorrente com vencimento → copiar para o mês seguinte → vencimento
-  preservado).
-- Botão de voltar para o login na tela de cadastro (`app/register/page.tsx`).
-- Clareza do campo de dia de fechamento do cartão — resolvido como parte do
-  trabalho de campos de cartão do PR #47 (labels adicionados a todos os
-  campos do formulário).
+### Média prioridade (PR #48 — `feature/recurring-transaction-due-day`)
+- [x] Vencimento em despesas recorrentes — campo opcional em
+      `TransactionForm`/`EditTransactionModal`, persistido em
+      `transactions.due_day` e propagado ao copiar para o mês seguinte.
+- [x] **Bug real corrigido**: `copyRecurringTransactions()` fazia upsert
+      com `onConflict` numa constraint que não existe — toda criação de
+      mês com recorrências configuradas falhava (`42P10`). Trocado por
+      `insert` simples.
+- [x] Botão "Voltar para o login" na tela de cadastro.
+- [x] Clareza do campo de dia de fechamento do cartão (labels em todos os
+      campos do formulário).
+
+### Paridade com a planilha de finanças (PR #49 — `feature/paridade-planilha-engine`)
+- [x] Total desconta `max(planejado, realizado)` por categoria (envelope),
+      não só a provisão planejada — `calculateSummary`.
+- [x] Receita de reembolso (`isReimbursement`) não soma no total — campo
+      novo no tipo/engine; **ainda inerte em produção**, falta migration +
+      UI (ver "Qualidade interna" acima, vira tarefa quando for ligado).
+- [x] Reserva (`isReserve`) abate o total separada de custos fixos —
+      mesma observação: tipo/engine prontos, falta migration + UI.
+- [x] Número real de semanas do mês (`getWeeksInMonth`) + variante de
+      orçamento `(receita - fixos) / semanas` — implementado no engine,
+      **ainda não consumido pelo Dashboard** (próxima tarefa natural).
+- [x] Número da parcela atual (`currentInstallment`) exposto por
+      `filterActiveInstallments` — **ainda não consumido por
+      `InstallmentList`**, que recalcula o mesmo número localmente
+      (próxima tarefa natural, depois do merge do PR #49).
+- [x] Normalização de categoria robusta a espaços internos duplicados.
+- [x] Split com valor sinalizado (`resolveSplitAmount` + toggle no
+      `TransactionForm`), sem precisar de tipo de transação novo.
 
 ### Infraestrutura
-- Deploy: aplicação publicada em produção na Vercel —
-  https://zerosheet-finance.vercel.app (projeto `zerosheet-finance`,
-  conectado ao repositório GitHub, branch de produção `develop`). Env vars
-  `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY` configuradas.
+- [x] Deploy em produção na Vercel —
+      https://zerosheet-finance.vercel.app (projeto conectado ao GitHub,
+      branch de produção `develop`, env vars do Supabase configuradas em
+      Production/Preview/Development).
+- [x] CI (`.github/workflows/ci.yml`): typecheck, testes, build.
 
 ### Já resolvidos antes desta revisão (ver CONTEXT.md §5)
-- Bug de matching cartão↔fatura no Dashboard (`card_id` em vez de `slug`).
-- Duplicação de `normalizeCategory()`.
-- `core/engine/installments.ts` como placeholder não usado.
-- Falta de CI (`.github/workflows/ci.yml`).
-- "Atualização manual do valor do cartão não está mais disponível" — a
-  premissa estava errada, o campo nunca saiu do ar.
+- [x] Bug de matching cartão↔fatura no Dashboard (`card_id` em vez de
+      `slug`).
+- [x] Duplicação de `normalizeCategory()`.
+- [x] `core/engine/installments.ts` como placeholder não usado.
+- [x] "Atualização manual do valor do cartão não está mais disponível" —
+      a premissa estava errada, o campo nunca saiu do ar.
