@@ -9,7 +9,6 @@ import { createMonth, getMonths } from '@/core/services/month.service';
 
 export default function InstallmentsPage() {
   const [monthId, setMonthId] = useState<string | null>(null);
-  const [months, setMonths] = useState<any[]>([]);
   const [installments, setInstallments] = useState<any[]>([]);
 
   const load = async () => {
@@ -25,8 +24,6 @@ export default function InstallmentsPage() {
 
         monthsData = [newMonth];
       }
-
-      setMonths(monthsData);
 
       const latestMonth = monthsData[monthsData.length - 1];
       setMonthId(latestMonth.id);
@@ -51,12 +48,7 @@ export default function InstallmentsPage() {
       <h1 className="text-2xl font-bold text-white">Parcelamentos</h1>
 
       <InstallmentForm monthId={monthId} onCreated={load} />
-      <InstallmentList
-        installments={installments}
-        months={months}
-        currentMonthId={monthId}
-        onUpdated={load}
-      />
+      <InstallmentList installments={installments} onUpdated={load} />
     </div>
   );
 }
