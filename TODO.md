@@ -16,11 +16,12 @@ indicado entre parênteses). Itens novos vão sempre no topo da seção
       atual (`TransactionForm` sempre envia `card: null`).
 
 ### Dashboard
-- [ ] **Dashboard mais moderna, com gráficos.** Pedido do usuário
+- [x] **Dashboard mais moderna, com gráficos.** Pedido do usuário
       (2026-06-25). Hoje `components/dashboard/Dashboard.tsx` só mostra
       cards de métrica e uma lista de semanas; sem nenhuma visualização
       gráfica (evolução do saldo, gasto por categoria, etc). Precisa de
       definição de biblioteca de gráficos antes de implementar.
+      (branch `feat/dashboard-charts`, Recharts: WeeklyBarChart + CategoryBarChart)
 
 ### Qualidade interna (sem impacto visível pro usuário)
 - [x] Modelar tipos de domínio reais para `Card`/`CardSnapshot`/`Installment`
