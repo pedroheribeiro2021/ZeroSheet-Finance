@@ -27,6 +27,8 @@ export function mapTransaction(db: DBTransaction): Transaction {
     isProvision: db.is_provision,
     isRecurring: db.is_recurring,
     dueDay: db.due_day,
+    isReimbursement: db.is_reimbursement ?? false,
+    isReserve: db.is_reserve ?? false,
 
     card: db.card,
 

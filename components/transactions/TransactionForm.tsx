@@ -5,12 +5,14 @@ import { createTransaction } from '@/core/services/transaction.service';
 import { parseCurrencyInput } from '@/core/utils/number';
 import { DEFAULT_CATEGORIES } from '@/core/constants/categories';
 import { useToast } from '@/components/ui/ToastProvider';
+import { resolveSplitAmount } from '@/core/engine/split';
 
 export default function TransactionForm({ onCreated, monthId }: any) {
   const { showToast } = useToast();
 
   const [amount, setAmount] = useState('');
   const [type, setType] = useState<'income' | 'expense'>('expense');
+  const [isSplit, setIsSplit] = useState(false);
 
   const [selectedCategory, setSelectedCategory] = useState('');
   const [customCategory, setCustomCategory] = useState('');
@@ -38,10 +40,15 @@ export default function TransactionForm({ onCreated, monthId }: any) {
         return;
       }
 
+      // Split: o sinal do valor decide o tipo, sem precisar escolher manualmente.
+      const resolved = isSplit
+        ? resolveSplitAmount(parsedAmount)
+        : { type, amount: parsedAmount };
+
       await createTransaction({
         month_id: monthId,
-        amount: parsedAmount,
-        type,
+        amount: resolved.amount,
+        type: resolved.type,
         category: finalCategory,
         is_fixed: isFixed,
         is_recurring: isRecurring,
@@ -58,6 +65,7 @@ export default function TransactionForm({ onCreated, monthId }: any) {
       setIsRecurring(false);
       setIsProvision(false);
       setDueDay('');
+      setIsSplit(false);
 
       showToast('Transação salva com sucesso');
       onCreated?.();
@@ -73,11 +81,22 @@ export default function TransactionForm({ onCreated, monthId }: any) {
 
       <input
         type="text"
-        placeholder="Valor (ex: 1000,50)"
+        placeholder={
+          isSplit ? 'Valor (+/-, ex: -63,56 ou +51,00)' : 'Valor (ex: 1000,50)'
+        }
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
         className="bg-zinc-800 p-2 rounded text-white"
       />
+
+      <label className="flex items-center gap-2 text-sm text-white">
+        <input
+          type="checkbox"
+          checked={isSplit}
+          onChange={(e) => setIsSplit(e.target.checked)}
+        />
+        Split (+/-): o sinal do valor decide se soma ou subtrai
+      </label>
 
       {/* ✅ SELECT DE CATEGORIA */}
       <select
@@ -107,14 +126,16 @@ export default function TransactionForm({ onCreated, monthId }: any) {
         />
       )}
 
-      <select
-        value={type}
-        onChange={(e) => setType(e.target.value as any)}
-        className="bg-zinc-800 p-2 rounded text-white"
-      >
-        <option value="income">Entrada</option>
-        <option value="expense">Despesa</option>
-      </select>
+      {!isSplit && (
+        <select
+          value={type}
+          onChange={(e) => setType(e.target.value as any)}
+          className="bg-zinc-800 p-2 rounded text-white"
+        >
+          <option value="income">Entrada</option>
+          <option value="expense">Despesa</option>
+        </select>
+      )}
 
       {/* FLAGS */}
       <div className="grid gap-2 text-sm text-white">

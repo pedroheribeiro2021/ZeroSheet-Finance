@@ -63,4 +63,26 @@ describe('filterActiveInstallments', () => {
       [],
     );
   });
+
+  it('exposes the current installment number (started 3 months before current shows 4/N)', () => {
+    const installments = [
+      { id: 'i1', start_month_id: 'm1', total_installments: 6 }, // active m1..m6
+    ];
+
+    const result = filterActiveInstallments(installments, months, 'm4');
+
+    expect(result).toEqual([
+      { id: 'i1', start_month_id: 'm1', total_installments: 6, currentInstallment: 4 },
+    ]);
+  });
+
+  it('shows 1/N on the installment start month', () => {
+    const installments = [
+      { id: 'i1', start_month_id: 'm3', total_installments: 1 },
+    ];
+
+    const result = filterActiveInstallments(installments, months, 'm3');
+
+    expect(result[0].currentInstallment).toBe(1);
+  });
 });

@@ -6,6 +6,17 @@ type Snapshot = {
   created_at: string;
 };
 
+/**
+ * Número real de semanas do mês, usando o mesmo critério de bucket por dia
+ * (Math.ceil(dia/7)) já usado para distribuir transações/snapshots entre
+ * semanas — meses com 28 dias caem em 4 semanas, os demais em 5.
+ */
+export function getWeeksInMonth(month: number, year: number): number {
+  const daysInMonth = new Date(year, month, 0).getDate();
+
+  return Math.ceil(daysInMonth / 7);
+}
+
 export function calculateWeekly(
   snapshots: Snapshot[],
   transactions: Transaction[],
