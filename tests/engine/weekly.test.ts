@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateWeekly, getWeeksInMonth } from '@/core/engine/weekly';
+import { calculateWeekly, getWeeksInCycle, getWeeksInMonth } from '@/core/engine/weekly';
 import { Transaction } from '@/core/types/finance';
 
 const transactions: Transaction[] = [
@@ -69,6 +69,28 @@ describe('calculateWeekly', () => {
 
     expect(weeks).toHaveLength(5);
     expect(weeks[4]).toMatchObject({ index: 5, budget: 100 });
+  });
+});
+
+describe('getWeeksInCycle', () => {
+  it('retorna 4 para fechamento no dia 28 (28 ÷ 7 = 4)', () => {
+    expect(getWeeksInCycle(28)).toBe(4);
+  });
+
+  it('retorna 5 para fechamento no dia 29', () => {
+    expect(getWeeksInCycle(29)).toBe(5);
+  });
+
+  it('retorna 5 para fechamento no dia 31', () => {
+    expect(getWeeksInCycle(31)).toBe(5);
+  });
+
+  it('retorna 1 para fechamento no dia 1 (mínimo)', () => {
+    expect(getWeeksInCycle(1)).toBe(1);
+  });
+
+  it('retorna 1 para closingDay 0 (proteção contra valores inválidos)', () => {
+    expect(getWeeksInCycle(0)).toBe(1);
   });
 });
 

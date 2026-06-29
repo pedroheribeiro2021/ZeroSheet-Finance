@@ -11,7 +11,7 @@ import { createWeeks, getWeeks } from '@/core/services/week.service';
 
 import { mapTransaction, mapWeek } from '@/core/models/mappers';
 import { calculateSummary } from '@/core/engine/calculations';
-import { calculateWeekly, getWeeksInMonth } from '@/core/engine/weekly';
+import { calculateWeekly, getWeeksInCycle, getWeeksInMonth } from '@/core/engine/weekly';
 import { getCardSnapshots } from '@/core/services/cardSnapshot.service';
 import { groupTransactionsByCategory } from '@/core/utils/groupTransactions';
 
@@ -105,7 +105,10 @@ export default function Dashboard() {
         installmentsDB,
       );
 
-      const weeksInMonth = getWeeksInMonth(latestMonth.month, latestMonth.year);
+      const primaryCard = cardsDB.find((c) => c.is_primary === true);
+      const weeksInMonth = primaryCard?.closing_day != null
+        ? getWeeksInCycle(primaryCard.closing_day)
+        : getWeeksInMonth(latestMonth.month, latestMonth.year);
 
       let finalWeeks = calculateWeekly(
         snapshotsData,

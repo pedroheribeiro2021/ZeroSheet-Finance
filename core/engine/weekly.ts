@@ -16,6 +16,17 @@ export function getWeeksInMonth(month: number, year: number): number {
   return Math.ceil(daysInMonth / 7);
 }
 
+/**
+ * Número de blocos de 7 dias do início do ciclo do cartão até o closing_day.
+ * O ciclo começa no dia seguinte ao fechamento anterior; o comprimento
+ * varia com o mês (28–31 dias), então usamos closing_day diretamente:
+ * se fecha no dia 28, o ciclo tem 28 dias → 4 semanas.
+ * Mínimo retornado é 1.
+ */
+export function getWeeksInCycle(closingDay: number): number {
+  return Math.max(1, Math.ceil(closingDay / 7));
+}
+
 export function calculateWeekly(
   snapshots: Snapshot[],
   transactions: Transaction[],
