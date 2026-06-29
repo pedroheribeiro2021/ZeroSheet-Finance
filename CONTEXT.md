@@ -107,10 +107,16 @@ tests/
 
 - `months` (month, year, user_id)
 - `weeks` (month_id, index, budget, spent, remaining)
-- `transactions` (month_id, type, category, amount, is_fixed, is_provision, is_recurring, card)
-- `cards` (name, slug, color, limit_amount, closing_day, due_day, user_id)
+- `transactions` (month_id, type, category, amount, is_fixed, is_provision, is_recurring, card,
+  `is_reimbursement` ⚠️, `is_reserve` ⚠️)
+- `cards` (name, slug, color, limit_amount, closing_day, due_day, user_id, `is_primary` ⚠️)
 - `card_snapshots` (month_id, card_id, amount, user_id) — fatura do cartão naquele mês
-- `installments` (description, card_id, total_amount, installment_amount, total_installments, current_installment, start_month_id, user_id)
+- `card_readings` ⚠️ (user_id, month_id→months, card_id→cards, amount, read_at, created_at)
+  — leituras parciais da fatura para o loop semanal; RLS owner
+- `installments` (description, card_id, total_amount, installment_amount, total_installments,
+  current_installment, start_month_id, user_id)
+
+⚠️ = coluna/tabela ainda não existe em produção (migration pendente — ver §7).
 
 ## 4. Fluxo de autenticação e navegação
 
@@ -151,50 +157,41 @@ para as `feature/*` — `main` recebe merges a partir dela).
 - CI configurado em `.github/workflows/ci.yml`: typecheck (`tsc --noEmit`),
   `vitest run`, lint (`continue-on-error: true`) e `next build` em PRs/pushes
   para `develop` e `main`.
-- Cobertura de testes ampliada: 3 arquivos / 12 testes
-  (`calculations.test.ts`, `weekly.test.ts`, `installments.test.ts`) —
-  confirmado rodando localmente (`npx vitest run` → 12 passed) e
-  `npx tsc --noEmit` limpo.
+- Cobertura de testes: 10 arquivos / 76 testes (`npx vitest run` → 76 passed,
+  `npx tsc --noEmit` limpo). Inclui `july-2026.test.ts` — contrato financeiro
+  de julho que fixa os números de referência do orçamento.
+- **Loop semanal** implementado e no `develop` (PR #55):
+  - `cards.is_primary` + `setPrimaryCard()` — toggle de cartão principal.
+  - `getWeeksInCycle(closingDay)` — semanas pelo ciclo do cartão principal.
+  - `card_readings` / `weeklySpendFromReadings` — delta entre leituras semanais.
+  - Não-interferência: transação com `card` que tem snapshot não entra em outros
+    buckets (`fixedCosts`, envelope etc.) — evita dupla contagem.
+  - Seção "Acompanhamento semanal" no Dashboard com campo de lançamento.
+  - **Tudo inerte em produção** até migrations serem aplicadas (ver §7).
 
 ### Trabalho em andamento / inconsistências conhecidas
+- **Migrations pendentes (ver §7):** loop semanal, `is_reimbursement`,
+  `is_reserve` e `is_primary` estão implementados no código mas inertes até
+  as migrations serem aplicadas manualmente. Dados históricos precisam de
+  UPDATE pós-migration (documentado nos arquivos `.sql`).
 - Tipagem solta: `any[]`/`any` ainda generalizado em `Dashboard.tsx`,
   `transaction.service.ts`, `week.service.ts`, `groupTransactions.ts` e na
-  maioria dos componentes (`TransactionForm`, `InstallmentForm`,
-  `InstallmentList`, `CardList`, `CardSnapshotForm`, `Modal`, `Card` etc.).
-  Várias dessas áreas têm
-  `/* eslint-disable @typescript-eslint/no-explicit-any */` no topo do
-  arquivo — não houve progresso aqui desde a última revisão.
-- Cobertura de testes ainda é só de `core/engine/*` (funções puras) — services,
-  hooks e componentes continuam sem teste.
-- `components/cards/CardList.tsx` não é importado em lugar nenhum
-  (`app/cards/page.tsx` renderiza a lista de cartões inline) — candidato a
-  remoção ou a voltar a ser usado.
-- `CardForm.tsx` (criação de cartão) só coleta `name` e `closing_day`, embora
-  `cards` (tabela e `card.service.ts`) já suportem `due_day`, `color` e
-  `limit_amount` — esses campos não têm UI nenhuma para serem definidos, e não
-  existe formulário de edição de cartão (só criar e remover). Ver TODO.md.
-- Bug de sessão confirmado por leitura de código: `LayoutShell.tsx` busca o
-  usuário atual uma única vez em `useEffect(..., [])`, sem listener
-  `supabase.auth.onAuthStateChange`. Trocar de conta na mesma aba sem recarregar
-  a página não atualiza o e-mail exibido na Topbar. Ver TODO.md.
-- Não há sistema de toast/notificação (`alert()`/`console.error` ainda é o
-  feedback usado em `CardForm`, `CardSnapshotForm`, `RegisterPage` etc.).
-- Não há arquivo `vercel.json`/`netlify.toml`/`.vercel` no repo — não é
-  possível confirmar pela árvore de arquivos se existe um ambiente publicado;
-  isso só é verificável no painel do provedor de hosting.
+  maioria dos componentes. Várias áreas têm
+  `/* eslint-disable @typescript-eslint/no-explicit-any */`.
+- Cobertura de testes cobre apenas `core/engine/*` (funções puras) — services,
+  hooks e componentes continuam sem teste (exceto os dois services de month/
+  transaction testados em `tests/services/`).
+- Deploy em produção: https://zerosheet-finance.vercel.app (branch `develop`
+  conectada à Vercel; env vars configuradas).
 
-### Histórico recente (mais novo primeiro, a partir do que o CONTEXT.md anterior já cobria)
-refactor: extrai filtro de parcelas ativas para `core/engine` → chore: workflow
-de CI (typecheck/test/build) → chore: remoção de código morto da normalização
-de cartões → fix: teste de `calculateSummary` defasado + bug de fallback em
-`calculateWeekly` → fix: matching de fatura por `card_id` em vez do `slug`
-legado → docs: CONTEXT.md inicial → normalização de relações de cartão →
-cartões dinâmicos por usuário (substituindo hardcode) → parcelamentos
-migrados para cartões dinâmicos.
-
-Há muitas outras branches `feature/*` antigas no repositório remoto que já
-foram incorporadas via merge e podem ser candidatas a limpeza
-(`git branch -a` lista ~35 branches feature, a maioria provavelmente obsoleta).
+### Histórico recente (mais novo primeiro)
+PR #55 `feature/loop-semanal`: is_primary, getWeeksInCycle, card_readings +
+weeklySpendFromReadings, não-interferência em calculateSummary →
+PR #54 `feat/dashboard-charts`: WeeklyBarChart + CategoryBarChart (Recharts) →
+PR #53 `chore/drop-card-check-constraint`: remove CHECK legado de
+transactions.card → PR #49 `feature/paridade-planilha-engine`: envelope,
+reembolso, reserva, getWeeksInMonth → PR #47 `feature/toasts-card-fields-and-auth-fix`:
+toasts, campos de cartão, onAuthStateChange.
 
 ## 6. Como rodar
 
@@ -210,3 +207,24 @@ npm run build && npm start
 
 Requer um projeto Supabase configurado com as tabelas do §3 e RLS habilitada
 por `user_id`, mais as variáveis em `.env.local` (§2).
+
+## 7. Migrations pendentes
+
+Os arquivos estão em `supabase/migrations/` e são idempotentes (IF NOT EXISTS).
+Aplicar **na ordem abaixo** via Supabase SQL Editor (Dashboard → SQL Editor →
+colar o conteúdo do arquivo e executar):
+
+| Arquivo | O que faz | Pré-requisito |
+|---------|-----------|---------------|
+| `20260629_01_cards_is_primary.sql` | Adiciona `cards.is_primary` + índice único parcial | nenhum |
+| `20260629_02_card_readings.sql` | Cria tabela `card_readings` com RLS | `cards` e `months` existirem |
+| `20260629_03_transactions_flags.sql` | Adiciona `transactions.is_reimbursement` e `.is_reserve` | nenhum |
+
+**Depois** da migration `03`, rodar os UPDATEs de backfill (estão comentados no
+próprio arquivo SQL) para marcar os dados históricos de junho que já existem no
+banco.
+
+Após as três migrations, todas as funcionalidades do loop semanal (botão
+estrela de cartão principal, seção "Acompanhamento semanal" no dashboard,
+separação de reembolso e reserva) ficam ativas automaticamente — o código já
+está em produção na `develop`.
