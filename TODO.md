@@ -6,6 +6,18 @@ indicado entre parênteses). Itens novos vão sempre no topo da seção
 
 ## Pendentes
 
+### Banco de dados — migrations a aplicar (ver CONTEXT.md §7)
+- [ ] Aplicar `20260629_01_cards_is_primary.sql` — ativa o botão ★ de cartão
+      principal no CardList (código já em produção; só falta a coluna).
+- [ ] Aplicar `20260629_02_card_readings.sql` — ativa a seção "Acompanhamento
+      semanal" do dashboard (cardReading.service.ts já existe; falta a tabela).
+- [ ] Aplicar `20260629_03_transactions_flags.sql` — ativa separação de
+      reembolso e reserva na engine (tipos e lógica já prontos; faltam as colunas).
+- [ ] Rodar UPDATEs de backfill de junho pós-migration (comentados no arquivo
+      `03`): marcar `is_reimbursement` e `is_reserve` nos dados existentes.
+- [ ] Definir/marcar o cartão principal (Nubank ou C6) via interface após a
+      migration `01` — necessário para o `getWeeksInCycle` e o acompanhamento.
+
 ### Produto / decisão
 - [x] Decidir formalmente se a atualização do valor da fatura do cartão
       (`CardSnapshotForm.tsx`) continua manual ou se algum dia o cálculo
@@ -38,6 +50,22 @@ indicado entre parênteses). Itens novos vão sempre no topo da seção
 ---
 
 ## Resolvidos
+
+### Loop semanal e contrato de julho (PR #55 `feature/loop-semanal`)
+- [x] `cards.is_primary` — tipo, serviço `setPrimaryCard()` e botão ★ no
+      `CardList`. Inerte até migration `01`.
+- [x] `getWeeksInCycle(closingDay)` — semanas pelo ciclo do cartão principal
+      em vez de 4 fixo. Dashboard usa o fechamento do cartão principal como
+      divisor; cai em `getWeeksInMonth` se não houver principal.
+- [x] `card_readings` / `weeklySpendFromReadings` — leituras parciais da
+      fatura, delta por semana, seção no dashboard com campo de lançamento.
+      Inerte até migration `02`.
+- [x] Não-interferência em `calculateSummary`: transação com `card` vinculada
+      a cartão que já tem snapshot no mês é ignorada em todos os outros buckets
+      (evita "Luz no C6" contar em fixos E na fatura).
+- [x] `july-2026.test.ts` — contrato financeiro fixado:
+      total −53,76 · fixedCosts 784,75 · cardSpending 2155,93
+      envelopeSpending 629,88 · reserveSpending 1000 · weeklyBudget −13,44
 
 ### Alta prioridade (PR #47 — `feature/toasts-card-fields-and-auth-fix`)
 - [x] Sessão do usuário não atualizava ao trocar de conta sem reload —
