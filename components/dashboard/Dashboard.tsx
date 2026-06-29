@@ -17,7 +17,9 @@ import { groupTransactionsByCategory } from '@/core/utils/groupTransactions';
 
 import { getInstallments } from '@/core/services/installment.service';
 import { getCards } from '@/core/services/card.service';
-import { DBCard, DBCardSnapshot } from '@/core/types/database';
+import { getReadings, addReading, deleteReading } from '@/core/services/cardReading.service';
+import { weeklySpendFromReadings } from '@/core/engine/weekly';
+import { DBCard, DBCardSnapshot, DBCardReading } from '@/core/types/database';
 import { Transaction, Week } from '@/core/types/finance';
 import WeeklyBarChart from './WeeklyBarChart';
 import CategoryBarChart from './CategoryBarChart';
@@ -35,6 +37,11 @@ export default function Dashboard() {
   const groupedTransactions = groupTransactionsByCategory(filteredTransactions);
   const [cards, setCards] = useState<DBCard[]>([]);
   const [snapshots, setSnapshots] = useState<DBCardSnapshot[]>([]);
+  const [readings, setReadings] = useState<DBCardReading[]>([]);
+  const [weeklySpend, setWeeklySpend] = useState<{ weekIndex: number; spent: number }[]>([]);
+  const [readingAmount, setReadingAmount] = useState('');
+  const [currentMonthId, setCurrentMonthId] = useState<string | null>(null);
+  const [primaryCard, setPrimaryCardState] = useState<DBCard | null>(null);
 
   const handleCardClick = (type: string) => {
     let filtered: Transaction[] = [];
@@ -105,9 +112,19 @@ export default function Dashboard() {
         installmentsDB,
       );
 
-      const primaryCard = cardsDB.find((c) => c.is_primary === true);
-      const weeksInMonth = primaryCard?.closing_day != null
-        ? getWeeksInCycle(primaryCard.closing_day)
+      const primary = cardsDB.find((c) => c.is_primary === true) ?? null;
+      setPrimaryCardState(primary);
+      setCurrentMonthId(latestMonth.id);
+
+      // leituras do cartão principal no mês corrente
+      if (primary) {
+        const readingsData = await getReadings(latestMonth.id, primary.id);
+        setReadings(readingsData);
+        setWeeklySpend(weeklySpendFromReadings(readingsData));
+      }
+
+      const weeksInMonth = primary?.closing_day != null
+        ? getWeeksInCycle(primary.closing_day)
         : getWeeksInMonth(latestMonth.month, latestMonth.year);
 
       let finalWeeks = calculateWeekly(
@@ -133,6 +150,33 @@ export default function Dashboard() {
 
       setSummary(result);
       setWeeks(finalWeeks);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleAddReading = async () => {
+    if (!primaryCard || !currentMonthId) return;
+    const amount = parseFloat(readingAmount.replace(',', '.'));
+    if (isNaN(amount) || amount < 0) return;
+    try {
+      await addReading({ month_id: currentMonthId, card_id: primaryCard.id, amount });
+      setReadingAmount('');
+      const updated = await getReadings(currentMonthId, primaryCard.id);
+      setReadings(updated);
+      setWeeklySpend(weeklySpendFromReadings(updated));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteReading = async (id: string) => {
+    if (!primaryCard || !currentMonthId) return;
+    try {
+      await deleteReading(id);
+      const updated = await getReadings(currentMonthId, primaryCard.id);
+      setReadings(updated);
+      setWeeklySpend(weeklySpendFromReadings(updated));
     } catch (err) {
       console.error(err);
     }
@@ -231,6 +275,73 @@ export default function Dashboard() {
           />
         </div>
       </div>
+
+      {primaryCard && (
+        <div className="mt-6 bg-zinc-900 p-5 rounded-xl">
+          <h2 className="text-base font-semibold text-white mb-4">
+            Acompanhamento semanal — {primaryCard.name}
+          </h2>
+
+          <div className="grid gap-2 mb-4">
+            {weeklySpend.length === 0 && (
+              <p className="text-zinc-400 text-sm">Nenhuma leitura lançada ainda.</p>
+            )}
+            {weeklySpend.map(({ weekIndex, spent }) => {
+              const diff = summary.weeklyBudget - spent;
+              return (
+                <div key={weekIndex} className="bg-zinc-800 rounded p-3 flex justify-between items-center">
+                  <span className="text-white text-sm">Semana {weekIndex}</span>
+                  <span className="text-zinc-400 text-sm">
+                    Orçamento: {formatCurrency(summary.weeklyBudget)}
+                  </span>
+                  <span className="text-white font-bold text-sm">
+                    Gasto: {formatCurrency(spent)}
+                  </span>
+                  <span className={`font-bold text-sm ${diff >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {diff >= 0 ? '+' : ''}{formatCurrency(diff)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex gap-2 items-center mb-4">
+            <input
+              type="text"
+              placeholder="Valor atual da fatura (ex.: 1200,50)"
+              value={readingAmount}
+              onChange={(e) => setReadingAmount(e.target.value)}
+              className="bg-zinc-800 text-white rounded px-3 py-2 text-sm flex-1 outline-none"
+            />
+            <button
+              onClick={handleAddReading}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm"
+            >
+              Lançar leitura
+            </button>
+          </div>
+
+          {readings.length > 0 && (
+            <div className="grid gap-1">
+              <p className="text-zinc-500 text-xs mb-1">Histórico de leituras</p>
+              {readings.map((r) => (
+                <div key={r.id} className="bg-zinc-800 rounded px-3 py-2 flex justify-between items-center">
+                  <span className="text-zinc-400 text-xs">
+                    {new Date(r.read_at).toLocaleDateString('pt-BR')}
+                  </span>
+                  <span className="text-white text-sm font-bold">{formatCurrency(Number(r.amount))}</span>
+                  <button
+                    onClick={() => handleDeleteReading(r.id)}
+                    className="text-red-500 hover:text-red-700 text-xs"
+                  >
+                    Remover
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <Modal
         open={!!selectedCard}
