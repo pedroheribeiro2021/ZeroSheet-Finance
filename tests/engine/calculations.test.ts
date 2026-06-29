@@ -372,3 +372,84 @@ describe('calculateSummary', () => {
     expect(Object.keys(result.provisionMap)).toEqual(['mercado']);
   });
 });
+
+describe('não-interferência — transação de cartão com snapshot não conta duas vezes', () => {
+  const income: Transaction = {
+    id: 'i1',
+    monthId: 'm1',
+    type: 'income',
+    category: 'salário',
+    amount: 5000,
+    isFixed: false,
+    isProvision: false,
+    isRecurring: false,
+    card: null,
+    createdAt: '2024-07-01',
+  };
+
+  const fixedWithCard: Transaction = {
+    id: 'f1',
+    monthId: 'm1',
+    type: 'expense',
+    category: 'Luz',
+    amount: 150,
+    isFixed: true,
+    isProvision: false,
+    isRecurring: false,
+    card: 'card-c6-id',
+    createdAt: '2024-07-05',
+  };
+
+  const snapshotC6 = [{ amount: 800, card_id: 'card-c6-id' }];
+
+  it('despesa fixa com cartão que tem snapshot não entra em fixedCosts', () => {
+    const result = calculateSummary([income, fixedWithCard], [], snapshotC6);
+
+    expect(result.fixedCosts).toBe(0);
+    expect(result.cardSpending).toBe(800); // vem do snapshot
+  });
+
+  it('total não muda ao alternar o flag card da despesa quando snapshot existe', () => {
+    const semCard: Transaction = { ...fixedWithCard, card: null };
+
+    const comCard = calculateSummary([income, fixedWithCard], [], snapshotC6);
+    const semCartao = calculateSummary([income, semCard], [], snapshotC6);
+
+    // com cartão + snapshot: fixedWithCard é ignorada (já na fatura)
+    // sem cartão + snapshot: fixedWithCard entra em fixedCosts normalmente
+    // → os totais DEVEM ser diferentes (proteção de que o teste é útil)
+    expect(comCard.fixedCosts).toBe(0);
+    expect(semCartao.fixedCosts).toBe(150);
+  });
+
+  it('despesa com cartão sem snapshot continua contando normalmente', () => {
+    // snapshot é de outro cartão
+    const otherSnapshot = [{ amount: 200, card_id: 'outro-cartao' }];
+
+    const result = calculateSummary([income, fixedWithCard], [], otherSnapshot);
+
+    // fixedWithCard.card = 'card-c6-id' não está em snapshotCardIds
+    // então cai no fluxo normal: é isFixed → fixedCosts
+    expect(result.fixedCosts).toBe(150);
+  });
+
+  it('sem snapshots, transação com card entra em cardSpending (comportamento legado)', () => {
+    const expense: Transaction = {
+      id: 'e1',
+      monthId: 'm1',
+      type: 'expense',
+      category: 'compras',
+      amount: 300,
+      isFixed: false,
+      isProvision: false,
+      isRecurring: false,
+      card: 'card-c6-id',
+      createdAt: '2024-07-10',
+    };
+
+    const result = calculateSummary([income, expense], [], undefined);
+
+    expect(result.cardSpending).toBe(300);
+    expect(result.fixedCosts).toBe(0);
+  });
+});

@@ -57,6 +57,12 @@ export type DBCard = {
   closing_day: number | null;
   due_day: number | null;
 
+  /**
+   * Ainda não existe no schema — aguardando migration (Item A).
+   * Ausência/null é tratada como false para não alterar dados existentes.
+   */
+  is_primary?: boolean | null;
+
   created_at: string | null;
 };
 
@@ -68,6 +74,20 @@ export type DBCardSnapshot = {
 
   amount: number;
 
+  created_at: string | null;
+};
+
+/**
+ * Leitura parcial da fatura — lançada toda semana para acompanhar o ciclo.
+ * Tabela card_readings ainda não existe (aguardando migration do Item C).
+ */
+export type DBCardReading = {
+  id: string;
+  user_id: string;
+  month_id: string | null;
+  card_id: string | null;
+  amount: number;
+  read_at: string;
   created_at: string | null;
 };
 

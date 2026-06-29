@@ -1,5 +1,10 @@
 import { Week, Transaction } from '../types/finance';
 
+export type CardReading = {
+  amount: number;
+  read_at: string;
+};
+
 type Snapshot = {
   amount: number;
   created_at: string | null;
@@ -14,6 +19,60 @@ export function getWeeksInMonth(month: number, year: number): number {
   const daysInMonth = new Date(year, month, 0).getDate();
 
   return Math.ceil(daysInMonth / 7);
+}
+
+/**
+ * Calcula o gasto de cada semana do ciclo a partir das leituras semanais
+ * da fatura. Cada leitura representa o valor acumulado da fatura naquele
+ * momento; o gasto da semana i = leitura_i − leitura_(i−1).
+ *
+ * Retorna um array de { weekIndex, spent } onde weekIndex é o bloco de 7 dias
+ * (Math.ceil(dia / 7)) da data de leitura.
+ *
+ * Leituras com a mesma semana são somadas antes de calcular o delta,
+ * mantendo coerência se o usuário lançar mais de uma leitura por semana.
+ */
+export function weeklySpendFromReadings(
+  readings: CardReading[],
+): { weekIndex: number; spent: number }[] {
+  if (readings.length === 0) return [];
+
+  const sorted = [...readings].sort(
+    (a, b) => new Date(a.read_at).getTime() - new Date(b.read_at).getTime(),
+  );
+
+  // agrupa por semana (bloco de 7 dias pelo dia-do-mês)
+  const byWeek = new Map<number, number>();
+  for (const r of sorted) {
+    const day = new Date(r.read_at).getDate();
+    const week = Math.ceil(day / 7);
+    // última leitura da semana prevalece (sobrescreve a anterior do mesmo bloco)
+    byWeek.set(week, r.amount);
+  }
+
+  const weekEntries = [...byWeek.entries()].sort(([a], [b]) => a - b);
+
+  const result: { weekIndex: number; spent: number }[] = [];
+  let prev = 0;
+
+  for (const [weekIndex, amount] of weekEntries) {
+    const spent = Math.max(0, amount - prev);
+    result.push({ weekIndex, spent });
+    prev = amount;
+  }
+
+  return result;
+}
+
+/**
+ * Número de blocos de 7 dias do início do ciclo do cartão até o closing_day.
+ * O ciclo começa no dia seguinte ao fechamento anterior; o comprimento
+ * varia com o mês (28–31 dias), então usamos closing_day diretamente:
+ * se fecha no dia 28, o ciclo tem 28 dias → 4 semanas.
+ * Mínimo retornado é 1.
+ */
+export function getWeeksInCycle(closingDay: number): number {
+  return Math.max(1, Math.ceil(closingDay / 7));
 }
 
 export function calculateWeekly(

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-import { deleteCard } from '@/core/services/card.service';
+import { deleteCard, setPrimaryCard } from '@/core/services/card.service';
 import EditCardModal from '../modals/EditCardModal';
 import { useToast } from '@/components/ui/ToastProvider';
 import { DBCard, DBCardSnapshot } from '@/core/types/database';
@@ -16,6 +16,17 @@ type Props = {
 export default function CardList({ cards, snapshots = [], onUpdated }: Props) {
   const { showToast } = useToast();
   const [selected, setSelected] = useState<DBCard | null>(null);
+
+  const handleSetPrimary = async (id: string) => {
+    try {
+      await setPrimaryCard(id);
+      showToast('Cartão principal atualizado');
+      onUpdated();
+    } catch (err) {
+      console.error(err);
+      showToast('Erro ao definir cartão principal', 'error');
+    }
+  };
 
   const handleDelete = async (id: string) => {
     const confirmDelete = confirm('Deseja remover esse cartão?');
@@ -80,6 +91,14 @@ export default function CardList({ cards, snapshots = [], onUpdated }: Props) {
                   }).format(Number(snapshot?.amount ?? 0))}
                 </p>
               </div>
+
+              <button
+                onClick={() => handleSetPrimary(card.id)}
+                title={card.is_primary ? 'Cartão principal' : 'Definir como principal'}
+                className={`text-lg leading-none ${card.is_primary ? 'text-yellow-400' : 'text-zinc-600 hover:text-yellow-400'}`}
+              >
+                ★
+              </button>
 
               <button
                 onClick={() => setSelected(card)}

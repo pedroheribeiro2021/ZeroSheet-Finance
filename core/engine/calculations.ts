@@ -6,7 +6,7 @@ import { normalizeCategory } from '../utils/normalize';
 export function calculateSummary(
   transactions: Transaction[],
   weeks: Week[],
-  snapshots?: { amount: number }[],
+  snapshots?: { amount: number; card_id?: string | null }[],
   installments: any[] = [],
   weeklyBudgetVariant: 'total' | 'incomeMinusFixed' = 'total',
 ) {
@@ -21,6 +21,23 @@ export function calculateSummary(
 
   const hasSnapshots = !!snapshots && snapshots.length > 0;
 
+  // card_ids que têm fatura fechada (snapshot) neste mês.
+  // Transações vinculadas a esses cartões não entram em nenhum outro bucket
+  // (já estão contadas dentro da fatura do cartão).
+  const snapshotCardIds = new Set<string>(
+    (snapshots ?? [])
+      .map((s) => s.card_id)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0),
+  );
+
+  // Se o campo card de Transaction for o id do cartão, usa direto;
+  // se for slug/nome legado, não haverá match com snapshotCardIds — e isso
+  // é o comportamento seguro (não exclui o que não consegue identificar).
+  const cardCoveredBySnapshot = (card: string | null | undefined): boolean => {
+    if (!card) return false;
+    return snapshotCardIds.has(card);
+  };
+
   for (const t of transactions) {
     const cat = normalizeCategory(t.category);
 
@@ -30,6 +47,11 @@ export function calculateSummary(
       } else {
         totalIncome += t.amount;
       }
+      continue;
+    }
+
+    // Transação vinculada a cartão com snapshot — já está na fatura; ignora.
+    if (cardCoveredBySnapshot(t.card)) {
       continue;
     }
 
