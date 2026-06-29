@@ -57,6 +57,12 @@ export type DBCard = {
   closing_day: number | null;
   due_day: number | null;
 
+  /**
+   * Ainda não existe no schema — aguardando migration (Item A).
+   * Ausência/null é tratada como false para não alterar dados existentes.
+   */
+  is_primary?: boolean | null;
+
   created_at: string | null;
 };
 
