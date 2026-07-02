@@ -19,10 +19,19 @@ import { getInstallments } from '@/core/services/installment.service';
 import { getCards } from '@/core/services/card.service';
 import { getReadings, addReading, deleteReading } from '@/core/services/cardReading.service';
 import { weeklySpendFromReadings } from '@/core/engine/weekly';
-import { DBCard, DBCardSnapshot, DBCardReading } from '@/core/types/database';
+import { DBCard, DBCardSnapshot, DBCardReading, DBMonth } from '@/core/types/database';
 import { Transaction, Week } from '@/core/types/finance';
 import WeeklyBarChart from './WeeklyBarChart';
 import CategoryBarChart from './CategoryBarChart';
+
+function formatMonthLabel(month: number, year: number): string {
+  const raw = new Intl.DateTimeFormat('pt-BR', {
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(year, month - 1));
+
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
 
 export default function Dashboard() {
   const [summary, setSummary] = useState<ReturnType<
@@ -41,6 +50,7 @@ export default function Dashboard() {
   const [weeklySpend, setWeeklySpend] = useState<{ weekIndex: number; spent: number }[]>([]);
   const [readingAmount, setReadingAmount] = useState('');
   const [currentMonthId, setCurrentMonthId] = useState<string | null>(null);
+  const [currentMonth, setCurrentMonth] = useState<DBMonth | null>(null);
   const [primaryCard, setPrimaryCardState] = useState<DBCard | null>(null);
 
   const handleCardClick = (type: string) => {
@@ -115,6 +125,7 @@ export default function Dashboard() {
       const primary = cardsDB.find((c) => c.is_primary === true) ?? null;
       setPrimaryCardState(primary);
       setCurrentMonthId(latestMonth.id);
+      setCurrentMonth(latestMonth);
 
       // leituras do cartão principal no mês corrente
       if (primary) {
@@ -199,6 +210,12 @@ export default function Dashboard() {
 
   return (
     <div className="p-6 grid gap-4">
+      {currentMonth && (
+        <h1 className="text-2xl font-bold text-white">
+          {formatMonthLabel(currentMonth.month, currentMonth.year)}
+        </h1>
+      )}
+
       <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
         <Card
           title="Entradas"
