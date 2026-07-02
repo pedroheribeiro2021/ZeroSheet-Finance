@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
 import Card from '@/components/ui/Card';
 import Modal from '@/components/ui/Modal';
@@ -19,12 +20,30 @@ import { getInstallments } from '@/core/services/installment.service';
 import { getCards } from '@/core/services/card.service';
 import { getReadings, addReading, deleteReading } from '@/core/services/cardReading.service';
 import { weeklySpendFromReadings } from '@/core/engine/weekly';
-import { DBCard, DBCardSnapshot, DBCardReading } from '@/core/types/database';
+import { DBCard, DBCardSnapshot, DBCardReading, DBMonth } from '@/core/types/database';
 import { Transaction, Week } from '@/core/types/finance';
 import WeeklyBarChart from './WeeklyBarChart';
 import CategoryBarChart from './CategoryBarChart';
 
+function formatMonthLabel(month: number, year: number): string {
+  const raw = new Intl.DateTimeFormat('pt-BR', {
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(year, month - 1));
+
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+function monthKey(m: { month: number; year: number }): string {
+  return `${m.year}-${String(m.month).padStart(2, '0')}`;
+}
+
 export default function Dashboard() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const [months, setMonths] = useState<DBMonth[]>([]);
   const [summary, setSummary] = useState<ReturnType<
     typeof calculateSummary
   > | null>(null);
@@ -73,7 +92,7 @@ export default function Dashboard() {
     setSelectedCard(type);
   };
 
-  const load = async () => {
+  const loadMonthsList = async () => {
     try {
       let monthsData = await getMonths();
 
@@ -88,20 +107,26 @@ export default function Dashboard() {
         monthsData = [newMonth];
       }
 
-      const latestMonth = monthsData[monthsData.length - 1];
+      setMonths(monthsData);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
-      const snapshotsData = await getCardSnapshots(latestMonth.id);
+  const loadMonthData = async (month: DBMonth) => {
+    try {
+      const snapshotsData = await getCardSnapshots(month.id);
       setSnapshots(snapshotsData);
       const cardsDB = await getCards();
 
       setCards(cardsDB);
-      const transactionsDB = await getTransactions(latestMonth.id);
-      const weeksDB = await getWeeks(latestMonth.id);
+      const transactionsDB = await getTransactions(month.id);
+      const weeksDB = await getWeeks(month.id);
 
       const transactionsMapped = transactionsDB.map(mapTransaction);
       const mappedWeeks = weeksDB.map(mapWeek);
 
-      const installmentsDB = await getInstallments(latestMonth.id);
+      const installmentsDB = await getInstallments(month.id);
 
       setTransactions(transactionsMapped);
 
@@ -114,38 +139,38 @@ export default function Dashboard() {
 
       const primary = cardsDB.find((c) => c.is_primary === true) ?? null;
       setPrimaryCardState(primary);
-      setCurrentMonthId(latestMonth.id);
+      setCurrentMonthId(month.id);
 
       // leituras do cartão principal no mês corrente
       if (primary) {
-        const readingsData = await getReadings(latestMonth.id, primary.id);
+        const readingsData = await getReadings(month.id, primary.id);
         setReadings(readingsData);
         setWeeklySpend(weeklySpendFromReadings(readingsData));
       }
 
       const weeksInMonth = primary?.closing_day != null
         ? getWeeksInCycle(primary.closing_day)
-        : getWeeksInMonth(latestMonth.month, latestMonth.year);
+        : getWeeksInMonth(month.month, month.year);
 
       let finalWeeks = calculateWeekly(
         snapshotsData,
         transactionsMapped,
         result.total,
-        latestMonth.id,
+        month.id,
         weeksInMonth,
       );
 
       if (!finalWeeks.length) {
         finalWeeks = Array.from({ length: weeksInMonth }).map((_, i) => ({
           id: crypto.randomUUID(),
-          monthId: latestMonth.id,
+          monthId: month.id,
           index: i + 1,
           budget: result.total / weeksInMonth,
           spent: 0,
           remaining: result.total / weeksInMonth,
         }));
 
-        await createWeeks(latestMonth.id, finalWeeks);
+        await createWeeks(month.id, finalWeeks);
       }
 
       setSummary(result);
@@ -183,8 +208,53 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    load();
+    loadMonthsList();
   }, []);
+
+  // mês ativo: vem da URL (?month=YYYY-MM); sem parâmetro, usa o mais recente
+  const activeMonth = useMemo(() => {
+    if (!months.length) return null;
+
+    const param = searchParams.get('month');
+
+    if (param) {
+      const found = months.find((m) => monthKey(m) === param);
+      if (found) return found;
+    }
+
+    return months[months.length - 1];
+  }, [months, searchParams]);
+
+  // mantém a URL sincronizada com o mês ativo (ex.: sem ?month, canoniza pro mais recente)
+  useEffect(() => {
+    if (!activeMonth) return;
+
+    const key = monthKey(activeMonth);
+    if (searchParams.get('month') !== key) {
+      router.replace(`${pathname}?month=${key}`);
+    }
+  }, [activeMonth, pathname, router, searchParams]);
+
+  // recarrega tudo (transações, snapshots, leituras, semanas, parcelas, summary) ao trocar de mês
+  useEffect(() => {
+    if (!activeMonth) return;
+
+    loadMonthData(activeMonth);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeMonth?.id]);
+
+  const goToMonth = (month: DBMonth) => {
+    router.push(`${pathname}?month=${monthKey(month)}`);
+  };
+
+  const activeIndex = activeMonth
+    ? months.findIndex((m) => m.id === activeMonth.id)
+    : -1;
+  const prevMonth = activeIndex > 0 ? months[activeIndex - 1] : null;
+  const nextMonth =
+    activeIndex >= 0 && activeIndex < months.length - 1
+      ? months[activeIndex + 1]
+      : null;
 
   if (!summary) {
     return <div className="text-white p-6">Carregando...</div>;
@@ -199,6 +269,50 @@ export default function Dashboard() {
 
   return (
     <div className="p-6 grid gap-4">
+      {activeMonth && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => prevMonth && goToMonth(prevMonth)}
+              disabled={!prevMonth}
+              className="rounded bg-zinc-900 px-3 py-2 text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Mês anterior"
+            >
+              ‹
+            </button>
+
+            <h1 className="text-2xl font-bold text-white">
+              {formatMonthLabel(activeMonth.month, activeMonth.year)}
+            </h1>
+
+            <button
+              onClick={() => nextMonth && goToMonth(nextMonth)}
+              disabled={!nextMonth}
+              className="rounded bg-zinc-900 px-3 py-2 text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Próximo mês"
+            >
+              ›
+            </button>
+          </div>
+
+          <select
+            value={monthKey(activeMonth)}
+            onChange={(e) => {
+              const found = months.find((m) => monthKey(m) === e.target.value);
+              if (found) goToMonth(found);
+            }}
+            className="rounded bg-zinc-900 px-3 py-2 text-sm text-white outline-none"
+            aria-label="Selecionar mês"
+          >
+            {months.map((m) => (
+              <option key={m.id} value={monthKey(m)}>
+                {formatMonthLabel(m.month, m.year)}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
         <Card
           title="Entradas"
@@ -255,6 +369,32 @@ export default function Dashboard() {
           title="Orçamento Semanal"
           value={formatCurrency(summary.weeklyBudget)}
         />
+      </div>
+
+      <div className="mt-6">
+        <h2 className="text-xl font-bold mb-2 text-white">Controle Semanal</h2>
+
+        <div className="grid grid-cols-2 gap-4">
+          {weeks.map((week) => (
+            <div key={week.id} className="bg-zinc-900 p-4 rounded">
+              <p className="font-bold text-white">Semana {week.index}</p>
+
+              <p className="text-zinc-400">
+                Orçamento: {formatCurrency(week.budget)}
+              </p>
+
+              <p className="text-white">Gasto: {formatCurrency(week.spent)}</p>
+
+              <p
+                className={
+                  week.remaining < 0 ? 'text-red-500' : 'text-green-500'
+                }
+              >
+                Restante: {formatCurrency(week.remaining)}
+              </p>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
