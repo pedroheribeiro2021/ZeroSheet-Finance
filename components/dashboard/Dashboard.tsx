@@ -17,9 +17,11 @@ import { getCardSnapshots } from '@/core/services/cardSnapshot.service';
 import { groupTransactionsByCategory } from '@/core/utils/groupTransactions';
 
 import { getInstallments } from '@/core/services/installment.service';
+import type { ActiveInstallment } from '@/core/services/installment.service';
 import { getCards } from '@/core/services/card.service';
 import { getReadings, addReading, deleteReading } from '@/core/services/cardReading.service';
 import { weeklySpendFromReadings } from '@/core/engine/weekly';
+import { sanitizeAmountInput } from '@/core/utils/number';
 import { DBCard, DBCardSnapshot, DBCardReading, DBMonth } from '@/core/types/database';
 import { Transaction, Week } from '@/core/types/finance';
 import WeeklyBarChart from './WeeklyBarChart';
@@ -61,6 +63,7 @@ export default function Dashboard() {
   const [readingAmount, setReadingAmount] = useState('');
   const [currentMonthId, setCurrentMonthId] = useState<string | null>(null);
   const [primaryCard, setPrimaryCardState] = useState<DBCard | null>(null);
+  const [installments, setInstallments] = useState<ActiveInstallment[]>([]);
 
   const handleCardClick = (type: string) => {
     let filtered: Transaction[] = [];
@@ -80,8 +83,16 @@ export default function Dashboard() {
 
       case 'real':
         filtered = transactions.filter(
-          (t) => t.type === 'expense' && !t.isFixed && !t.isProvision,
+          (t) =>
+            t.type === 'expense' &&
+            !t.isFixed &&
+            !t.isProvision &&
+            !t.isReserve,
         );
+        break;
+
+      case 'reserve':
+        filtered = transactions.filter((t) => t.isReserve);
         break;
 
       default:
@@ -127,6 +138,7 @@ export default function Dashboard() {
       const mappedWeeks = weeksDB.map(mapWeek);
 
       const installmentsDB = await getInstallments(month.id);
+      setInstallments(installmentsDB);
 
       setTransactions(transactionsMapped);
 
@@ -328,12 +340,28 @@ export default function Dashboard() {
 
         {cards.map((card) => {
           const snapshot = snapshots.find((s) => s.card_id === card.id);
+          const fatura = Number(snapshot?.amount ?? 0);
+
+          const cardInstallments = installments
+            .filter((i) => i.card_id === card.id)
+            .reduce((acc, i) => acc + Number(i.installment_amount), 0);
+
+          // O comprometido do mês no cartão: a fatura (que já inclui as
+          // parcelas lançadas nela) ou, sem fatura ainda, as parcelas.
+          const comprometido = Math.max(fatura, cardInstallments);
+          const limite = Number(card.limit_amount ?? 0);
+          const disponivel = limite > 0 ? limite - comprometido : null;
 
           return (
             <Card
               key={card.id}
-              title={card.name}
-              value={formatCurrency(Number(snapshot?.amount ?? 0))}
+              title={`💳 ${card.name}`}
+              value={formatCurrency(fatura)}
+              subtitle={`Parcelas no mês: ${formatCurrency(cardInstallments)}${
+                disponivel != null
+                  ? ` • Disponível p/ gastar: ${formatCurrency(disponivel)}`
+                  : ''
+              }`}
             />
           );
         })}
@@ -341,6 +369,20 @@ export default function Dashboard() {
         <Card
           title="Total Cartões"
           value={formatCurrency(summary.cardSpending)}
+        />
+
+        <Card
+          title="Parcelamentos (fora da fatura)"
+          value={formatCurrency(summary.installmentSpending)}
+          subtitle="Parcelas de cartões sem fatura lançada no mês — as demais já estão dentro da fatura"
+        />
+
+        <Card
+          title="Reserva / Investimentos"
+          value={formatCurrency(summary.reserveSpending)}
+          subtitle="Abate das entradas, mas é patrimônio seu"
+          onClick={() => handleCardClick('reserve')}
+          className="border border-sky-700"
         />
 
         <Card
@@ -370,6 +412,58 @@ export default function Dashboard() {
           value={formatCurrency(summary.weeklyBudget)}
         />
       </div>
+
+      {summary.envelopes.length > 0 && (
+        <div className="mt-6 bg-zinc-900 p-5 rounded-xl">
+          <h2 className="text-base font-semibold text-white mb-1">
+            Provisões do mês (envelopes)
+          </h2>
+          <p className="text-zinc-500 text-xs mb-4">
+            Cada gasto real lançado na mesma categoria abate automaticamente da
+            provisão — não precisa atualizar o valor na mão.
+          </p>
+
+          <div className="grid gap-3">
+            {summary.envelopes.map((env) => {
+              const pct =
+                env.planned > 0
+                  ? Math.min(100, (env.used / env.planned) * 100)
+                  : 0;
+              const over = env.remaining < 0;
+
+              return (
+                <div key={env.category} className="grid gap-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-white font-medium">
+                      {env.category}
+                    </span>
+                    <span className={over ? 'text-red-400' : 'text-zinc-400'}>
+                      {formatCurrency(env.used)} de{' '}
+                      {formatCurrency(env.planned)}
+                      {' — '}
+                      {over
+                        ? `estourou ${formatCurrency(Math.abs(env.remaining))}`
+                        : `resta ${formatCurrency(env.remaining)}`}
+                    </span>
+                  </div>
+                  <div className="h-2 rounded bg-zinc-800 overflow-hidden">
+                    <div
+                      className={`h-full rounded ${
+                        over
+                          ? 'bg-red-500'
+                          : pct > 80
+                            ? 'bg-amber-500'
+                            : 'bg-green-500'
+                      }`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="mt-6">
         <h2 className="text-xl font-bold mb-2 text-white">Controle Semanal</h2>
@@ -450,7 +544,9 @@ export default function Dashboard() {
               type="text"
               placeholder="Valor atual da fatura (ex.: 1200,50)"
               value={readingAmount}
-              onChange={(e) => setReadingAmount(e.target.value)}
+              onChange={(e) =>
+                setReadingAmount(sanitizeAmountInput(e.target.value))
+              }
               className="bg-zinc-800 text-white rounded px-3 py-2 text-sm flex-1 outline-none"
             />
             <button

@@ -10,3 +10,18 @@ body {
 body {
   min-height: 100vh;
 }
+
+/* Todo botão clicável mostra cursor pointer (desabilitado, não) */
+button:not(:disabled),
+[role='button'],
+select,
+input[type='checkbox'],
+input[type='radio'],
+label:has(> input[type='checkbox']),
+label:has(> input[type='radio']) {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}

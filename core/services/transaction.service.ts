@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { getCurrentUser } from './auth.service';
 import { supabase } from '@/lib/supabase';
+import { isRecurrenceActive } from '@/core/engine/recurrence';
 
 export async function getTransactions(monthId: string) {
   const user = await getCurrentUser();
@@ -79,6 +80,8 @@ export async function deleteTransaction(id: string) {
 export async function copyRecurringTransactions(
   fromMonthId: string,
   toMonthId: string,
+  /** Competência do mês destino — usada para respeitar recurring_until. */
+  target?: { month: number; year: number },
 ) {
   const user = await getCurrentUser();
 
@@ -97,7 +100,16 @@ export async function copyRecurringTransactions(
 
   if (!data || data.length === 0) return;
 
-  const payload = data.map((t) => ({
+  // respeita a duração da recorrência (recurring_until)
+  const active = target
+    ? data.filter((t) =>
+        isRecurrenceActive(t.recurring_until, target.year, target.month),
+      )
+    : data;
+
+  if (active.length === 0) return;
+
+  const payload = active.map((t) => ({
     month_id: toMonthId,
     user_id: user.id,
     type: t.type,
@@ -106,7 +118,10 @@ export async function copyRecurringTransactions(
     is_fixed: t.is_fixed,
     is_recurring: t.is_recurring,
     is_provision: t.is_provision,
+    is_reimbursement: t.is_reimbursement ?? false,
+    is_reserve: t.is_reserve ?? false,
     due_day: t.due_day ?? null,
+    recurring_until: t.recurring_until ?? null,
     card: t.card ?? null,
   }));
 

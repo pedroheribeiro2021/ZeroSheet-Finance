@@ -10,6 +10,10 @@ import { getTransactions } from '@/core/services/transaction.service';
 
 export default function TransactionsPage() {
   const [monthId, setMonthId] = useState<string | null>(null);
+  const [activeMonth, setActiveMonth] = useState<{
+    month: number;
+    year: number;
+  } | null>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
 
   const load = async () => {
@@ -28,6 +32,7 @@ export default function TransactionsPage() {
 
       const latestMonth = monthsData[monthsData.length - 1];
       setMonthId(latestMonth.id);
+      setActiveMonth({ month: latestMonth.month, year: latestMonth.year });
 
       const transactionsDB = await getTransactions(latestMonth.id);
       setTransactions(transactionsDB.map(mapTransaction));
@@ -48,7 +53,7 @@ export default function TransactionsPage() {
     <div className="p-6 grid gap-4">
       <h1 className="text-2xl font-bold text-white">Transações</h1>
 
-      <TransactionForm monthId={monthId} onCreated={load} />
+      <TransactionForm monthId={monthId} month={activeMonth} onCreated={load} />
       <TransactionList transactions={transactions} onUpdated={load} />
     </div>
   );

@@ -3,17 +3,27 @@
 import { useEffect, useState } from 'react';
 
 import { createInstallment } from '@/core/services/installment.service';
-import { parseCurrencyInput } from '@/core/utils/number';
+import {
+  parseCurrencyInput,
+  sanitizeAmountInput,
+  formatBRL,
+} from '@/core/utils/number';
 import { getCards } from '@/core/services/card.service';
 import { useToast } from '@/components/ui/ToastProvider';
 import { DBCard } from '@/core/types/database';
 
 type Props = {
   monthId: string;
+  /** Rótulo do mês ativo (ex.: "Julho de 2026") para deixar claro quando a 1ª parcela conta. */
+  monthLabel?: string;
   onCreated?: () => void;
 };
 
-export default function InstallmentForm({ monthId, onCreated }: Props) {
+export default function InstallmentForm({
+  monthId,
+  monthLabel,
+  onCreated,
+}: Props) {
   const { showToast } = useToast();
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
@@ -36,14 +46,25 @@ export default function InstallmentForm({ monthId, onCreated }: Props) {
     loadCards();
   }, []);
 
+  const parsed = parseCurrencyInput(amount);
+  const total = parsed * totalInstallments;
+
   const handleSubmit = async () => {
     try {
-      const parsed = parseCurrencyInput(amount);
+      if (!description) {
+        showToast('Informe uma descrição', 'error');
+        return;
+      }
+
+      if (!parsed) {
+        showToast('Informe o valor da parcela', 'error');
+        return;
+      }
 
       await createInstallment({
         description,
         card_id: cardId,
-        total_amount: parsed * totalInstallments,
+        total_amount: total,
         installment_amount: parsed,
         total_installments: totalInstallments,
         start_month_id: monthId,
@@ -63,42 +84,72 @@ export default function InstallmentForm({ monthId, onCreated }: Props) {
 
   return (
     <div className="bg-zinc-900 p-4 rounded grid gap-3">
-      <h2 className="font-bold text-white">Nova Parcela</h2>
+      <h2 className="font-bold text-white">Novo Parcelamento</h2>
 
-      <input
-        placeholder="Nome"
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        className="bg-zinc-800 p-2 rounded text-white"
-      />
+      <label className="grid gap-1 text-sm text-zinc-400">
+        Descrição
+        <input
+          placeholder="Ex: Celular Samsung"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          className="bg-zinc-800 p-2 rounded text-white"
+        />
+      </label>
 
-      <input
-        placeholder="Valor"
-        value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-        className="bg-zinc-800 p-2 rounded text-white"
-      />
+      <div className="grid grid-cols-2 gap-3">
+        <label className="grid gap-1 text-sm text-zinc-400">
+          Valor de cada parcela
+          <input
+            inputMode="decimal"
+            placeholder="Ex: 703,20"
+            value={amount}
+            onChange={(e) => setAmount(sanitizeAmountInput(e.target.value))}
+            className="bg-zinc-800 p-2 rounded text-white"
+          />
+        </label>
 
-      <input
-        type="number"
-        value={totalInstallments}
-        onChange={(e) => setTotalInstallments(Number(e.target.value))}
-        className="bg-zinc-800 p-2 rounded text-white"
-      />
+        <label className="grid gap-1 text-sm text-zinc-400">
+          Número de parcelas
+          <input
+            type="number"
+            min={1}
+            max={72}
+            value={totalInstallments}
+            onChange={(e) =>
+              setTotalInstallments(Math.max(1, Number(e.target.value)))
+            }
+            className="bg-zinc-800 p-2 rounded text-white"
+          />
+        </label>
+      </div>
 
-      <select
-        value={cardId}
-        onChange={(e) => setCardId(e.target.value)}
-        className="bg-zinc-800 p-2 rounded text-white"
+      <label className="grid gap-1 text-sm text-zinc-400">
+        Cartão onde foi parcelado
+        <select
+          value={cardId}
+          onChange={(e) => setCardId(e.target.value)}
+          className="bg-zinc-800 p-2 rounded text-white"
+        >
+          {cards.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <p className="text-xs text-zinc-500">
+        A 1ª parcela conta {monthLabel ? `em ${monthLabel}` : 'neste mês'}.
+        {parsed > 0 &&
+          ` Total da compra: ${formatBRL(total)} (${totalInstallments}× de ${formatBRL(parsed)}).`}{' '}
+        A parcela compromete a fatura do cartão selecionado todo mês até
+        terminar.
+      </p>
+
+      <button
+        onClick={handleSubmit}
+        className="bg-blue-600 p-2 rounded text-white hover:bg-blue-700 font-medium"
       >
-        {cards.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
-      </select>
-
-      <button onClick={handleSubmit} className="bg-blue-600 p-2 rounded">
         Salvar
       </button>
     </div>
