@@ -2,27 +2,94 @@
 
 import { useState } from 'react';
 import { createTransaction } from '@/core/services/transaction.service';
-import { parseCurrencyInput } from '@/core/utils/number';
-import { DEFAULT_CATEGORIES } from '@/core/constants/categories';
+import { parseCurrencyInput, sanitizeAmountInput } from '@/core/utils/number';
+import {
+  EXPENSE_CATEGORIES,
+  INCOME_CATEGORIES,
+  RESERVE_CATEGORIES,
+} from '@/core/constants/categories';
 import { useToast } from '@/components/ui/ToastProvider';
 import { resolveSplitAmount } from '@/core/engine/split';
+import { recurringUntilFromMonths } from '@/core/engine/recurrence';
 
-export default function TransactionForm({ onCreated, monthId }: any) {
+type Kind = 'income' | 'expense' | 'reserve';
+
+type Props = {
+  monthId: string;
+  /** Competência ativa — usada para calcular o fim da recorrência. */
+  month?: { month: number; year: number } | null;
+  onCreated?: () => void;
+};
+
+const KIND_OPTIONS: { value: Kind; label: string; hint: string }[] = [
+  { value: 'expense', label: '(−) Despesa', hint: 'Sai do orçamento' },
+  { value: 'income', label: '(+) Entrada', hint: 'Soma ao orçamento' },
+  {
+    value: 'reserve',
+    label: '(↗) Reserva',
+    hint: 'Não é gasto: vai para poupança/investimento, mas abate das entradas',
+  },
+];
+
+export default function TransactionForm({ monthId, month, onCreated }: Props) {
   const { showToast } = useToast();
 
+  const [kind, setKind] = useState<Kind>('expense');
   const [amount, setAmount] = useState('');
-  const [type, setType] = useState<'income' | 'expense'>('expense');
   const [isSplit, setIsSplit] = useState(false);
 
   const [selectedCategory, setSelectedCategory] = useState('');
   const [customCategory, setCustomCategory] = useState('');
 
   const [isFixed, setIsFixed] = useState(false);
-  const [isRecurring, setIsRecurring] = useState(false);
   const [isProvision, setIsProvision] = useState(false);
+  const [isReimbursement, setIsReimbursement] = useState(false);
+
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurrenceMode, setRecurrenceMode] = useState<
+    'forever' | 'months' | 'until'
+  >('forever');
+  const [recurrenceMonths, setRecurrenceMonths] = useState('12');
+  const [recurrenceUntil, setRecurrenceUntil] = useState('');
   const [dueDay, setDueDay] = useState('');
 
   const isCustom = selectedCategory === '__custom__';
+
+  const categories =
+    kind === 'income'
+      ? INCOME_CATEGORIES
+      : kind === 'reserve'
+        ? RESERVE_CATEGORIES
+        : EXPENSE_CATEGORIES;
+
+  const changeKind = (k: Kind) => {
+    setKind(k);
+    setSelectedCategory(k === 'reserve' ? RESERVE_CATEGORIES[0] : '');
+    setIsFixed(false);
+    setIsProvision(false);
+    setIsReimbursement(false);
+    setIsSplit(false);
+  };
+
+  const computeRecurringUntil = (): string | null => {
+    if (!isRecurring) return null;
+
+    if (recurrenceMode === 'months') {
+      const n = Number(recurrenceMonths);
+      if (!n || n < 1) return null;
+      const base = month ?? {
+        month: new Date().getMonth() + 1,
+        year: new Date().getFullYear(),
+      };
+      return recurringUntilFromMonths(base.year, base.month, n);
+    }
+
+    if (recurrenceMode === 'until' && recurrenceUntil) {
+      return `${recurrenceUntil}-01`;
+    }
+
+    return null; // para sempre
+  };
 
   const handleSubmit = async () => {
     try {
@@ -33,6 +100,11 @@ export default function TransactionForm({ onCreated, monthId }: any) {
 
       const parsedAmount = parseCurrencyInput(amount);
 
+      if (!parsedAmount) {
+        showToast('Informe um valor válido', 'error');
+        return;
+      }
+
       const finalCategory = isCustom ? customCategory : selectedCategory;
 
       if (!finalCategory) {
@@ -40,30 +112,40 @@ export default function TransactionForm({ onCreated, monthId }: any) {
         return;
       }
 
-      // Split: o sinal do valor decide o tipo, sem precisar escolher manualmente.
-      const resolved = isSplit
-        ? resolveSplitAmount(parsedAmount)
-        : { type, amount: parsedAmount };
+      // Split: o sinal do valor decide o tipo (só p/ entrada/despesa).
+      const resolved =
+        isSplit && kind !== 'reserve'
+          ? resolveSplitAmount(parsedAmount)
+          : {
+              type: kind === 'reserve' ? ('expense' as const) : kind,
+              amount: Math.abs(parsedAmount),
+            };
 
       await createTransaction({
         month_id: monthId,
         amount: resolved.amount,
         type: resolved.type,
         category: finalCategory,
-        is_fixed: isFixed,
+        is_fixed: kind === 'expense' && isFixed,
         is_recurring: isRecurring,
-        is_provision: isProvision,
+        is_provision: kind === 'expense' && isProvision,
+        is_reserve: kind === 'reserve',
+        is_reimbursement: kind === 'income' && isReimbursement,
+        recurring_until: computeRecurringUntil(),
         due_day: isRecurring && dueDay ? Number(dueDay) : null,
         card: null,
       });
 
       // reset
       setAmount('');
-      setSelectedCategory('');
+      setSelectedCategory(kind === 'reserve' ? RESERVE_CATEGORIES[0] : '');
       setCustomCategory('');
       setIsFixed(false);
-      setIsRecurring(false);
       setIsProvision(false);
+      setIsReimbursement(false);
+      setIsRecurring(false);
+      setRecurrenceMode('forever');
+      setRecurrenceUntil('');
       setDueDay('');
       setIsSplit(false);
 
@@ -79,26 +161,58 @@ export default function TransactionForm({ onCreated, monthId }: any) {
     <div className="bg-zinc-900 p-4 rounded grid gap-3">
       <h2 className="font-bold text-white">Nova Transação</h2>
 
+      {/* TIPO */}
+      <div className="grid grid-cols-3 gap-2">
+        {KIND_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => changeKind(opt.value)}
+            title={opt.hint}
+            className={`p-2 rounded text-sm font-medium transition ${
+              kind === opt.value
+                ? opt.value === 'income'
+                  ? 'bg-green-600 text-white'
+                  : opt.value === 'reserve'
+                    ? 'bg-sky-600 text-white'
+                    : 'bg-red-600 text-white'
+                : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
+      <p className="text-xs text-zinc-500">
+        {KIND_OPTIONS.find((o) => o.value === kind)?.hint}
+      </p>
+
       <input
         type="text"
+        inputMode="decimal"
         placeholder={
           isSplit ? 'Valor (+/-, ex: -63,56 ou +51,00)' : 'Valor (ex: 1000,50)'
         }
         value={amount}
-        onChange={(e) => setAmount(e.target.value)}
+        onChange={(e) =>
+          setAmount(sanitizeAmountInput(e.target.value, isSplit))
+        }
         className="bg-zinc-800 p-2 rounded text-white"
       />
 
-      <label className="flex items-center gap-2 text-sm text-white">
-        <input
-          type="checkbox"
-          checked={isSplit}
-          onChange={(e) => setIsSplit(e.target.checked)}
-        />
-        Split (+/-): o sinal do valor decide se soma ou subtrai
-      </label>
+      {kind !== 'reserve' && (
+        <label className="flex items-center gap-2 text-sm text-white">
+          <input
+            type="checkbox"
+            checked={isSplit}
+            onChange={(e) => setIsSplit(e.target.checked)}
+          />
+          Split (+/-): o sinal do valor decide se soma ou subtrai
+        </label>
+      )}
 
-      {/* ✅ SELECT DE CATEGORIA */}
+      {/* CATEGORIA */}
       <select
         value={selectedCategory}
         onChange={(e) => setSelectedCategory(e.target.value)}
@@ -106,7 +220,7 @@ export default function TransactionForm({ onCreated, monthId }: any) {
       >
         <option value="">Selecione uma categoria</option>
 
-        {DEFAULT_CATEGORIES.map((cat) => (
+        {categories.map((cat) => (
           <option key={cat} value={cat}>
             {cat}
           </option>
@@ -115,7 +229,6 @@ export default function TransactionForm({ onCreated, monthId }: any) {
         <option value="__custom__">Outra...</option>
       </select>
 
-      {/* ✅ INPUT CUSTOM */}
       {isCustom && (
         <input
           type="text"
@@ -126,67 +239,122 @@ export default function TransactionForm({ onCreated, monthId }: any) {
         />
       )}
 
-      {!isSplit && (
-        <select
-          value={type}
-          onChange={(e) => setType(e.target.value as any)}
-          className="bg-zinc-800 p-2 rounded text-white"
-        >
-          <option value="income">Entrada</option>
-          <option value="expense">Despesa</option>
-        </select>
-      )}
-
       {/* FLAGS */}
       <div className="grid gap-2 text-sm text-white">
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={isFixed}
-            onChange={(e) => setIsFixed(e.target.checked)}
-          />
-          Despesa fixa
-        </label>
-
-        {isFixed && (
-          <label className="flex items-center gap-2 ml-4">
+        {kind === 'expense' && (
+          <label className="flex items-center gap-2">
             <input
               type="checkbox"
-              checked={isRecurring}
-              onChange={(e) => setIsRecurring(e.target.checked)}
+              checked={isFixed}
+              onChange={(e) => setIsFixed(e.target.checked)}
             />
-            Recorrente mensal
+            Despesa fixa
           </label>
         )}
 
-        {isFixed && isRecurring && (
-          <label className="grid gap-1 ml-4">
-            Dia de vencimento (opcional)
+        {kind === 'expense' && (
+          <label className="flex items-center gap-2">
             <input
-              type="number"
-              min={1}
-              max={31}
-              placeholder="Ex: 10"
-              value={dueDay}
-              onChange={(e) => setDueDay(e.target.value)}
-              className="bg-zinc-800 p-2 rounded text-white w-24"
+              type="checkbox"
+              checked={isProvision}
+              onChange={(e) => setIsProvision(e.target.checked)}
             />
+            Provisão (planejamento — os gastos reais da mesma categoria abatem
+            deste valor)
           </label>
         )}
 
+        {kind === 'income' && (
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={isReimbursement}
+              onChange={(e) => setIsReimbursement(e.target.checked)}
+            />
+            Reembolso (aparece no resumo, mas não soma nas entradas)
+          </label>
+        )}
+
+        {/* RECORRÊNCIA — disponível para entrada, despesa e reserva */}
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
-            checked={isProvision}
-            onChange={(e) => setIsProvision(e.target.checked)}
+            checked={isRecurring}
+            onChange={(e) => setIsRecurring(e.target.checked)}
           />
-          Provisão (planejamento)
+          Recorrente mensal (copiada automaticamente para os próximos meses)
         </label>
+
+        {isRecurring && (
+          <div className="ml-6 grid gap-2 rounded bg-zinc-800/60 p-3">
+            <p className="text-zinc-400 text-xs">Repetir por quanto tempo?</p>
+
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="recurrence-mode"
+                checked={recurrenceMode === 'forever'}
+                onChange={() => setRecurrenceMode('forever')}
+              />
+              Sempre (até eu remover)
+            </label>
+
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="recurrence-mode"
+                checked={recurrenceMode === 'months'}
+                onChange={() => setRecurrenceMode('months')}
+              />
+              Por
+              <input
+                type="number"
+                min={1}
+                max={120}
+                value={recurrenceMonths}
+                onChange={(e) => setRecurrenceMonths(e.target.value)}
+                onFocus={() => setRecurrenceMode('months')}
+                className="bg-zinc-900 p-1 rounded text-white w-16 text-center"
+              />
+              meses (contando este)
+            </label>
+
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="recurrence-mode"
+                checked={recurrenceMode === 'until'}
+                onChange={() => setRecurrenceMode('until')}
+              />
+              Até
+              <input
+                type="month"
+                value={recurrenceUntil}
+                onChange={(e) => setRecurrenceUntil(e.target.value)}
+                onFocus={() => setRecurrenceMode('until')}
+                className="bg-zinc-900 p-1 rounded text-white"
+              />
+            </label>
+
+            <label className="grid gap-1">
+              Dia de vencimento (opcional)
+              <input
+                type="number"
+                min={1}
+                max={31}
+                placeholder="Ex: 10"
+                value={dueDay}
+                onChange={(e) => setDueDay(e.target.value)}
+                className="bg-zinc-900 p-2 rounded text-white w-24"
+              />
+            </label>
+          </div>
+        )}
       </div>
 
       <button
         onClick={handleSubmit}
-        className="bg-green-600 p-2 rounded hover:bg-green-700"
+        className="bg-green-600 p-2 rounded hover:bg-green-700 text-white font-medium"
       >
         Salvar
       </button>
