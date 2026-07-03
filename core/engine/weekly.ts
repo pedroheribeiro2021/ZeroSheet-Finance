@@ -75,6 +75,43 @@ export function getWeeksInCycle(closingDay: number): number {
   return Math.max(1, Math.ceil(closingDay / 7));
 }
 
+/**
+ * Semanas do ciclo vigente da fatura do cartão principal, visto de `from`:
+ * conta os dias entre a PRÓXIMA virada da fatura e a virada seguinte e
+ * divide por 7 (arredondando pra cima).
+ *
+ * Ex.: hoje 03/07, fechamento dia 4 → ciclo 04/07→04/08 = 31 dias = 5 semanas.
+ * É por esse número que o saldo do mês é dividido no orçamento semanal.
+ */
+export function getWeeksInCurrentCycle(
+  closingDay: number,
+  from: Date = new Date(),
+): number {
+  const clampDay = (year: number, monthIndex: number) =>
+    Math.min(closingDay, new Date(year, monthIndex + 1, 0).getDate());
+
+  let y = from.getFullYear();
+  let m = from.getMonth();
+
+  let nextClosing = new Date(y, m, clampDay(y, m));
+  if (nextClosing.getTime() <= from.getTime()) {
+    m += 1;
+    nextClosing = new Date(y, m, clampDay(y, m));
+  }
+
+  const followingClosing = new Date(
+    nextClosing.getFullYear(),
+    nextClosing.getMonth() + 1,
+    clampDay(nextClosing.getFullYear(), nextClosing.getMonth() + 1),
+  );
+
+  const days = Math.round(
+    (followingClosing.getTime() - nextClosing.getTime()) / 86_400_000,
+  );
+
+  return Math.max(1, Math.ceil(days / 7));
+}
+
 export function calculateWeekly(
   snapshots: Snapshot[],
   transactions: Transaction[],
