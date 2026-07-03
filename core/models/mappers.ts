@@ -21,6 +21,7 @@ export function mapTransaction(db: DBTransaction): Transaction {
 
     type: db.type,
     category: db.category,
+    description: db.description ?? null,
     amount: db.amount,
 
     isFixed: db.is_fixed,

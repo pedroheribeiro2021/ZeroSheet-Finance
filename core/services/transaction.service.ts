@@ -114,6 +114,7 @@ export async function copyRecurringTransactions(
     user_id: user.id,
     type: t.type,
     category: t.category,
+    description: t.description ?? null,
     amount: t.amount,
     is_fixed: t.is_fixed,
     is_recurring: t.is_recurring,

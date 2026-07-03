@@ -9,8 +9,11 @@ export function calculateSummary(
   snapshots?: { amount: number; card_id?: string | null }[],
   installments: any[] = [],
   weeklyBudgetVariant: 'total' | 'incomeMinusFixed' = 'total',
+  /** Nº de semanas para dividir o orçamento (ciclo da fatura). Default: weeks.length. */
+  weeksForBudget?: number,
 ) {
   let totalIncome = 0;
+  let salaryIncome = 0;
   let fixedCosts = 0;
   let cardSpending = 0;
   let reimbursementIncome = 0;
@@ -18,6 +21,8 @@ export function calculateSummary(
 
   const provisionPlanned: Record<string, number> = {};
   const realizedSpend: Record<string, number> = {};
+  /** Gastos reais que JÁ estão dentro de uma fatura de cartão (snapshot). */
+  const realizedOnCard: Record<string, number> = {};
   const categoryLabel: Record<string, string> = {};
 
   const hasSnapshots = !!snapshots && snapshots.length > 0;
@@ -48,12 +53,18 @@ export function calculateSummary(
         reimbursementIncome += t.amount;
       } else {
         totalIncome += t.amount;
+        if (cat === 'salario') salaryIncome += t.amount;
       }
       continue;
     }
 
-    // Transação vinculada a cartão com snapshot — já está na fatura; ignora.
+    // Transação vinculada a cartão com snapshot — já está na fatura, não
+    // conta de novo no total; mas o gasto real ABATE o envelope da categoria
+    // (ex.: gasolina paga no cartão consome a provisão de gasolina).
     if (cardCoveredBySnapshot(t.card)) {
+      if (!t.isProvision && !t.isReserve) {
+        realizedOnCard[cat] = (realizedOnCard[cat] ?? 0) + t.amount;
+      }
       continue;
     }
 
@@ -97,6 +108,7 @@ export function calculateSummary(
   const categories = new Set([
     ...Object.keys(provisionPlanned),
     ...Object.keys(realizedSpend),
+    ...Object.keys(realizedOnCard),
   ]);
 
   const envelopes: {
@@ -108,12 +120,19 @@ export function calculateSummary(
 
   for (const cat of categories) {
     const planned = provisionPlanned[cat] ?? 0;
-    const realized = realizedSpend[cat] ?? 0;
+    const realizedOff = realizedSpend[cat] ?? 0;
+    const onCard = realizedOnCard[cat] ?? 0;
+    const realized = realizedOff + onCard;
 
-    envelopeSpending += Math.max(planned, realized);
+    // Compromisso da categoria = maior entre planejado e realizado.
+    // A parte já dentro da fatura (onCard) não é subtraída de novo aqui,
+    // pois já está contada em cardSpending (snapshot da fatura).
+    const committed = Math.max(planned, realized);
+    envelopeSpending += Math.max(0, committed - onCard);
+
     provisionMap[cat] = planned - realized;
     plannedTotal += planned;
-    usedTotal += realized;
+    usedTotal += realizedOff + (planned > 0 ? onCard : 0);
 
     // envelope de verdade = categoria que tem provisão planejada
     if (planned > 0) {
@@ -149,13 +168,17 @@ export function calculateSummary(
       ? totalIncome - fixedCosts
       : total;
 
+  const budgetWeeks = weeksForBudget ?? weeks.length;
+
   const weeklyBudget =
-    weeks.length > 0
-      ? toCurrency(weeklyBudgetBase / weeks.length)
+    budgetWeeks > 0
+      ? toCurrency(weeklyBudgetBase / budgetWeeks)
       : toCurrency(weeklyBudgetBase);
 
   return {
     totalIncome,
+    salaryIncome: toCurrency(salaryIncome),
+    otherIncome: toCurrency(totalIncome - salaryIncome),
     fixedCosts,
 
     cardSpending,

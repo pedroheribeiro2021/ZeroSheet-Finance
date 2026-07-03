@@ -7,6 +7,8 @@ export type Transaction = {
   type: 'income' | 'expense';
 
   category: string;
+  /** Nome do lançamento (ex.: 'Claude'); category agrupa (ex.: 'Assinaturas'). */
+  description?: string | null;
   amount: number;
 
   isFixed: boolean;
