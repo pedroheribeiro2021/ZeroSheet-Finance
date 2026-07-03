@@ -94,7 +94,7 @@ export async function createMonth(month: number, year: number) {
   */
 
   if (lastMonth) {
-    await copyRecurringTransactions(lastMonth.id, data.id);
+    await copyRecurringTransactions(lastMonth.id, data.id, { month, year });
   }
 
   return data;

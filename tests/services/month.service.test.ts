@@ -83,7 +83,10 @@ describe('createMonth', () => {
     const result = await createMonth(1, 2026);
 
     expect(result).toEqual(newMonth);
-    expect(copyRecurringTransactions).toHaveBeenCalledWith('m-last', 'm-new');
+    expect(copyRecurringTransactions).toHaveBeenCalledWith('m-last', 'm-new', {
+      month: 1,
+      year: 2026,
+    });
   });
 
   it('creates a new month without copying when there are no previous months', async () => {

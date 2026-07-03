@@ -101,6 +101,20 @@ describe('calculateSummary', () => {
     expect(result.total).toBe(4200 - 100 - 750 - 300);
   });
 
+  it('does not double count an installment whose card has a snapshot in the month', () => {
+    const snapshots = [{ amount: 1000, card_id: 'card-1' }];
+    const installments = [
+      { installment_amount: 150, card_id: 'card-1' }, // já dentro da fatura
+      { installment_amount: 200, card_id: 'card-2' }, // cartão sem fatura: conta
+      { installment_amount: 50 }, // sem cartão: conta
+    ];
+
+    const result = calculateSummary([], [], snapshots, installments);
+
+    expect(result.installmentSpending).toBe(250);
+    expect(result.total).toBe(-1250); // fatura 1000 + parcelas fora dela 250
+  });
+
   it('subtracts installment payments from the monthly total', () => {
     const installments = [{ installment_amount: 150 }];
 

@@ -18,6 +18,7 @@ export function calculateSummary(
 
   const provisionPlanned: Record<string, number> = {};
   const realizedSpend: Record<string, number> = {};
+  const categoryLabel: Record<string, string> = {};
 
   const hasSnapshots = !!snapshots && snapshots.length > 0;
 
@@ -40,6 +41,7 @@ export function calculateSummary(
 
   for (const t of transactions) {
     const cat = normalizeCategory(t.category);
+    if (!categoryLabel[cat]) categoryLabel[cat] = t.category.trim();
 
     if (t.type === 'income') {
       if (t.isReimbursement) {
@@ -97,6 +99,13 @@ export function calculateSummary(
     ...Object.keys(realizedSpend),
   ]);
 
+  const envelopes: {
+    category: string;
+    planned: number;
+    used: number;
+    remaining: number;
+  }[] = [];
+
   for (const cat of categories) {
     const planned = provisionPlanned[cat] ?? 0;
     const realized = realizedSpend[cat] ?? 0;
@@ -105,12 +114,26 @@ export function calculateSummary(
     provisionMap[cat] = planned - realized;
     plannedTotal += planned;
     usedTotal += realized;
+
+    // envelope de verdade = categoria que tem provisão planejada
+    if (planned > 0) {
+      envelopes.push({
+        category: categoryLabel[cat] ?? cat,
+        planned: toCurrency(planned),
+        used: toCurrency(realized),
+        remaining: toCurrency(planned - realized),
+      });
+    }
   }
 
-  const installmentSpending = installments.reduce(
-    (acc, i) => acc + i.installment_amount,
-    0,
-  );
+  envelopes.sort((a, b) => b.planned - a.planned);
+
+  // Parcela cujo cartão tem fatura fechada (snapshot) no mês NÃO soma de
+  // novo: ela já está dentro do valor da fatura. Evita dupla contagem.
+  const installmentSpending = installments.reduce((acc, i) => {
+    if (i.card_id && snapshotCardIds.has(i.card_id)) return acc;
+    return acc + Number(i.installment_amount);
+  }, 0);
 
   const total = toCurrency(
     totalIncome -
@@ -144,9 +167,12 @@ export function calculateSummary(
     provisionDiff: plannedTotal - usedTotal,
     envelopeSpending,
 
+    installmentSpending: toCurrency(installmentSpending),
+
     total,
     weeklyBudget,
 
     provisionMap,
+    envelopes,
   };
 }

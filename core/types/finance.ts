@@ -14,6 +14,9 @@ export type Transaction = {
   isRecurring: boolean;
   dueDay?: number | null;
 
+  /** Última competência (YYYY-MM-01) da recorrência; null = para sempre. */
+  recurringUntil?: string | null;
+
   /** Receita que aparece no resumo mas não soma no total (ex.: reembolso). */
   isReimbursement?: boolean;
 

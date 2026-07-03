@@ -14,6 +14,9 @@ export type DBTransaction = {
   is_recurring: boolean;
   due_day: number | null;
 
+  /** Última competência (YYYY-MM-01) da recorrência; null = para sempre. */
+  recurring_until?: string | null;
+
   /**
    * Ainda não existe no schema do Supabase (ver PARIDADE-PLANILHA.md item 2)
    * — opcional até a migration ser aplicada; mapTransaction trata ausência

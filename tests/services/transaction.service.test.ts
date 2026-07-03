@@ -89,7 +89,10 @@ describe('copyRecurringTransactions', () => {
         is_fixed: true,
         is_recurring: true,
         is_provision: false,
+        is_reimbursement: false,
+        is_reserve: false,
         due_day: 10,
+        recurring_until: null,
         card: null,
       },
     ]);

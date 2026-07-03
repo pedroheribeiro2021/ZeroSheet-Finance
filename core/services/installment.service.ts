@@ -3,9 +3,15 @@ import { supabase } from '@/lib/supabase';
 import { filterActiveInstallments } from '@/core/engine/installments';
 import { DBInstallment, DBMonth } from '@/core/types/database';
 
+export type ActiveInstallment = DBInstallment & {
+  currentInstallment: number;
+  /** Mês da 1ª parcela (para exibir "Início: jul/2026"). */
+  startMonth: DBMonth | null;
+};
+
 export async function getInstallments(
   monthId: string,
-): Promise<(DBInstallment & { currentInstallment: number })[]> {
+): Promise<ActiveInstallment[]> {
   const user = await getCurrentUser();
 
   if (!user) {
@@ -37,11 +43,20 @@ export async function getInstallments(
 
   if (error) throw error;
 
-  return filterActiveInstallments(
+  const active = filterActiveInstallments(
     installments as DBInstallment[],
     months as DBMonth[],
     monthId,
   );
+
+  const monthById = new Map((months as DBMonth[]).map((m) => [m.id, m]));
+
+  return active.map((i) => ({
+    ...i,
+    startMonth: i.start_month_id
+      ? (monthById.get(i.start_month_id) ?? null)
+      : null,
+  }));
 }
 
 export async function createInstallment(data: {
