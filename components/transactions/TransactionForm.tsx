@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createTransaction } from '@/core/services/transaction.service';
+import { getCards } from '@/core/services/card.service';
+import { DBCard } from '@/core/types/database';
 import { parseCurrencyInput, sanitizeAmountInput } from '@/core/utils/number';
 import {
   EXPENSE_CATEGORIES,
@@ -35,7 +37,10 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
   const { showToast } = useToast();
 
   const [kind, setKind] = useState<Kind>('expense');
+  const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
+  const [cards, setCards] = useState<DBCard[]>([]);
+  const [cardId, setCardId] = useState('');
   const [isSplit, setIsSplit] = useState(false);
 
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -54,6 +59,12 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
   const [dueDay, setDueDay] = useState('');
 
   const isCustom = selectedCategory === '__custom__';
+
+  useEffect(() => {
+    getCards()
+      .then(setCards)
+      .catch(() => setCards([]));
+  }, []);
 
   const categories =
     kind === 'income'
@@ -133,10 +144,13 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
         is_reimbursement: kind === 'income' && isReimbursement,
         recurring_until: computeRecurringUntil(),
         due_day: isRecurring && dueDay ? Number(dueDay) : null,
-        card: null,
+        description: description || null,
+        card: kind === 'expense' && cardId ? cardId : null,
       });
 
       // reset
+      setDescription('');
+      setCardId('');
       setAmount('');
       setSelectedCategory(kind === 'reserve' ? RESERVE_CATEGORIES[0] : '');
       setCustomCategory('');
@@ -190,6 +204,14 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
 
       <input
         type="text"
+        placeholder="Descrição (opcional — ex: Claude, Netflix, Conta de luz)"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        className="bg-zinc-800 p-2 rounded text-white"
+      />
+
+      <input
+        type="text"
         inputMode="decimal"
         placeholder={
           isSplit ? 'Valor (+/-, ex: -63,56 ou +51,00)' : 'Valor (ex: 1000,50)'
@@ -228,6 +250,24 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
 
         <option value="__custom__">Outra...</option>
       </select>
+
+      {kind === 'expense' && cards.length > 0 && (
+        <label className="grid gap-1 text-sm text-zinc-400">
+          Pago no cartão de crédito? (compõe a fatura — não conta duas vezes)
+          <select
+            value={cardId}
+            onChange={(e) => setCardId(e.target.value)}
+            className="bg-zinc-800 p-2 rounded text-white"
+          >
+            <option value="">Não (boleto/débito/pix)</option>
+            {cards.map((c) => (
+              <option key={c.id} value={c.id}>
+                💳 {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       {isCustom && (
         <input

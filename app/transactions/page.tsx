@@ -7,6 +7,7 @@ import TransactionList from '@/components/transactions/TransactionList';
 import { mapTransaction } from '@/core/models/mappers';
 import { createMonth, getMonths } from '@/core/services/month.service';
 import { getTransactions } from '@/core/services/transaction.service';
+import { getCards } from '@/core/services/card.service';
 
 export default function TransactionsPage() {
   const [monthId, setMonthId] = useState<string | null>(null);
@@ -15,6 +16,7 @@ export default function TransactionsPage() {
     year: number;
   } | null>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
+  const [cardNames, setCardNames] = useState<Record<string, string>>({});
 
   const load = async () => {
     try {
@@ -36,6 +38,11 @@ export default function TransactionsPage() {
 
       const transactionsDB = await getTransactions(latestMonth.id);
       setTransactions(transactionsDB.map(mapTransaction));
+
+      const cardsDB = await getCards();
+      setCardNames(
+        Object.fromEntries(cardsDB.map((c: any) => [c.id, c.name])),
+      );
     } catch (err) {
       console.error(err);
     }
@@ -54,7 +61,11 @@ export default function TransactionsPage() {
       <h1 className="text-2xl font-bold text-white">Transações</h1>
 
       <TransactionForm monthId={monthId} month={activeMonth} onCreated={load} />
-      <TransactionList transactions={transactions} onUpdated={load} />
+      <TransactionList
+        transactions={transactions}
+        cardNames={cardNames}
+        onUpdated={load}
+      />
     </div>
   );
 }
