@@ -8,11 +8,10 @@ import Modal from '@/components/ui/Modal';
 
 import { getMonths, createMonth } from '@/core/services/month.service';
 import { getTransactions } from '@/core/services/transaction.service';
-import { createWeeks, getWeeks } from '@/core/services/week.service';
 
-import { mapTransaction, mapWeek } from '@/core/models/mappers';
+import { mapTransaction } from '@/core/models/mappers';
 import { calculateSummary } from '@/core/engine/calculations';
-import { calculateWeekly, getWeeksInCurrentCycle, getWeeksInMonth } from '@/core/engine/weekly';
+import { getWeeksInCurrentCycle, getWeeksInMonth } from '@/core/engine/weekly';
 import { normalizeCategory } from '@/core/utils/normalize';
 import { getCardSnapshots } from '@/core/services/cardSnapshot.service';
 import { groupTransactionsByCategory } from '@/core/utils/groupTransactions';
@@ -41,6 +40,39 @@ function monthKey(m: { month: number; year: number }): string {
   return `${m.year}-${String(m.month).padStart(2, '0')}`;
 }
 
+function installmentMonthLabel(
+  m: { month: number; year: number } | null,
+): string | null {
+  if (!m) return null;
+  return new Intl.DateTimeFormat('pt-BR', {
+    month: 'short',
+    year: 'numeric',
+  }).format(new Date(m.year, m.month - 1, 1));
+}
+
+function installmentEndLabel(
+  start: { month: number; year: number } | null,
+  totalInstallments: number,
+): string | null {
+  if (!start) return null;
+  const d = new Date(start.year, start.month - 1 + totalInstallments - 1, 1);
+  return new Intl.DateTimeFormat('pt-BR', {
+    month: 'short',
+    year: 'numeric',
+  }).format(d);
+}
+
+const MODAL_TITLES: Record<string, string> = {
+  income: 'Entradas',
+  cards: 'Cartões',
+  installments: 'Parcelamentos',
+  fixed: 'Custos Fixos',
+  subscriptions: 'Assinaturas',
+  reserve: 'Reserva / Investimentos',
+  balance: 'Saldo do Mês',
+  'weekly-budget': 'Orçamento Semanal',
+};
+
 export default function Dashboard() {
   const router = useRouter();
   const pathname = usePathname();
@@ -50,7 +82,6 @@ export default function Dashboard() {
   const [summary, setSummary] = useState<ReturnType<
     typeof calculateSummary
   > | null>(null);
-  const [weeks, setWeeks] = useState<Week[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
   const [filteredTransactions, setFilteredTransactions] = useState<
@@ -61,6 +92,7 @@ export default function Dashboard() {
   const [snapshots, setSnapshots] = useState<DBCardSnapshot[]>([]);
   const [readings, setReadings] = useState<DBCardReading[]>([]);
   const [weeklySpend, setWeeklySpend] = useState<{ weekIndex: number; spent: number }[]>([]);
+  const [cycleWeeks, setCycleWeeks] = useState(0);
   const [readingAmount, setReadingAmount] = useState('');
   const [currentMonthId, setCurrentMonthId] = useState<string | null>(null);
   const [primaryCard, setPrimaryCardState] = useState<DBCard | null>(null);
@@ -74,22 +106,6 @@ export default function Dashboard() {
         filtered = transactions.filter((t) => t.type === 'income');
         break;
 
-      case 'salary':
-        filtered = transactions.filter(
-          (t) =>
-            t.type === 'income' &&
-            normalizeCategory(t.category) === 'salario' &&
-            !t.isReimbursement,
-        );
-        break;
-
-      case 'other-income':
-        filtered = transactions.filter(
-          (t) =>
-            t.type === 'income' && normalizeCategory(t.category) !== 'salario',
-        );
-        break;
-
       case 'subscriptions':
         filtered = transactions.filter(
           (t) =>
@@ -100,20 +116,6 @@ export default function Dashboard() {
 
       case 'fixed':
         filtered = transactions.filter((t) => t.isFixed);
-        break;
-
-      case 'provision':
-        filtered = transactions.filter((t) => t.isProvision);
-        break;
-
-      case 'real':
-        filtered = transactions.filter(
-          (t) =>
-            t.type === 'expense' &&
-            !t.isFixed &&
-            !t.isProvision &&
-            !t.isReserve,
-        );
         break;
 
       case 'reserve':
@@ -157,10 +159,7 @@ export default function Dashboard() {
 
       setCards(cardsDB);
       const transactionsDB = await getTransactions(month.id);
-      const weeksDB = await getWeeks(month.id);
-
       const transactionsMapped = transactionsDB.map(mapTransaction);
-      const mappedWeeks = weeksDB.map(mapWeek);
 
       const installmentsDB = await getInstallments(month.id);
       setInstallments(installmentsDB);
@@ -173,50 +172,33 @@ export default function Dashboard() {
 
       // Semanas do ciclo da fatura do cartão principal: é por esse número
       // que o saldo do mês é dividido (ex.: fecha dia 4 → ciclo de ~5 semanas).
-      const weeksInMonth =
+      const weeksInCycle =
         primary?.closing_day != null
           ? getWeeksInCurrentCycle(primary.closing_day)
           : getWeeksInMonth(month.month, month.year);
+      setCycleWeeks(weeksInCycle);
 
       const result = calculateSummary(
         transactionsMapped,
-        mappedWeeks,
+        [],
         snapshotsData,
         installmentsDB,
         'total',
-        weeksInMonth,
+        weeksInCycle,
       );
 
-      // leituras do cartão principal no mês corrente
+      // leituras do cartão principal no mês corrente — única fonte do
+      // acompanhamento semanal exibido (nunca soma faturas de dois cartões).
       if (primary) {
         const readingsData = await getReadings(month.id, primary.id);
         setReadings(readingsData);
         setWeeklySpend(weeklySpendFromReadings(readingsData));
-      }
-
-      let finalWeeks = calculateWeekly(
-        snapshotsData,
-        transactionsMapped,
-        result.total,
-        month.id,
-        weeksInMonth,
-      );
-
-      if (!finalWeeks.length) {
-        finalWeeks = Array.from({ length: weeksInMonth }).map((_, i) => ({
-          id: crypto.randomUUID(),
-          monthId: month.id,
-          index: i + 1,
-          budget: result.total / weeksInMonth,
-          spent: 0,
-          remaining: result.total / weeksInMonth,
-        }));
-
-        await createWeeks(month.id, finalWeeks);
+      } else {
+        setReadings([]);
+        setWeeklySpend([]);
       }
 
       setSummary(result);
-      setWeeks(finalWeeks);
     } catch (err) {
       console.error(err);
     }
@@ -275,9 +257,10 @@ export default function Dashboard() {
     if (searchParams.get('month') !== key) {
       router.replace(`${pathname}?month=${key}`);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeMonth, pathname, router, searchParams]);
 
-  // recarrega tudo (transações, snapshots, leituras, semanas, parcelas, summary) ao trocar de mês
+  // recarrega tudo (transações, snapshots, leituras, parcelas, summary) ao trocar de mês
   useEffect(() => {
     if (!activeMonth) return;
 
@@ -308,6 +291,28 @@ export default function Dashboard() {
       currency: 'BRL',
     }).format(value);
   };
+
+  const totalInstallments = installments.reduce(
+    (acc, i) => acc + Number(i.installment_amount),
+    0,
+  );
+
+  // Semanas do ciclo, na mesma forma usada pelo gráfico e pela lista —
+  // única fonte: leituras da fatura do cartão principal.
+  const chartWeeks: Week[] = Array.from({ length: cycleWeeks }, (_, i) => {
+    const index = i + 1;
+    const entry = weeklySpend.find((w) => w.weekIndex === index);
+    const spent = entry?.spent ?? 0;
+
+    return {
+      id: `week-${index}`,
+      monthId: currentMonthId ?? '',
+      index,
+      budget: summary.weeklyBudget,
+      spent,
+      remaining: summary.weeklyBudget - spent,
+    };
+  });
 
   return (
     <div className="p-6 grid gap-4">
@@ -357,18 +362,11 @@ export default function Dashboard() {
 
       <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
         <Card
-          title="Salário"
-          value={formatCurrency(summary.salaryIncome)}
-          subtitle="Fonte de renda principal"
-          onClick={() => handleCardClick('salary')}
+          title="Entradas"
+          value={formatCurrency(summary.totalIncome)}
+          subtitle="Salário, extras e reembolsos — clique para ver cada lançamento"
+          onClick={() => handleCardClick('income')}
           className="border border-green-800"
-        />
-
-        <Card
-          title="Outras Entradas"
-          value={formatCurrency(summary.otherIncome)}
-          subtitle={`Total de entradas: ${formatCurrency(summary.totalIncome)}`}
-          onClick={() => handleCardClick('other-income')}
         />
 
         <Card
@@ -377,43 +375,18 @@ export default function Dashboard() {
           onClick={() => handleCardClick('fixed')}
         />
 
-        {cards.map((card) => {
-          const snapshot = snapshots.find((s) => s.card_id === card.id);
-          const fatura = Number(snapshot?.amount ?? 0);
-
-          const cardInstallments = installments
-            .filter((i) => i.card_id === card.id)
-            .reduce((acc, i) => acc + Number(i.installment_amount), 0);
-
-          // O comprometido do mês no cartão: a fatura (que já inclui as
-          // parcelas lançadas nela) ou, sem fatura ainda, as parcelas.
-          const comprometido = Math.max(fatura, cardInstallments);
-          const limite = Number(card.limit_amount ?? 0);
-          const disponivel = limite > 0 ? limite - comprometido : null;
-
-          return (
-            <Card
-              key={card.id}
-              title={`💳 ${card.name}`}
-              value={formatCurrency(fatura)}
-              subtitle={`Parcelas no mês: ${formatCurrency(cardInstallments)}${
-                disponivel != null
-                  ? ` • Disponível p/ gastar: ${formatCurrency(disponivel)}`
-                  : ''
-              }`}
-            />
-          );
-        })}
-
         <Card
-          title="Total Cartões"
+          title="Cartões"
           value={formatCurrency(summary.cardSpending)}
+          subtitle="Soma das faturas do mês"
+          onClick={() => handleCardClick('cards')}
         />
 
         <Card
-          title="Parcelamentos (fora da fatura)"
-          value={formatCurrency(summary.installmentSpending)}
-          subtitle="Parcelas de cartões sem fatura lançada no mês — as demais já estão dentro da fatura"
+          title="Parcelamentos"
+          value={formatCurrency(totalInstallments)}
+          subtitle="Parcelas ativas no mês"
+          onClick={() => handleCardClick('installments')}
         />
 
         <Card
@@ -440,25 +413,10 @@ export default function Dashboard() {
         />
 
         <Card
-          title="Planejado (Provisões)"
-          value={formatCurrency(summary.provisionPlanned)}
-          onClick={() => handleCardClick('provision')}
-        />
-
-        <Card
-          title="Gasto Real (Provisões)"
-          value={formatCurrency(summary.provisionUsed)}
-          onClick={() => handleCardClick('real')}
-        />
-
-        {/* Card "Diferença" (provisão planejada − gasto real) comentado a
-            pedido do usuário em 2026-07-03 — a informação já aparece por
-            categoria na seção "Provisões do mês (envelopes)". */}
-
-        <Card
           title="Saldo do Mês"
           value={formatCurrency(summary.total)}
           subtitle="O que ainda dá pra gastar: entradas − fixos − faturas − parcelas − provisões − reserva"
+          onClick={() => handleCardClick('balance')}
           className={
             summary.total < 0
               ? 'border border-red-700'
@@ -471,9 +429,10 @@ export default function Dashboard() {
           value={formatCurrency(summary.weeklyBudget)}
           subtitle={
             primaryCard?.closing_day != null
-              ? `Saldo ÷ ${weeks.length} semanas do ciclo da fatura (${primaryCard.name} fecha dia ${primaryCard.closing_day})`
+              ? `Saldo ÷ ${cycleWeeks} semanas do ciclo da fatura (${primaryCard.name} fecha dia ${primaryCard.closing_day})`
               : 'Saldo ÷ semanas do mês (defina um cartão principal ★ para usar o ciclo da fatura)'
           }
+          onClick={() => handleCardClick('weekly-budget')}
         />
       </div>
 
@@ -529,30 +488,100 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="mt-6">
-        <h2 className="text-xl font-bold mb-2 text-white">Controle Semanal</h2>
+      <div className="mt-6 bg-zinc-900 p-5 rounded-xl">
+        <h2 className="text-base font-semibold text-white mb-4">
+          Acompanhamento Semanal{primaryCard ? ` — ${primaryCard.name}` : ''}
+        </h2>
 
-        <div className="grid grid-cols-2 gap-4">
-          {weeks.map((week) => (
-            <div key={week.id} className="bg-zinc-900 p-4 rounded">
-              <p className="font-bold text-white">Semana {week.index}</p>
+        {!primaryCard && (
+          <p className="text-amber-400 text-sm">
+            Marque um cartão como principal (★ na tela de Cartões) para
+            ativar o acompanhamento semanal — ele é calculado só a partir das
+            leituras da fatura do cartão principal.
+          </p>
+        )}
 
-              <p className="text-zinc-400">
-                Orçamento: {formatCurrency(week.budget)}
-              </p>
+        {primaryCard && (
+          <>
+            <div className="grid gap-2 mb-4">
+              {chartWeeks.map((week) => {
+                const hasReading = weeklySpend.some(
+                  (w) => w.weekIndex === week.index,
+                );
+                const diff = summary.weeklyBudget - week.spent;
 
-              <p className="text-white">Gasto: {formatCurrency(week.spent)}</p>
-
-              <p
-                className={
-                  week.remaining < 0 ? 'text-red-500' : 'text-green-500'
-                }
-              >
-                Restante: {formatCurrency(week.remaining)}
-              </p>
+                return (
+                  <div
+                    key={week.index}
+                    className="bg-zinc-800 rounded p-3 flex flex-wrap justify-between items-center gap-2"
+                  >
+                    <span className="text-white text-sm font-bold">
+                      Semana {week.index}
+                    </span>
+                    <span className="text-zinc-400 text-sm">
+                      Orçamento: {formatCurrency(summary.weeklyBudget)}
+                    </span>
+                    {hasReading ? (
+                      <>
+                        <span className="text-white font-bold text-sm">
+                          Gasto: {formatCurrency(week.spent)}
+                        </span>
+                        <span
+                          className={`font-bold text-sm ${diff >= 0 ? 'text-green-400' : 'text-red-400'}`}
+                        >
+                          {diff >= 0 ? '+' : ''}
+                          {formatCurrency(diff)}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-zinc-500 text-sm italic">
+                        sem leitura
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          ))}
-        </div>
+
+            <div className="flex gap-2 items-center mb-4">
+              <input
+                type="text"
+                placeholder="Valor atual da fatura (ex.: 1200,50)"
+                value={readingAmount}
+                onChange={(e) =>
+                  setReadingAmount(sanitizeAmountInput(e.target.value))
+                }
+                className="bg-zinc-800 text-white rounded px-3 py-2 text-sm flex-1 outline-none"
+              />
+              <button
+                onClick={handleAddReading}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm"
+              >
+                Lançar leitura
+              </button>
+            </div>
+
+            {readings.length > 0 && (
+              <div className="grid gap-1">
+                <p className="text-zinc-500 text-xs mb-1">Histórico de leituras</p>
+                {readings.map((r) => (
+                  <div key={r.id} className="bg-zinc-800 rounded px-3 py-2 flex justify-between items-center">
+                    <span className="text-zinc-400 text-xs">
+                      {new Date(r.read_at).toLocaleDateString('pt-BR')}
+                    </span>
+                    <span className="text-white text-sm font-bold">{formatCurrency(Number(r.amount))}</span>
+                    <button
+                      onClick={() => handleDeleteReading(r.id)}
+                      className="text-red-500 hover:text-red-700 text-xs"
+                    >
+                      Remover
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
@@ -560,7 +589,7 @@ export default function Dashboard() {
           <h2 className="text-base font-semibold text-white mb-4">
             Orçamento × Gasto por Semana
           </h2>
-          <WeeklyBarChart weeks={weeks} formatCurrency={formatCurrency} />
+          <WeeklyBarChart weeks={chartWeeks} formatCurrency={formatCurrency} />
         </div>
 
         <div className="bg-zinc-900 p-5 rounded-xl">
@@ -574,117 +603,186 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {primaryCard && (
-        <div className="mt-6 bg-zinc-900 p-5 rounded-xl">
-          <h2 className="text-base font-semibold text-white mb-4">
-            Acompanhamento semanal — {primaryCard.name}
-          </h2>
-
-          <div className="grid gap-2 mb-4">
-            {weeklySpend.length === 0 && (
-              <p className="text-zinc-400 text-sm">Nenhuma leitura lançada ainda.</p>
+      <Modal
+        open={!!selectedCard}
+        onClose={() => setSelectedCard(null)}
+        title={selectedCard ? (MODAL_TITLES[selectedCard] ?? 'Detalhamento') : 'Detalhamento'}
+      >
+        {selectedCard === 'income' && (
+          <div className="grid gap-2">
+            {filteredTransactions.length === 0 && (
+              <p className="text-zinc-400">Nenhum registro</p>
             )}
-            {weeklySpend.map(({ weekIndex, spent }) => {
-              const diff = summary.weeklyBudget - spent;
+            {filteredTransactions.map((t) => (
+              <div
+                key={t.id}
+                className="bg-zinc-800 rounded p-3 flex justify-between items-center gap-3"
+              >
+                <div className="min-w-0">
+                  <p className="text-white font-bold truncate">
+                    {t.description || t.category}
+                  </p>
+                  <p className="text-zinc-400 text-sm">{t.category}</p>
+                </div>
+                <p className="text-green-400 font-bold shrink-0">
+                  {formatCurrency(t.amount)}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {selectedCard === 'cards' && (
+          <div className="grid gap-2">
+            {cards.length === 0 && (
+              <p className="text-zinc-400">Nenhum cartão cadastrado</p>
+            )}
+            {cards.map((card) => {
+              const snapshot = snapshots.find((s) => s.card_id === card.id);
+              const fatura = Number(snapshot?.amount ?? 0);
+
+              const parcelas = installments
+                .filter((i) => i.card_id === card.id)
+                .reduce((acc, i) => acc + Number(i.installment_amount), 0);
+
+              const limite = Number(card.limit_amount ?? 0);
+              const disponivel = limite > 0 ? limite - fatura : null;
+
               return (
-                <div key={weekIndex} className="bg-zinc-800 rounded p-3 flex justify-between items-center">
-                  <span className="text-white text-sm">Semana {weekIndex}</span>
-                  <span className="text-zinc-400 text-sm">
-                    Orçamento: {formatCurrency(summary.weeklyBudget)}
-                  </span>
-                  <span className="text-white font-bold text-sm">
-                    Gasto: {formatCurrency(spent)}
-                  </span>
-                  <span className={`font-bold text-sm ${diff >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {diff >= 0 ? '+' : ''}{formatCurrency(diff)}
-                  </span>
+                <div key={card.id} className="bg-zinc-800 rounded p-3 grid gap-1">
+                  <p className="text-white font-bold">💳 {card.name}</p>
+                  <p className="text-zinc-400 text-sm">
+                    Fatura atual: {formatCurrency(fatura)}
+                  </p>
+                  <p className="text-zinc-400 text-sm">
+                    Parcelas no mês: {formatCurrency(parcelas)}
+                  </p>
+                  {limite > 0 && (
+                    <p className="text-zinc-400 text-sm">
+                      Limite: {formatCurrency(limite)} • Disponível:{' '}
+                      {formatCurrency(disponivel ?? 0)}
+                    </p>
+                  )}
                 </div>
               );
             })}
           </div>
-
-          <div className="flex gap-2 items-center mb-4">
-            <input
-              type="text"
-              placeholder="Valor atual da fatura (ex.: 1200,50)"
-              value={readingAmount}
-              onChange={(e) =>
-                setReadingAmount(sanitizeAmountInput(e.target.value))
-              }
-              className="bg-zinc-800 text-white rounded px-3 py-2 text-sm flex-1 outline-none"
-            />
-            <button
-              onClick={handleAddReading}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm"
-            >
-              Lançar leitura
-            </button>
-          </div>
-
-          {readings.length > 0 && (
-            <div className="grid gap-1">
-              <p className="text-zinc-500 text-xs mb-1">Histórico de leituras</p>
-              {readings.map((r) => (
-                <div key={r.id} className="bg-zinc-800 rounded px-3 py-2 flex justify-between items-center">
-                  <span className="text-zinc-400 text-xs">
-                    {new Date(r.read_at).toLocaleDateString('pt-BR')}
-                  </span>
-                  <span className="text-white text-sm font-bold">{formatCurrency(Number(r.amount))}</span>
-                  <button
-                    onClick={() => handleDeleteReading(r.id)}
-                    className="text-red-500 hover:text-red-700 text-xs"
-                  >
-                    Remover
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      <Modal
-        open={!!selectedCard}
-        onClose={() => setSelectedCard(null)}
-        title="Detalhamento"
-      >
-        {filteredTransactions.length === 0 && (
-          <p className="text-zinc-400">Nenhum registro</p>
         )}
 
-        <div className="grid gap-2">
-          {groupedTransactions.map((item) => {
-            const total = filteredTransactions.reduce(
-              (acc, t) => acc + Number(t.amount),
-              0,
-            );
+        {selectedCard === 'installments' && (
+          <div className="grid gap-2">
+            {installments.length === 0 && (
+              <p className="text-zinc-400">Nenhum parcelamento ativo neste mês</p>
+            )}
+            {installments.map((i) => {
+              const start = installmentMonthLabel(i.startMonth);
+              const end = installmentEndLabel(i.startMonth, i.total_installments);
 
-            const percent =
-              total > 0 ? ((item.total / total) * 100).toFixed(1) : '0';
+              return (
+                <div key={i.id} className="bg-zinc-800 rounded p-3 grid gap-1">
+                  <p className="text-white font-bold">{i.description}</p>
+                  <p className="text-orange-400 text-sm font-bold">
+                    Parcela {i.currentInstallment}/{i.total_installments} —{' '}
+                    {formatCurrency(Number(i.installment_amount))}/mês
+                  </p>
+                  <p className="text-zinc-400 text-sm">
+                    {i.cards?.name ? `💳 ${i.cards.name}` : 'Sem cartão'}
+                    {start ? ` • Início: ${start}` : ''}
+                    {end ? ` • Última parcela: ${end}` : ''}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
-            return (
-              <div key={item.category} className="bg-zinc-800 rounded p-3">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <p className="text-white font-bold">{item.category}</p>
+        {selectedCard === 'balance' && (
+          <div className="grid gap-2">
+            {[
+              { label: 'Entradas', value: summary.totalIncome },
+              { label: 'Custos Fixos', value: -summary.fixedCosts },
+              { label: 'Cartões (faturas)', value: -summary.cardSpending },
+              { label: 'Parcelamentos', value: -summary.installmentSpending },
+              { label: 'Provisões (envelopes)', value: -summary.envelopeSpending },
+              { label: 'Reserva / Investimentos', value: -summary.reserveSpending },
+            ].map((row) => (
+              <div key={row.label} className="bg-zinc-800 rounded p-3 flex justify-between">
+                <span className="text-white">{row.label}</span>
+                <span className={row.value < 0 ? 'text-red-400' : 'text-green-400'}>
+                  {formatCurrency(row.value)}
+                </span>
+              </div>
+            ))}
+            <div className="bg-zinc-800 rounded p-3 flex justify-between border border-zinc-700">
+              <span className="text-white font-bold">Saldo do Mês</span>
+              <span
+                className={`font-bold ${summary.total < 0 ? 'text-red-400' : 'text-green-400'}`}
+              >
+                {formatCurrency(summary.total)}
+              </span>
+            </div>
+          </div>
+        )}
 
-                    <p className="text-zinc-400 text-sm">
-                      {item.count} lançamento(s)
-                    </p>
-                  </div>
+        {selectedCard === 'weekly-budget' && (
+          <div className="grid gap-2">
+            <div className="bg-zinc-800 rounded p-3 flex justify-between">
+              <span className="text-white">Saldo do mês</span>
+              <span className="text-white font-bold">{formatCurrency(summary.total)}</span>
+            </div>
+            <div className="bg-zinc-800 rounded p-3 flex justify-between">
+              <span className="text-white">÷ semanas do ciclo</span>
+              <span className="text-white font-bold">{cycleWeeks}</span>
+            </div>
+            <div className="bg-zinc-800 rounded p-3 flex justify-between border border-zinc-700">
+              <span className="text-white font-bold">Orçamento semanal</span>
+              <span className="text-white font-bold">
+                {formatCurrency(summary.weeklyBudget)}
+              </span>
+            </div>
+          </div>
+        )}
 
-                  <div className="text-right">
-                    <p className="text-white font-bold">
-                      {formatCurrency(item.total)}
-                    </p>
+        {(selectedCard === 'fixed' ||
+          selectedCard === 'subscriptions' ||
+          selectedCard === 'reserve') && (
+          <div className="grid gap-2">
+            {filteredTransactions.length === 0 && (
+              <p className="text-zinc-400">Nenhum registro</p>
+            )}
+            {groupedTransactions.map((item) => {
+              const total = filteredTransactions.reduce(
+                (acc, t) => acc + Number(t.amount),
+                0,
+              );
 
-                    <p className="text-zinc-400 text-sm">{percent}%</p>
+              const percent =
+                total > 0 ? ((item.total / total) * 100).toFixed(1) : '0';
+
+              return (
+                <div key={item.category} className="bg-zinc-800 rounded p-3">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="text-white font-bold">{item.category}</p>
+
+                      <p className="text-zinc-400 text-sm">
+                        {item.count} lançamento(s)
+                      </p>
+                    </div>
+
+                    <div className="text-right">
+                      <p className="text-white font-bold">
+                        {formatCurrency(item.total)}
+                      </p>
+
+                      <p className="text-zinc-400 text-sm">{percent}%</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </Modal>
     </div>
   );
