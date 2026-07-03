@@ -1,22 +1,81 @@
 # TODO — Zerosheet
 
-Atualizado em 2026-06-25. Checkbox marcado = já implementado (commit/PR
+Atualizado em 2026-07-03. Checkbox marcado = já implementado (commit/PR
 indicado entre parênteses). Itens novos vão sempre no topo da seção
 "Pendentes" da categoria correta.
 
 ## Pendentes
 
-### Banco de dados — migrations a aplicar (ver CONTEXT.md §7)
-- [ ] Aplicar `20260629_01_cards_is_primary.sql` — ativa o botão ★ de cartão
-      principal no CardList (código já em produção; só falta a coluna).
-- [ ] Aplicar `20260629_02_card_readings.sql` — ativa a seção "Acompanhamento
-      semanal" do dashboard (cardReading.service.ts já existe; falta a tabela).
-- [ ] Aplicar `20260629_03_transactions_flags.sql` — ativa separação de
-      reembolso e reserva na engine (tipos e lógica já prontos; faltam as colunas).
-- [ ] Rodar UPDATEs de backfill de junho pós-migration (comentados no arquivo
-      `03`): marcar `is_reimbursement` e `is_reserve` nos dados existentes.
-- [ ] Definir/marcar o cartão principal (Nubank ou C6) via interface após a
-      migration `01` — necessário para o `getWeeksInCycle` e o acompanhamento.
+### Produto
+- [ ] Avaliar integração/import de extrato (OFX/CSV) para reduzir lançamento
+      manual de gastos de mercado/gasolina — hoje o fluxo é: provisionar e ir
+      lançando os gastos reais na mesma categoria (o envelope abate sozinho).
+- [ ] Edição de parcelamento (hoje só criar/excluir).
+- [ ] Ordenação por arrastar (drag-and-drop) na lista de transações — por ora
+      há seletor de ordenação (entradas primeiro/recentes/valor/categoria).
+
+## Feitos em 2026-07-03 (auditoria + ajustes de cálculo e UX)
+
+### Banco de dados
+- [x] Migrations `20260629_01/02/03` verificadas: **já estavam aplicadas em
+      produção** (is_primary, card_readings, is_reimbursement/is_reserve).
+- [x] Backfill de julho/2026 aplicado: Reserva marcada `is_reserve`, reembolso
+      Samsung marcado `is_reimbursement`, categoria "Gasolina (Provisão)"
+      renomeada para "Gasolina" (religando o envelope ao gasto real).
+- [x] Nova migration `20260703_01_transactions_recurring_until.sql` aplicada em
+      produção: coluna `recurring_until` (duração da recorrência).
+
+### Cálculo (engine)
+- [x] **Dupla contagem parcela × fatura corrigida**: parcela cujo cartão tem
+      snapshot no mês não soma de novo no total (já está dentro da fatura).
+      `installmentSpending` agora exposto no summary + teste novo.
+- [x] Envelopes detalhados no summary (`envelopes[]`: planejado, usado,
+      restante por categoria) — gasto real na mesma categoria abate a provisão
+      automaticamente (não precisa editar a provisão na mão).
+- [x] Recorrência com duração: `recurring_until` respeitado ao copiar
+      recorrentes para o novo mês (`core/engine/recurrence.ts` + testes).
+- [x] Cópia de recorrentes agora leva `is_reserve`, `is_reimbursement` e
+      `recurring_until` (antes as flags se perdiam na virada do mês).
+- [x] `parseCurrencyInput` aceita separador de milhar ("1.234,56").
+
+### Transações (UX)
+- [x] Tipos de lançamento explícitos: (+) Entrada / (−) Despesa / (↗) Reserva
+      — reserva não é despesa nem receita, mas abate das entradas.
+- [x] Recorrência disponível também para entradas e reservas, com duração:
+      sempre / por N meses / até mês-ano.
+- [x] Lista com separação visual: borda e valor coloridos (verde entrada,
+      vermelho despesa, azul reserva), sinais + / −, badges com texto
+      ("Provisão", "Reserva", "Reembolso", "Fixo", 🔁 com fim da recorrência).
+- [x] Ordenação: entradas primeiro por padrão + seletor (recentes, maior
+      valor, categoria).
+- [x] Campo de valor aceita somente números (sanitização em todos os forms).
+- [x] Categorias novas: Mercado, Gasolina, Assinaturas (Amazon, Claude etc.),
+      Academia, Saúde etc. (despesa); Salário, Reembolso etc. (entrada);
+      Reserva financeira / Investimentos (reserva). Modal de edição ganhou os
+      mesmos campos do form.
+
+### Parcelamentos
+- [x] Lista mostra parcela vigente ("Parcela vigente: 2/5"), mês de início e
+      mês da última parcela, e o cartão.
+- [x] Form com rótulos claros, total da compra calculado e aviso de quando a
+      1ª parcela conta.
+- [x] Dashboard: cada cartão mostra fatura, parcelas comprometidas no mês e
+      "Disponível p/ gastar" (limite − comprometido).
+
+### Dashboard
+- [x] Card "Reserva / Investimentos" (clicável, com detalhamento).
+- [x] Card "Parcelamentos (fora da fatura)".
+- [x] Seção "Provisões do mês (envelopes)" com barras de progresso
+      (planejado × usado × restante) por categoria.
+
+### Geral
+- [x] `cursor: pointer` global em botões, selects, checkboxes e radios
+      (`globals.css`); botão desabilitado usa `not-allowed`.
+
+
+### Banco de dados
+- [ ] Definir/marcar o cartão principal (Nubank ou C6) via interface (botão ★
+      no CardList) — necessário para o acompanhamento semanal do dashboard.
 
 ### Produto / decisão
 - [x] Decidir formalmente se a atualização do valor da fatura do cartão

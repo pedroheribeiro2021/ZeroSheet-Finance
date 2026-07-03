@@ -108,7 +108,7 @@ tests/
 - `months` (month, year, user_id)
 - `weeks` (month_id, index, budget, spent, remaining)
 - `transactions` (month_id, type, category, amount, is_fixed, is_provision, is_recurring, card,
-  `is_reimbursement` ⚠️, `is_reserve` ⚠️)
+  is_reimbursement, is_reserve, recurring_until)
 - `cards` (name, slug, color, limit_amount, closing_day, due_day, user_id, `is_primary` ⚠️)
 - `card_snapshots` (month_id, card_id, amount, user_id) — fatura do cartão naquele mês
 - `card_readings` ⚠️ (user_id, month_id→months, card_id→cards, amount, read_at, created_at)
@@ -208,23 +208,14 @@ npm run build && npm start
 Requer um projeto Supabase configurado com as tabelas do §3 e RLS habilitada
 por `user_id`, mais as variáveis em `.env.local` (§2).
 
-## 7. Migrations pendentes
+## 7. Migrations
 
-Os arquivos estão em `supabase/migrations/` e são idempotentes (IF NOT EXISTS).
-Aplicar **na ordem abaixo** via Supabase SQL Editor (Dashboard → SQL Editor →
-colar o conteúdo do arquivo e executar):
+**Todas aplicadas em produção** (verificado em 2026-07-03 via MCP do Supabase):
+`20260629_01` (cards.is_primary), `20260629_02` (card_readings),
+`20260629_03` (is_reimbursement/is_reserve) e
+`20260703_01` (transactions.recurring_until — duração da recorrência).
+O backfill de julho/2026 também foi aplicado (reserva, reembolso e categoria
+"Gasolina (Provisão)" → "Gasolina").
 
-| Arquivo | O que faz | Pré-requisito |
-|---------|-----------|---------------|
-| `20260629_01_cards_is_primary.sql` | Adiciona `cards.is_primary` + índice único parcial | nenhum |
-| `20260629_02_card_readings.sql` | Cria tabela `card_readings` com RLS | `cards` e `months` existirem |
-| `20260629_03_transactions_flags.sql` | Adiciona `transactions.is_reimbursement` e `.is_reserve` | nenhum |
-
-**Depois** da migration `03`, rodar os UPDATEs de backfill (estão comentados no
-próprio arquivo SQL) para marcar os dados históricos de junho que já existem no
-banco.
-
-Após as três migrations, todas as funcionalidades do loop semanal (botão
-estrela de cartão principal, seção "Acompanhamento semanal" no dashboard,
-separação de reembolso e reserva) ficam ativas automaticamente — o código já
-está em produção na `develop`.
+Falta apenas ação de interface: marcar o cartão principal (★ no CardList)
+para ativar o acompanhamento semanal do dashboard.
