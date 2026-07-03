@@ -12,7 +12,8 @@ import { createWeeks, getWeeks } from '@/core/services/week.service';
 
 import { mapTransaction, mapWeek } from '@/core/models/mappers';
 import { calculateSummary } from '@/core/engine/calculations';
-import { calculateWeekly, getWeeksInCycle, getWeeksInMonth } from '@/core/engine/weekly';
+import { calculateWeekly, getWeeksInCurrentCycle, getWeeksInMonth } from '@/core/engine/weekly';
+import { normalizeCategory } from '@/core/utils/normalize';
 import { getCardSnapshots } from '@/core/services/cardSnapshot.service';
 import { groupTransactionsByCategory } from '@/core/utils/groupTransactions';
 
@@ -71,6 +72,30 @@ export default function Dashboard() {
     switch (type) {
       case 'income':
         filtered = transactions.filter((t) => t.type === 'income');
+        break;
+
+      case 'salary':
+        filtered = transactions.filter(
+          (t) =>
+            t.type === 'income' &&
+            normalizeCategory(t.category) === 'salario' &&
+            !t.isReimbursement,
+        );
+        break;
+
+      case 'other-income':
+        filtered = transactions.filter(
+          (t) =>
+            t.type === 'income' && normalizeCategory(t.category) !== 'salario',
+        );
+        break;
+
+      case 'subscriptions':
+        filtered = transactions.filter(
+          (t) =>
+            t.type === 'expense' &&
+            normalizeCategory(t.category) === 'assinaturas',
+        );
         break;
 
       case 'fixed':
@@ -142,16 +167,25 @@ export default function Dashboard() {
 
       setTransactions(transactionsMapped);
 
+      const primary = cardsDB.find((c) => c.is_primary === true) ?? null;
+      setPrimaryCardState(primary);
+      setCurrentMonthId(month.id);
+
+      // Semanas do ciclo da fatura do cartão principal: é por esse número
+      // que o saldo do mês é dividido (ex.: fecha dia 4 → ciclo de ~5 semanas).
+      const weeksInMonth =
+        primary?.closing_day != null
+          ? getWeeksInCurrentCycle(primary.closing_day)
+          : getWeeksInMonth(month.month, month.year);
+
       const result = calculateSummary(
         transactionsMapped,
         mappedWeeks,
         snapshotsData,
         installmentsDB,
+        'total',
+        weeksInMonth,
       );
-
-      const primary = cardsDB.find((c) => c.is_primary === true) ?? null;
-      setPrimaryCardState(primary);
-      setCurrentMonthId(month.id);
 
       // leituras do cartão principal no mês corrente
       if (primary) {
@@ -159,10 +193,6 @@ export default function Dashboard() {
         setReadings(readingsData);
         setWeeklySpend(weeklySpendFromReadings(readingsData));
       }
-
-      const weeksInMonth = primary?.closing_day != null
-        ? getWeeksInCycle(primary.closing_day)
-        : getWeeksInMonth(month.month, month.year);
 
       let finalWeeks = calculateWeekly(
         snapshotsData,
@@ -327,9 +357,18 @@ export default function Dashboard() {
 
       <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
         <Card
-          title="Entradas"
-          value={formatCurrency(summary.totalIncome)}
-          onClick={() => handleCardClick('income')}
+          title="Salário"
+          value={formatCurrency(summary.salaryIncome)}
+          subtitle="Fonte de renda principal"
+          onClick={() => handleCardClick('salary')}
+          className="border border-green-800"
+        />
+
+        <Card
+          title="Outras Entradas"
+          value={formatCurrency(summary.otherIncome)}
+          subtitle={`Total de entradas: ${formatCurrency(summary.totalIncome)}`}
+          onClick={() => handleCardClick('other-income')}
         />
 
         <Card
@@ -378,6 +417,21 @@ export default function Dashboard() {
         />
 
         <Card
+          title="Assinaturas"
+          value={formatCurrency(
+            transactions
+              .filter(
+                (t) =>
+                  t.type === 'expense' &&
+                  normalizeCategory(t.category) === 'assinaturas',
+              )
+              .reduce((acc, t) => acc + Number(t.amount), 0),
+          )}
+          subtitle="Recorrentes no cartão — compõem a fatura"
+          onClick={() => handleCardClick('subscriptions')}
+        />
+
+        <Card
           title="Reserva / Investimentos"
           value={formatCurrency(summary.reserveSpending)}
           subtitle="Abate das entradas, mas é patrimônio seu"
@@ -397,19 +451,29 @@ export default function Dashboard() {
           onClick={() => handleCardClick('real')}
         />
 
+        {/* Card "Diferença" (provisão planejada − gasto real) comentado a
+            pedido do usuário em 2026-07-03 — a informação já aparece por
+            categoria na seção "Provisões do mês (envelopes)". */}
+
         <Card
-          title="Diferença"
-          value={formatCurrency(summary.provisionDiff)}
+          title="Saldo do Mês"
+          value={formatCurrency(summary.total)}
+          subtitle="O que ainda dá pra gastar: entradas − fixos − faturas − parcelas − provisões − reserva"
           className={
-            summary.provisionDiff < 0 ? 'border-red-500' : 'border-green-500'
+            summary.total < 0
+              ? 'border border-red-700'
+              : 'border border-green-800'
           }
         />
-
-        <Card title="Total do Mês" value={formatCurrency(summary.total)} />
 
         <Card
           title="Orçamento Semanal"
           value={formatCurrency(summary.weeklyBudget)}
+          subtitle={
+            primaryCard?.closing_day != null
+              ? `Saldo ÷ ${weeks.length} semanas do ciclo da fatura (${primaryCard.name} fecha dia ${primaryCard.closing_day})`
+              : 'Saldo ÷ semanas do mês (defina um cartão principal ★ para usar o ciclo da fatura)'
+          }
         />
       </div>
 

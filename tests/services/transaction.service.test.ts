@@ -85,6 +85,7 @@ describe('copyRecurringTransactions', () => {
         user_id: 'user-1',
         type: 'expense',
         category: 'Alimentação',
+        description: null,
         amount: 100,
         is_fixed: true,
         is_recurring: true,

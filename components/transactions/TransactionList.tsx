@@ -34,7 +34,11 @@ function formatUntil(recurringUntil?: string | null): string {
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-export default function TransactionList({ transactions, onUpdated }: any) {
+export default function TransactionList({
+  transactions,
+  cardNames = {},
+  onUpdated,
+}: any) {
   const { showToast } = useToast();
   const [selected, setSelected] = useState<Transaction | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>('entradas-primeiro');
@@ -129,13 +133,23 @@ export default function TransactionList({ transactions, onUpdated }: any) {
           >
             <div className="min-w-0">
               <p className="text-white font-bold truncate">
-                {t.category}{' '}
+                {t.description || t.category}{' '}
                 <span className={`${amountColor} font-bold`}>
                   {sign} {formatBRL(t.amount)}
                 </span>
               </p>
 
               <div className="text-xs flex gap-1.5 flex-wrap mt-1">
+                {t.description && (
+                  <span className="bg-zinc-700/60 text-zinc-300 px-1.5 py-0.5 rounded font-medium">
+                    {t.category}
+                  </span>
+                )}
+                {t.card && (
+                  <span className="bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded font-medium">
+                    💳 {cardNames[t.card] ?? 'Cartão'} — na fatura
+                  </span>
+                )}
                 {t.isProvision && (
                   <span className="bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded font-medium">
                     Provisão

@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { updateTransaction } from '@/core/services/transaction.service';
+import { getCards } from '@/core/services/card.service';
+import { DBCard } from '@/core/types/database';
 import { parseCurrencyInput, sanitizeAmountInput } from '@/core/utils/number';
 import { useToast } from '@/components/ui/ToastProvider';
 import {
@@ -25,8 +27,17 @@ export default function EditTransactionModal({
     : transaction.type;
 
   const [kind, setKind] = useState<Kind>(initialKind);
+  const [description, setDescription] = useState(transaction.description ?? '');
   const [amount, setAmount] = useState(String(transaction.amount));
   const [category, setCategory] = useState(transaction.category);
+  const [cards, setCards] = useState<DBCard[]>([]);
+  const [cardId, setCardId] = useState(transaction.card ?? '');
+
+  useEffect(() => {
+    getCards()
+      .then(setCards)
+      .catch(() => setCards([]));
+  }, []);
 
   const [isFixed, setIsFixed] = useState(!!transaction.isFixed);
   const [isProvision, setIsProvision] = useState(!!transaction.isProvision);
@@ -73,6 +84,8 @@ export default function EditTransactionModal({
         recurring_until:
           isRecurring && recurringUntil ? `${recurringUntil}-01` : null,
         due_day: isRecurring && dueDay ? Number(dueDay) : null,
+        description: description || null,
+        card: kind === 'expense' && cardId ? cardId : null,
       });
 
       showToast('Transação atualizada com sucesso');
@@ -98,6 +111,13 @@ export default function EditTransactionModal({
           <option value="expense">(−) Despesa</option>
           <option value="reserve">(↗) Reserva</option>
         </select>
+
+        <input
+          placeholder="Descrição (opcional — ex: Claude, Netflix)"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          className="bg-zinc-800 p-2 rounded text-white"
+        />
 
         <input
           inputMode="decimal"
@@ -128,6 +148,24 @@ export default function EditTransactionModal({
           placeholder="Categoria"
           className="bg-zinc-800 p-2 rounded text-white"
         />
+
+        {kind === 'expense' && cards.length > 0 && (
+          <label className="grid gap-1 text-sm text-zinc-400">
+            Pago no cartão de crédito? (compõe a fatura)
+            <select
+              value={cardId}
+              onChange={(e) => setCardId(e.target.value)}
+              className="bg-zinc-800 p-2 rounded text-white"
+            >
+              <option value="">Não (boleto/débito/pix)</option>
+              {cards.map((c) => (
+                <option key={c.id} value={c.id}>
+                  💳 {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <div className="text-sm text-white grid gap-2">
           {kind === 'expense' && (
