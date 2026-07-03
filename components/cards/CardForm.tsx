@@ -3,7 +3,7 @@
 import { useState } from 'react';
 
 import { createCard } from '@/core/services/card.service';
-import { parseCurrencyInput } from '@/core/utils/number';
+import { parseCurrencyInput, sanitizeAmountInput } from '@/core/utils/number';
 import { useToast } from '@/components/ui/ToastProvider';
 
 export default function CardForm({ onCreated }: { onCreated?: () => void }) {

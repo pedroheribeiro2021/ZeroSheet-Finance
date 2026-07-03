@@ -3,7 +3,7 @@
 import { useState } from 'react';
 
 import { upsertCardSnapshot } from '@/core/services/cardSnapshot.service';
-import { parseCurrencyInput } from '@/core/utils/number';
+import { parseCurrencyInput, sanitizeAmountInput } from '@/core/utils/number';
 import { useToast } from '@/components/ui/ToastProvider';
 import { DBCard } from '@/core/types/database';
 
@@ -56,7 +56,10 @@ export default function CardSnapshotForm({
             key={card.id}
             placeholder={card.name}
             value={values[card.id] ?? ''}
-            onChange={(e) => handleChange(card.id, e.target.value)}
+            inputMode="decimal"
+            onChange={(e) =>
+              handleChange(card.id, sanitizeAmountInput(e.target.value))
+            }
             className="p-2 rounded bg-zinc-800 text-white"
           />
         ))}
