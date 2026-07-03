@@ -14,6 +14,47 @@ indicado entre parênteses). Itens novos vão sempre no topo da seção
 - [ ] Ordenação por arrastar (drag-and-drop) na lista de transações — por ora
       há seletor de ordenação (entradas primeiro/recentes/valor/categoria).
 
+## Feitos em 2026-07-03 — rodada 2 (paridade com a planilha)
+
+### Paridade planilha × app — diferença de R$ 413,90 IDENTIFICADA E ZERADA
+- [x] Causa: TotalPass (119,90), Claude (110,00) e gasolina real (184,00)
+      estavam DENTRO da fatura do cartão na planilha, mas o app contava de
+      novo por fora (sem vínculo transação↔cartão). 119,90+110+184 = 413,90.
+- [x] Transações agora podem ser vinculadas a um cartão ("Pago no cartão?"),
+      e despesa vinculada a cartão com fatura lançada não conta duas vezes.
+- [x] Gasto no cartão CONSOME a provisão da categoria (envelope): provisão de
+      gasolina 300 com 184 gastos no cartão → só 116 seguem reservados.
+- [x] Teste de paridade `tests/engine/card-linked.test.ts` fixa o saldo de
+      julho/2026 em R$ 2.548,44 e orçamento semanal em R$ 509,69.
+- [x] Backfill aplicado em produção: TotalPass e Claude → categoria
+      'Assinaturas' + vínculo com Nubank; gasolina real → Nubank; reembolso
+      Samsung → categoria 'Reembolso', recorrente até nov/2026 (1/5).
+      **Conferir se o cartão correto é mesmo o Nubank** (edite na UI se não).
+
+### Transações
+- [x] Campo description separado da categoria (migration
+      `20260703_02_transactions_description.sql`, aplicada): item "Claude"
+      na categoria "Assinaturas".
+- [x] Índice único (month_id, category) removido (migration
+      `20260703_03_drop_unique_recurring_index.sql`, aplicada) — permitia só
+      1 assinatura recorrente por categoria/mês.
+- [x] Lista mostra descrição + chip de categoria + badge "💳 na fatura".
+
+### Dashboard
+- [x] Card "Salário" separado de "Outras Entradas".
+- [x] Card "Assinaturas" (recorrentes no cartão, compõem a fatura).
+- [x] "Total do Mês" renomeado para "Saldo do Mês" (com explicação).
+- [x] Orçamento semanal = saldo ÷ semanas do ciclo da fatura do cartão
+      principal (`getWeeksInCurrentCycle`): fecha dia 4 → ciclo 04/07→04/08 =
+      5 semanas → 2.548,44/5 = 509,69.
+- [x] Card "Diferença" comentado (informação já está nos envelopes).
+
+### Incidente
+- [x] OneDrive truncou vários arquivos do working tree durante a sessão
+      (sync conflict). Recuperado do git (HEAD = PR #58) + reaplicação das
+      mudanças. **Recomendação: commitar com frequência; considerar mover o
+      repo para fora do OneDrive ou pausar o sync durante sessões de agente.**
+
 ## Feitos em 2026-07-03 (auditoria + ajustes de cálculo e UX)
 
 ### Banco de dados
