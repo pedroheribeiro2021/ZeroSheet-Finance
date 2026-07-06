@@ -1,6 +1,6 @@
 # TODO — Zerosheet
 
-Atualizado em 2026-07-03. Checkbox marcado = já implementado (commit/PR
+Atualizado em 2026-07-06. Checkbox marcado = já implementado (commit/PR
 indicado entre parênteses). Itens novos vão sempre no topo da seção
 "Pendentes" da categoria correta.
 
@@ -13,6 +13,47 @@ indicado entre parênteses). Itens novos vão sempre no topo da seção
 - [ ] Edição de parcelamento (hoje só criar/excluir).
 - [ ] Ordenação por arrastar (drag-and-drop) na lista de transações — por ora
       há seletor de ordenação (entradas primeiro/recentes/valor/categoria).
+
+## Feitos em 2026-07-06 — ajuste fino do Acompanhamento Semanal
+
+### Gasto da semana = delta entre leituras (bug da 1ª leitura corrigido)
+- [x] `weeklySpendFromReadings` trata a primeira leitura (mais antiga) como
+      linha de base (`isBaseline: true`, `spent: 0`) em vez de contá-la como
+      gasto cheio; o gasto real só é computado a partir da segunda leitura em
+      diante. UI mostra "Leitura inicial (base)" para a semana da leitura
+      inicial.
+- [x] Atualizar a fatura de um cartão em Cartões (`CardSnapshotForm`) agora
+      também lança uma leitura automaticamente (`recordSnapshotAsReading`),
+      evitando duplicata exata (mesmo valor no mesmo dia) — o usuário
+      atualiza a fatura uma vez só e o histórico semanal se constrói sozinho.
+- [x] Nova função pura `weekIndexInCycle(date, closingDay)` indexa a semana
+      pelo ciclo da fatura (dia seguinte ao fechamento = início da semana 1),
+      em vez do dia do mês calendário — usada tanto na listagem quanto no
+      gráfico semanal quando o cartão principal tem `closing_day` definido.
+
+### Orçamento semanal decrescente (semanas restantes, não semanas do ciclo)
+- [x] Nova função pura `getWeeksRemainingInCycle(closingDay, from)`: semanas
+      que faltam até o próximo fechamento, por data. Quando há leituras no
+      mês, o Dashboard prefere `semanas do ciclo − maior índice de semana já
+      lançada` (mínimo 1); sem leituras, cai no cálculo por data.
+- [x] `Dashboard.tsx` passa esse número (`weeksRemaining`) como
+      `weeksForBudget` a `calculateSummary`, em vez do total de semanas do
+      ciclo. Subtítulo do card "Orçamento Semanal" e o modal de detalhe
+      atualizados para "semanas restantes do ciclo".
+- [x] Lançar ou remover uma leitura recarrega o mês inteiro (`loadMonthData`)
+      para que o orçamento semanal reflita a nova contagem de semanas
+      restantes.
+
+### Coerência visual
+- [x] Cada linha de semana no Acompanhamento Semanal mostra o intervalo de
+      datas do ciclo (`weekDateRangeInCycle`, ex. "Semana 1 (05/07–11/07)").
+- [x] Semana sem leitura mostra "sem leitura ainda" (antes: "sem leitura").
+- [x] Testes novos: `tests/engine/week-index-in-cycle.test.ts`,
+      `tests/engine/weeks-remaining.test.ts`; `card-readings.test.ts`
+      reescrito para a semântica de linha de base.
+- [x] Não afeta os contratos fixados em `july-2026.test.ts` e
+      `card-linked.test.ts` (ambos passam o número de semanas explicitamente
+      ao engine).
 
 ## Feitos em 2026-07-03 — rodada 3 (otimização de cards + filtros)
 
