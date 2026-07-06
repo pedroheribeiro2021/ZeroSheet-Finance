@@ -14,6 +14,48 @@ indicado entre parênteses). Itens novos vão sempre no topo da seção
 - [ ] Ordenação por arrastar (drag-and-drop) na lista de transações — por ora
       há seletor de ordenação (entradas primeiro/recentes/valor/categoria).
 
+## Feitos em 2026-07-03 — rodada 3 (otimização de cards + filtros)
+
+### Dashboard: menos cards, detalhe no clique
+- [x] Entradas volta a ser UM card só (`summary.totalIncome`); no clique lista
+      cada lançamento individual (descrição/categoria/valor), sem agrupar.
+- [x] Cartões unificado num card só (`summary.cardSpending`); no clique
+      mostra por cartão: fatura atual, parcelas no mês, limite e disponível
+      (limite − fatura). Removidos os cards por cartão e "Total Cartões".
+- [x] "Parcelamentos (fora da fatura)" virou card "Parcelamentos" = soma das
+      parcelas ativas no mês (mesmo dado do módulo Parcelamentos); no clique
+      lista cada parcelamento (descrição, parcela vigente, valor/mês, cartão,
+      início/fim). `calculateSummary`/`installmentSpending` não mudou.
+- [x] Cards "Planejado (Provisões)" e "Gasto Real (Provisões)" removidos — já
+      cobertos pela seção "Provisões do mês (envelopes)".
+- [x] Todo card que sobrou é clicável: Entradas, Custos Fixos, Cartões,
+      Parcelamentos, Assinaturas, Reserva/Investimentos, Saldo do Mês (mostra
+      a composição do cálculo) e Orçamento Semanal (mostra saldo ÷ semanas).
+
+### Controle semanal: só o cartão principal
+- [x] "Controle Semanal" (baseado em `calculateWeekly`/snapshots, somava as
+      DUAS faturas por semana) e "Acompanhamento semanal — {cartão}" foram
+      mesclados numa seção única, alimentada só por
+      `weeklySpendFromReadings(readings)` do cartão principal. Semana sem
+      leitura mostra "sem leitura" em vez de gasto zerado.
+- [x] `WeeklyBarChart` passou a receber as semanas construídas a partir das
+      leituras (não mais de `calculateWeekly`/snapshots).
+- [x] Dashboard parou de chamar `createWeeks`/`getWeeks`; código morto
+      removido: `core/services/week.service.ts`, `mapWeek`, `DBWeek`
+      (`calculateWeekly` continua em `core/engine/weekly.ts`, ainda coberto
+      por `tests/engine/weekly.test.ts`). A tabela `weeks` no banco não foi
+      alterada, só deixou de ser escrita.
+- [x] Sem cartão principal definido: aviso pedindo para marcar o ★ na tela de
+      Cartões, sem exibir semanas.
+
+### Transações: filtros combináveis
+- [x] `TransactionList.tsx` ganhou barra de filtros client-side: tipo
+      (todas/entradas/despesas/reservas), categoria, cartão (todas/sem
+      cartão/por cartão), flags (provisão/fixo/recorrente/assinatura) e busca
+      por texto (`normalizeCategory` para ignorar acento/caixa) — todos
+      combináveis (AND) e aplicados antes da ordenação existente.
+- [x] Contagem e soma do que está filtrado exibidas acima da lista.
+
 ## Feitos em 2026-07-03 — rodada 2 (paridade com a planilha)
 
 ### Paridade planilha × app — diferença de R$ 413,90 IDENTIFICADA E ZERADA

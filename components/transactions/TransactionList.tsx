@@ -5,6 +5,7 @@ import { deleteTransaction } from '@/core/services/transaction.service';
 import EditTransactionModal from '../modals/EditTransactionModal';
 import { useToast } from '@/components/ui/ToastProvider';
 import { formatBRL } from '@/core/utils/number';
+import { normalizeCategory } from '@/core/utils/normalize';
 import { Transaction } from '@/core/types/finance';
 
 type SortMode = 'entradas-primeiro' | 'recentes' | 'maior-valor' | 'categoria';
@@ -16,11 +17,72 @@ const SORT_LABELS: Record<SortMode, string> = {
   categoria: 'Categoria (A→Z)',
 };
 
+type TypeFilter = 'todas' | 'entradas' | 'despesas' | 'reservas';
+
+const TYPE_FILTER_LABELS: Record<TypeFilter, string> = {
+  todas: 'Todas',
+  entradas: 'Entradas',
+  despesas: 'Despesas',
+  reservas: 'Reservas',
+};
+
+const CARD_FILTER_ALL = 'todas';
+const CARD_FILTER_NONE = 'sem-cartao';
+
+type FlagFilters = {
+  provision: boolean;
+  fixed: boolean;
+  recurring: boolean;
+  subscription: boolean;
+};
+
+const EMPTY_FLAGS: FlagFilters = {
+  provision: false,
+  fixed: false,
+  recurring: false,
+  subscription: false,
+};
+
 /** entrada = 0, reserva = 1, despesa = 2 — define o agrupamento padrão */
 function kindRank(t: Transaction): number {
   if (t.type === 'income') return 0;
   if (t.isReserve) return 1;
   return 2;
+}
+
+function matchesTypeFilter(t: Transaction, filter: TypeFilter): boolean {
+  switch (filter) {
+    case 'entradas':
+      return t.type === 'income';
+    case 'reservas':
+      return !!t.isReserve;
+    case 'despesas':
+      return t.type === 'expense' && !t.isReserve;
+    case 'todas':
+    default:
+      return true;
+  }
+}
+
+function matchesCardFilter(t: Transaction, filter: string): boolean {
+  if (filter === CARD_FILTER_ALL) return true;
+  if (filter === CARD_FILTER_NONE) return !t.card;
+  return t.card === filter;
+}
+
+function matchesFlags(t: Transaction, flags: FlagFilters): boolean {
+  if (flags.provision && !t.isProvision) return false;
+  if (flags.fixed && !t.isFixed) return false;
+  if (flags.recurring && !t.isRecurring) return false;
+  if (flags.subscription && normalizeCategory(t.category) !== 'assinaturas')
+    return false;
+  return true;
+}
+
+function matchesSearch(t: Transaction, search: string): boolean {
+  if (!search) return true;
+  const haystack = normalizeCategory(`${t.description ?? ''} ${t.category}`);
+  return haystack.includes(search);
 }
 
 function formatUntil(recurringUntil?: string | null): string {
@@ -43,8 +105,39 @@ export default function TransactionList({
   const [selected, setSelected] = useState<Transaction | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>('entradas-primeiro');
 
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('todas');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [cardFilter, setCardFilter] = useState(CARD_FILTER_ALL);
+  const [flags, setFlags] = useState<FlagFilters>(EMPTY_FLAGS);
+  const [search, setSearch] = useState('');
+
+  const categoryOptions = useMemo(() => {
+    const set = new Set<string>(
+      (transactions as Transaction[]).map((t) => t.category),
+    );
+    return [...set].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [transactions]);
+
+  const filtered = useMemo(() => {
+    const normalizedSearch = normalizeCategory(search);
+
+    return (transactions as Transaction[]).filter(
+      (t) =>
+        matchesTypeFilter(t, typeFilter) &&
+        (!categoryFilter || t.category === categoryFilter) &&
+        matchesCardFilter(t, cardFilter) &&
+        matchesFlags(t, flags) &&
+        matchesSearch(t, normalizedSearch),
+    );
+  }, [transactions, typeFilter, categoryFilter, cardFilter, flags, search]);
+
+  const filteredSum = filtered.reduce(
+    (acc, t) => acc + (t.type === 'income' ? t.amount : -t.amount),
+    0,
+  );
+
   const sorted = useMemo(() => {
-    const list = [...(transactions as Transaction[])];
+    const list = [...filtered];
 
     switch (sortMode) {
       case 'entradas-primeiro':
@@ -66,7 +159,11 @@ export default function TransactionList({
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
         );
     }
-  }, [transactions, sortMode]);
+  }, [filtered, sortMode]);
+
+  const toggleFlag = (key: keyof FlagFilters) => {
+    setFlags((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   const handleDelete = async (id: string) => {
     const confirmDelete = confirm('Deseja excluir essa transação?');
@@ -104,8 +201,108 @@ export default function TransactionList({
         </label>
       </div>
 
+      <div className="grid gap-2 bg-zinc-800/60 p-3 rounded">
+        <div className="flex gap-2 flex-wrap">
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
+            className="bg-zinc-800 p-1.5 rounded text-white text-xs"
+            aria-label="Filtrar por tipo"
+          >
+            {Object.entries(TYPE_FILTER_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="bg-zinc-800 p-1.5 rounded text-white text-xs"
+            aria-label="Filtrar por categoria"
+          >
+            <option value="">Todas as categorias</option>
+            {categoryOptions.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={cardFilter}
+            onChange={(e) => setCardFilter(e.target.value)}
+            className="bg-zinc-800 p-1.5 rounded text-white text-xs"
+            aria-label="Filtrar por cartão"
+          >
+            <option value={CARD_FILTER_ALL}>Todos os cartões</option>
+            <option value={CARD_FILTER_NONE}>Sem cartão</option>
+            {Object.entries(cardNames as Record<string, string>).map(
+              ([id, name]) => (
+                <option key={id} value={id}>
+                  💳 {name}
+                </option>
+              ),
+            )}
+          </select>
+
+          <input
+            type="text"
+            placeholder="Buscar por descrição ou categoria..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="bg-zinc-800 p-1.5 rounded text-white text-xs flex-1 min-w-[180px] outline-none"
+          />
+        </div>
+
+        <div className="flex gap-3 flex-wrap text-xs text-zinc-300">
+          <label className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={flags.provision}
+              onChange={() => toggleFlag('provision')}
+            />
+            Provisão
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={flags.fixed}
+              onChange={() => toggleFlag('fixed')}
+            />
+            Fixo
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={flags.recurring}
+              onChange={() => toggleFlag('recurring')}
+            />
+            Recorrente
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={flags.subscription}
+              onChange={() => toggleFlag('subscription')}
+            />
+            Assinatura
+          </label>
+        </div>
+
+        <p className="text-zinc-400 text-xs">
+          {filtered.length} lançamento{filtered.length === 1 ? '' : 's'} •{' '}
+          {formatBRL(filteredSum)}
+        </p>
+      </div>
+
       {sorted.length === 0 && (
-        <p className="text-zinc-500 text-sm">Nenhuma transação neste mês.</p>
+        <p className="text-zinc-500 text-sm">
+          {(transactions as Transaction[]).length === 0
+            ? 'Nenhuma transação neste mês.'
+            : 'Nenhuma transação encontrada com esses filtros.'}
+        </p>
       )}
 
       {sorted.map((t) => {

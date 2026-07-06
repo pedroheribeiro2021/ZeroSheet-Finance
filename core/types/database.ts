@@ -39,18 +39,6 @@ export type DBMonth = {
   created_at: string;
 };
 
-export type DBWeek = {
-  id: string;
-  month_id: string;
-
-  index: number;
-  budget: number;
-  spent: number;
-  remaining: number;
-
-  created_at: string;
-};
-
 export type DBCard = {
   id: string;
   user_id: string;
