@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import { upsertCardSnapshot } from '@/core/services/cardSnapshot.service';
+import { recordSnapshotAsReading } from '@/core/services/cardReading.service';
 import { parseCurrencyInput, sanitizeAmountInput } from '@/core/utils/number';
 import { useToast } from '@/components/ui/ToastProvider';
 import { DBCard } from '@/core/types/database';
@@ -33,7 +34,16 @@ export default function CardSnapshotForm({
 
         if (!value) continue;
 
-        await upsertCardSnapshot(monthId, card.id, parseCurrencyInput(value));
+        const amount = parseCurrencyInput(value);
+        await upsertCardSnapshot(monthId, card.id, amount);
+
+        // atualização da fatura vira leitura automaticamente — histórico
+        // semanal se constrói sozinho, sem lançamento duplicado.
+        await recordSnapshotAsReading({
+          month_id: monthId,
+          card_id: card.id,
+          amount,
+        });
       }
 
       setValues({});

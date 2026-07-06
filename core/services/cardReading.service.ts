@@ -54,6 +54,30 @@ export async function addReading(data: {
   return created as DBCardReading;
 }
 
+/**
+ * Registra uma leitura a partir da atualização da fatura no módulo Cartões
+ * (`CardSnapshotForm`), sem duplicar: se já existe uma leitura com o mesmo
+ * valor no mesmo dia para esse cartão/mês, não lança de novo.
+ */
+export async function recordSnapshotAsReading(data: {
+  month_id: string;
+  card_id: string;
+  amount: number;
+}): Promise<DBCardReading | null> {
+  const existing = await getReadings(data.month_id, data.card_id);
+
+  const today = new Date().toDateString();
+  const isDuplicate = existing.some(
+    (r) =>
+      Number(r.amount) === data.amount &&
+      new Date(r.read_at).toDateString() === today,
+  );
+
+  if (isDuplicate) return null;
+
+  return addReading(data);
+}
+
 export async function deleteReading(id: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error('Usuário não autenticado');

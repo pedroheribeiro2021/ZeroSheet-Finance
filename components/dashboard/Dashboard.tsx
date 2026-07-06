@@ -11,7 +11,14 @@ import { getTransactions } from '@/core/services/transaction.service';
 
 import { mapTransaction } from '@/core/models/mappers';
 import { calculateSummary } from '@/core/engine/calculations';
-import { getWeeksInCurrentCycle, getWeeksInMonth } from '@/core/engine/weekly';
+import {
+  getWeeksInCurrentCycle,
+  getWeeksInMonth,
+  getWeeksRemainingInCycle,
+  weekDateRangeInCycle,
+  weeklySpendFromReadings,
+  WeeklySpend,
+} from '@/core/engine/weekly';
 import { normalizeCategory } from '@/core/utils/normalize';
 import { getCardSnapshots } from '@/core/services/cardSnapshot.service';
 import { groupTransactionsByCategory } from '@/core/utils/groupTransactions';
@@ -20,7 +27,6 @@ import { getInstallments } from '@/core/services/installment.service';
 import type { ActiveInstallment } from '@/core/services/installment.service';
 import { getCards } from '@/core/services/card.service';
 import { getReadings, addReading, deleteReading } from '@/core/services/cardReading.service';
-import { weeklySpendFromReadings } from '@/core/engine/weekly';
 import { sanitizeAmountInput } from '@/core/utils/number';
 import { DBCard, DBCardSnapshot, DBCardReading, DBMonth } from '@/core/types/database';
 import { Transaction, Week } from '@/core/types/finance';
@@ -91,8 +97,9 @@ export default function Dashboard() {
   const [cards, setCards] = useState<DBCard[]>([]);
   const [snapshots, setSnapshots] = useState<DBCardSnapshot[]>([]);
   const [readings, setReadings] = useState<DBCardReading[]>([]);
-  const [weeklySpend, setWeeklySpend] = useState<{ weekIndex: number; spent: number }[]>([]);
+  const [weeklySpend, setWeeklySpend] = useState<WeeklySpend[]>([]);
   const [cycleWeeks, setCycleWeeks] = useState(0);
+  const [weeksRemaining, setWeeksRemaining] = useState(0);
   const [readingAmount, setReadingAmount] = useState('');
   const [currentMonthId, setCurrentMonthId] = useState<string | null>(null);
   const [primaryCard, setPrimaryCardState] = useState<DBCard | null>(null);
@@ -170,13 +177,45 @@ export default function Dashboard() {
       setPrimaryCardState(primary);
       setCurrentMonthId(month.id);
 
-      // Semanas do ciclo da fatura do cartão principal: é por esse número
-      // que o saldo do mês é dividido (ex.: fecha dia 4 → ciclo de ~5 semanas).
+      // Semanas do ciclo da fatura do cartão principal: é o total de linhas
+      // exibidas no acompanhamento semanal (ex.: fecha dia 4 → ciclo de ~5 semanas).
       const weeksInCycle =
         primary?.closing_day != null
           ? getWeeksInCurrentCycle(primary.closing_day)
           : getWeeksInMonth(month.month, month.year);
       setCycleWeeks(weeksInCycle);
+
+      // leituras do cartão principal no mês corrente — única fonte do
+      // acompanhamento semanal exibido (nunca soma faturas de dois cartões).
+      let weeklySpendData: WeeklySpend[] = [];
+      if (primary) {
+        const readingsData = await getReadings(month.id, primary.id);
+        setReadings(readingsData);
+        weeklySpendData = weeklySpendFromReadings(
+          readingsData,
+          primary.closing_day ?? undefined,
+        );
+        setWeeklySpend(weeklySpendData);
+      } else {
+        setReadings([]);
+        setWeeklySpend([]);
+      }
+
+      // Orçamento semanal decrescente: passou uma semana, divide pelas que
+      // restam. Com leituras lançadas, usa o maior índice de semana já
+      // registrado (mínimo 1 restante); sem leituras, cai no cálculo por data.
+      let weeksForBudget = weeksInCycle;
+      if (primary?.closing_day != null) {
+        if (weeklySpendData.length > 0) {
+          const maxWeekIndex = Math.max(
+            ...weeklySpendData.map((w) => w.weekIndex),
+          );
+          weeksForBudget = Math.max(1, weeksInCycle - maxWeekIndex);
+        } else {
+          weeksForBudget = getWeeksRemainingInCycle(primary.closing_day);
+        }
+      }
+      setWeeksRemaining(weeksForBudget);
 
       const result = calculateSummary(
         transactionsMapped,
@@ -184,19 +223,8 @@ export default function Dashboard() {
         snapshotsData,
         installmentsDB,
         'total',
-        weeksInCycle,
+        weeksForBudget,
       );
-
-      // leituras do cartão principal no mês corrente — única fonte do
-      // acompanhamento semanal exibido (nunca soma faturas de dois cartões).
-      if (primary) {
-        const readingsData = await getReadings(month.id, primary.id);
-        setReadings(readingsData);
-        setWeeklySpend(weeklySpendFromReadings(readingsData));
-      } else {
-        setReadings([]);
-        setWeeklySpend([]);
-      }
 
       setSummary(result);
     } catch (err) {
@@ -205,27 +233,25 @@ export default function Dashboard() {
   };
 
   const handleAddReading = async () => {
-    if (!primaryCard || !currentMonthId) return;
+    if (!primaryCard || !currentMonthId || !activeMonth) return;
     const amount = parseFloat(readingAmount.replace(',', '.'));
     if (isNaN(amount) || amount < 0) return;
     try {
       await addReading({ month_id: currentMonthId, card_id: primaryCard.id, amount });
       setReadingAmount('');
-      const updated = await getReadings(currentMonthId, primaryCard.id);
-      setReadings(updated);
-      setWeeklySpend(weeklySpendFromReadings(updated));
+      // recarrega tudo: uma nova leitura muda as semanas restantes e,
+      // portanto, o orçamento semanal vigente.
+      await loadMonthData(activeMonth);
     } catch (err) {
       console.error(err);
     }
   };
 
   const handleDeleteReading = async (id: string) => {
-    if (!primaryCard || !currentMonthId) return;
+    if (!primaryCard || !currentMonthId || !activeMonth) return;
     try {
       await deleteReading(id);
-      const updated = await getReadings(currentMonthId, primaryCard.id);
-      setReadings(updated);
-      setWeeklySpend(weeklySpendFromReadings(updated));
+      await loadMonthData(activeMonth);
     } catch (err) {
       console.error(err);
     }
@@ -291,6 +317,9 @@ export default function Dashboard() {
       currency: 'BRL',
     }).format(value);
   };
+
+  const formatDateShort = (date: Date): string =>
+    date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 
   const totalInstallments = installments.reduce(
     (acc, i) => acc + Number(i.installment_amount),
@@ -429,7 +458,7 @@ export default function Dashboard() {
           value={formatCurrency(summary.weeklyBudget)}
           subtitle={
             primaryCard?.closing_day != null
-              ? `Saldo ÷ ${cycleWeeks} semanas do ciclo da fatura (${primaryCard.name} fecha dia ${primaryCard.closing_day})`
+              ? `Saldo ÷ ${weeksRemaining} semanas restantes do ciclo (${primaryCard.name} fecha dia ${primaryCard.closing_day})`
               : 'Saldo ÷ semanas do mês (defina um cartão principal ★ para usar o ciclo da fatura)'
           }
           onClick={() => handleCardClick('weekly-budget')}
@@ -505,10 +534,15 @@ export default function Dashboard() {
           <>
             <div className="grid gap-2 mb-4">
               {chartWeeks.map((week) => {
-                const hasReading = weeklySpend.some(
+                const entry = weeklySpend.find(
                   (w) => w.weekIndex === week.index,
                 );
                 const diff = summary.weeklyBudget - week.spent;
+
+                const { start, end } =
+                  primaryCard.closing_day != null
+                    ? weekDateRangeInCycle(week.index, primaryCard.closing_day)
+                    : { start: null, end: null };
 
                 return (
                   <div
@@ -517,11 +551,21 @@ export default function Dashboard() {
                   >
                     <span className="text-white text-sm font-bold">
                       Semana {week.index}
+                      {start && end && (
+                        <span className="text-zinc-500 font-normal">
+                          {' '}
+                          ({formatDateShort(start)}–{formatDateShort(end)})
+                        </span>
+                      )}
                     </span>
                     <span className="text-zinc-400 text-sm">
                       Orçamento: {formatCurrency(summary.weeklyBudget)}
                     </span>
-                    {hasReading ? (
+                    {entry?.isBaseline ? (
+                      <span className="text-zinc-400 text-sm italic">
+                        Leitura inicial (base)
+                      </span>
+                    ) : entry ? (
                       <>
                         <span className="text-white font-bold text-sm">
                           Gasto: {formatCurrency(week.spent)}
@@ -535,7 +579,7 @@ export default function Dashboard() {
                       </>
                     ) : (
                       <span className="text-zinc-500 text-sm italic">
-                        sem leitura
+                        sem leitura ainda
                       </span>
                     )}
                   </div>
@@ -731,8 +775,8 @@ export default function Dashboard() {
               <span className="text-white font-bold">{formatCurrency(summary.total)}</span>
             </div>
             <div className="bg-zinc-800 rounded p-3 flex justify-between">
-              <span className="text-white">÷ semanas do ciclo</span>
-              <span className="text-white font-bold">{cycleWeeks}</span>
+              <span className="text-white">÷ semanas restantes do ciclo</span>
+              <span className="text-white font-bold">{weeksRemaining}</span>
             </div>
             <div className="bg-zinc-800 rounded p-3 flex justify-between border border-zinc-700">
               <span className="text-white font-bold">Orçamento semanal</span>
