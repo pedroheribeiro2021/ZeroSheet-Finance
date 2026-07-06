@@ -1,8 +1,16 @@
 import { Week, Transaction } from '../types/finance';
+import { toCurrency } from '../utils/number';
 
 export type CardReading = {
   amount: number;
   read_at: string;
+};
+
+export type WeeklySpend = {
+  weekIndex: number;
+  spent: number;
+  /** true = essa é a primeira leitura do conjunto (linha de base, não é gasto). */
+  isBaseline: boolean;
 };
 
 type Snapshot = {
@@ -21,43 +29,127 @@ export function getWeeksInMonth(month: number, year: number): number {
   return Math.ceil(daysInMonth / 7);
 }
 
+function startOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+/** Clampa o dia de fechamento aos dias do mês informado (ex.: dia 31 em fevereiro → 28). */
+function clampClosingDay(
+  year: number,
+  monthIndex: number,
+  closingDay: number,
+): number {
+  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+  return Math.min(closingDay, daysInMonth);
+}
+
+/** Data do fechamento mais recente que ocorre ANTES do dia informado (o dia do próprio fechamento já pertence ao ciclo anterior). */
+function closingBefore(day: Date, closingDay: number): Date {
+  const y = day.getFullYear();
+  let m = day.getMonth();
+
+  let closing = new Date(y, m, clampClosingDay(y, m, closingDay));
+
+  if (closing.getTime() >= day.getTime()) {
+    m -= 1;
+    closing = new Date(y, m, clampClosingDay(y, m, closingDay));
+  }
+
+  return closing;
+}
+
+/** Início do ciclo (dia seguinte ao último fechamento) que contém a data informada. */
+function cycleStartFor(date: Date, closingDay: number): Date {
+  const closing = closingBefore(startOfDay(date), closingDay);
+  return new Date(closing.getFullYear(), closing.getMonth(), closing.getDate() + 1);
+}
+
+/**
+ * Índice da semana (1-based, blocos de 7 dias) dentro do ciclo da fatura,
+ * a partir do closing_day do cartão principal — em vez de usar o dia do mês
+ * calendário. Ex.: fecha dia 4 → ciclo começa dia 5; 05–11/07 = semana 1,
+ * 12–18/07 = semana 2 etc.
+ */
+export function weekIndexInCycle(date: Date, closingDay: number): number {
+  const day = startOfDay(date);
+  const cycleStart = cycleStartFor(day, closingDay);
+
+  const diffDays = Math.round(
+    (day.getTime() - cycleStart.getTime()) / 86_400_000,
+  );
+
+  return Math.max(1, Math.ceil((diffDays + 1) / 7));
+}
+
+/**
+ * Intervalo de datas (início–fim) da semana `weekIndex` do ciclo vigente
+ * (visto de `from`, por padrão hoje) — usado para exibir "Semana N (dd/mm–dd/mm)".
+ */
+export function weekDateRangeInCycle(
+  weekIndex: number,
+  closingDay: number,
+  from: Date = new Date(),
+): { start: Date; end: Date } {
+  const cycleStart = cycleStartFor(from, closingDay);
+
+  const start = new Date(cycleStart);
+  start.setDate(start.getDate() + (weekIndex - 1) * 7);
+
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+
+  return { start, end };
+}
+
 /**
  * Calcula o gasto de cada semana do ciclo a partir das leituras semanais
  * da fatura. Cada leitura representa o valor acumulado da fatura naquele
- * momento; o gasto da semana i = leitura_i − leitura_(i−1).
+ * momento; a PRIMEIRA leitura (mais antiga) é a linha de base e não conta
+ * como gasto — o gasto da semana i (i > base) = leitura_i − leitura_(i−1).
  *
- * Retorna um array de { weekIndex, spent } onde weekIndex é o bloco de 7 dias
- * (Math.ceil(dia / 7)) da data de leitura.
+ * Se `closingDay` for informado, a semana da leitura é calculada pelo ciclo
+ * da fatura (`weekIndexInCycle`); sem ele, cai no bucket por dia do mês
+ * (Math.ceil(dia / 7)), mantido por compatibilidade.
  *
  * Leituras com a mesma semana são somadas antes de calcular o delta,
  * mantendo coerência se o usuário lançar mais de uma leitura por semana.
  */
 export function weeklySpendFromReadings(
   readings: CardReading[],
-): { weekIndex: number; spent: number }[] {
+  closingDay?: number,
+): WeeklySpend[] {
   if (readings.length === 0) return [];
 
   const sorted = [...readings].sort(
     (a, b) => new Date(a.read_at).getTime() - new Date(b.read_at).getTime(),
   );
 
-  // agrupa por semana (bloco de 7 dias pelo dia-do-mês)
+  const weekOf = (isoDate: string): number => {
+    const date = new Date(isoDate);
+    return closingDay != null
+      ? weekIndexInCycle(date, closingDay)
+      : Math.ceil(date.getDate() / 7);
+  };
+
+  // agrupa por semana (última leitura da semana prevalece)
   const byWeek = new Map<number, number>();
   for (const r of sorted) {
-    const day = new Date(r.read_at).getDate();
-    const week = Math.ceil(day / 7);
-    // última leitura da semana prevalece (sobrescreve a anterior do mesmo bloco)
-    byWeek.set(week, r.amount);
+    byWeek.set(weekOf(r.read_at), r.amount);
   }
 
   const weekEntries = [...byWeek.entries()].sort(([a], [b]) => a - b);
 
-  const result: { weekIndex: number; spent: number }[] = [];
-  let prev = 0;
+  const [baseline, ...rest] = weekEntries;
+  const [baseWeekIndex, baseAmount] = baseline;
 
-  for (const [weekIndex, amount] of weekEntries) {
-    const spent = Math.max(0, amount - prev);
-    result.push({ weekIndex, spent });
+  const result: WeeklySpend[] = [
+    { weekIndex: baseWeekIndex, spent: 0, isBaseline: true },
+  ];
+
+  let prev = baseAmount;
+  for (const [weekIndex, amount] of rest) {
+    const spent = toCurrency(Math.max(0, amount - prev));
+    result.push({ weekIndex, spent, isBaseline: false });
     prev = amount;
   }
 
@@ -87,22 +179,19 @@ export function getWeeksInCurrentCycle(
   closingDay: number,
   from: Date = new Date(),
 ): number {
-  const clampDay = (year: number, monthIndex: number) =>
-    Math.min(closingDay, new Date(year, monthIndex + 1, 0).getDate());
-
-  let y = from.getFullYear();
+  const y = from.getFullYear();
   let m = from.getMonth();
 
-  let nextClosing = new Date(y, m, clampDay(y, m));
+  let nextClosing = new Date(y, m, clampClosingDay(y, m, closingDay));
   if (nextClosing.getTime() <= from.getTime()) {
     m += 1;
-    nextClosing = new Date(y, m, clampDay(y, m));
+    nextClosing = new Date(y, m, clampClosingDay(y, m, closingDay));
   }
 
   const followingClosing = new Date(
     nextClosing.getFullYear(),
     nextClosing.getMonth() + 1,
-    clampDay(nextClosing.getFullYear(), nextClosing.getMonth() + 1),
+    clampClosingDay(nextClosing.getFullYear(), nextClosing.getMonth() + 1, closingDay),
   );
 
   const days = Math.round(
@@ -110,6 +199,40 @@ export function getWeeksInCurrentCycle(
   );
 
   return Math.max(1, Math.ceil(days / 7));
+}
+
+/**
+ * Semanas que FALTAM até o próximo fechamento da fatura, vistas de `from`
+ * (padrão hoje) — divisor decrescente do orçamento semanal: passou uma
+ * semana, divide o saldo pelas que restam.
+ *
+ * `max(1, ...)` garante que o próprio dia do fechamento (ou o dia seguinte,
+ * antes da próxima leitura) já conte como "última semana" (1), sem precisar
+ * de uma regra extra para o limiar de ~2 dias.
+ *
+ * Ex.: ciclo 04/07→04/08 (5 semanas); em 05/07 (início) restam 5; em 12/07
+ * (1 semana depois) restam 4; em 03/08 (véspera do fechamento) resta 1.
+ */
+export function getWeeksRemainingInCycle(
+  closingDay: number,
+  from: Date = new Date(),
+): number {
+  const today = startOfDay(from);
+
+  const y = today.getFullYear();
+  let m = today.getMonth();
+
+  let nextClosing = new Date(y, m, clampClosingDay(y, m, closingDay));
+  if (nextClosing.getTime() < today.getTime()) {
+    m += 1;
+    nextClosing = new Date(y, m, clampClosingDay(y, m, closingDay));
+  }
+
+  const daysUntilClosing = Math.round(
+    (nextClosing.getTime() - today.getTime()) / 86_400_000,
+  );
+
+  return Math.max(1, Math.ceil(daysUntilClosing / 7));
 }
 
 export function calculateWeekly(
