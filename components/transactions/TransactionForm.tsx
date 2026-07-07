@@ -172,7 +172,7 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
   };
 
   return (
-    <div className="bg-zinc-900 p-4 rounded grid gap-3">
+    <div className="surface grid gap-3 p-4 sm:p-5">
       <h2 className="font-bold text-white">Nova Transação</h2>
 
       {/* TIPO */}
@@ -183,13 +183,13 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
             type="button"
             onClick={() => changeKind(opt.value)}
             title={opt.hint}
-            className={`p-2 rounded text-sm font-medium transition ${
+            className={`min-h-[44px] rounded-xl p-2 text-sm font-semibold transition active:scale-[0.97] ${
               kind === opt.value
                 ? opt.value === 'income'
-                  ? 'bg-green-600 text-white'
+                  ? 'bg-green-600 text-white shadow-md shadow-green-950/40'
                   : opt.value === 'reserve'
-                    ? 'bg-sky-600 text-white'
-                    : 'bg-red-600 text-white'
+                    ? 'bg-sky-600 text-white shadow-md shadow-sky-950/40'
+                    : 'bg-red-600 text-white shadow-md shadow-red-950/40'
                 : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
             }`}
           >
@@ -207,7 +207,7 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
         placeholder="Descrição (opcional — ex: Claude, Netflix, Conta de luz)"
         value={description}
         onChange={(e) => setDescription(e.target.value)}
-        className="bg-zinc-800 p-2 rounded text-white"
+        className="field"
       />
 
       <input
@@ -220,7 +220,7 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
         onChange={(e) =>
           setAmount(sanitizeAmountInput(e.target.value, isSplit))
         }
-        className="bg-zinc-800 p-2 rounded text-white"
+        className="field"
       />
 
       {kind !== 'reserve' && (
@@ -238,7 +238,7 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
       <select
         value={selectedCategory}
         onChange={(e) => setSelectedCategory(e.target.value)}
-        className="bg-zinc-800 p-2 rounded text-white"
+        className="field"
       >
         <option value="">Selecione uma categoria</option>
 
@@ -257,7 +257,7 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
           <select
             value={cardId}
             onChange={(e) => setCardId(e.target.value)}
-            className="bg-zinc-800 p-2 rounded text-white"
+            className="field"
           >
             <option value="">Não (boleto/débito/pix)</option>
             {cards.map((c) => (
@@ -275,7 +275,7 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
           placeholder="Digite a categoria"
           value={customCategory}
           onChange={(e) => setCustomCategory(e.target.value)}
-          className="bg-zinc-800 p-2 rounded text-white"
+          className="field"
         />
       )}
 
@@ -326,10 +326,10 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
         </label>
 
         {isRecurring && (
-          <div className="ml-6 grid gap-2 rounded bg-zinc-800/60 p-3">
+          <div className="ml-1 grid gap-2.5 rounded-xl border border-white/[0.04] bg-black/20 p-3 sm:ml-6">
             <p className="text-zinc-400 text-xs">Repetir por quanto tempo?</p>
 
-            <label className="flex items-center gap-2">
+            <label className="flex flex-wrap items-center gap-2">
               <input
                 type="radio"
                 name="recurrence-mode"
@@ -339,7 +339,7 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
               Sempre (até eu remover)
             </label>
 
-            <label className="flex items-center gap-2">
+            <label className="flex flex-wrap items-center gap-2">
               <input
                 type="radio"
                 name="recurrence-mode"
@@ -354,12 +354,12 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
                 value={recurrenceMonths}
                 onChange={(e) => setRecurrenceMonths(e.target.value)}
                 onFocus={() => setRecurrenceMode('months')}
-                className="bg-zinc-900 p-1 rounded text-white w-16 text-center"
+                className="field-sm w-16 text-center"
               />
               meses (contando este)
             </label>
 
-            <label className="flex items-center gap-2">
+            <label className="flex flex-wrap items-center gap-2">
               <input
                 type="radio"
                 name="recurrence-mode"
@@ -372,7 +372,7 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
                 value={recurrenceUntil}
                 onChange={(e) => setRecurrenceUntil(e.target.value)}
                 onFocus={() => setRecurrenceMode('until')}
-                className="bg-zinc-900 p-1 rounded text-white"
+                className="field-sm"
               />
             </label>
 
@@ -385,17 +385,14 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
                 placeholder="Ex: 10"
                 value={dueDay}
                 onChange={(e) => setDueDay(e.target.value)}
-                className="bg-zinc-900 p-2 rounded text-white w-24"
+                className="field-sm w-24"
               />
             </label>
           </div>
         )}
       </div>
 
-      <button
-        onClick={handleSubmit}
-        className="bg-green-600 p-2 rounded hover:bg-green-700 text-white font-medium"
-      >
+      <button onClick={handleSubmit} className="btn-success">
         Salvar
       </button>
     </div>

@@ -6,6 +6,7 @@ import { getCards } from '@/core/services/card.service';
 import { DBCard } from '@/core/types/database';
 import { parseCurrencyInput, sanitizeAmountInput } from '@/core/utils/number';
 import { useToast } from '@/components/ui/ToastProvider';
+import Modal from '@/components/ui/Modal';
 import {
   EXPENSE_CATEGORIES,
   INCOME_CATEGORIES,
@@ -98,14 +99,12 @@ export default function EditTransactionModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-zinc-900 p-6 rounded w-full max-w-md grid gap-3 max-h-[90vh] overflow-y-auto">
-        <h2 className="text-white font-bold">Editar Transação</h2>
-
+    <Modal open onClose={onClose} title="Editar Transação">
+      <div className="grid gap-3">
         <select
           value={kind}
           onChange={(e) => setKind(e.target.value as Kind)}
-          className="bg-zinc-800 p-2 rounded text-white"
+          className="field"
         >
           <option value="income">(+) Entrada</option>
           <option value="expense">(−) Despesa</option>
@@ -116,7 +115,7 @@ export default function EditTransactionModal({
           placeholder="Descrição (opcional — ex: Claude, Netflix)"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          className="bg-zinc-800 p-2 rounded text-white"
+          className="field"
         />
 
         <input
@@ -124,7 +123,7 @@ export default function EditTransactionModal({
           value={amount}
           onChange={(e) => setAmount(sanitizeAmountInput(e.target.value))}
           placeholder="Valor"
-          className="bg-zinc-800 p-2 rounded text-white"
+          className="field"
         />
 
         <select
@@ -132,7 +131,7 @@ export default function EditTransactionModal({
           onChange={(e) => {
             if (e.target.value !== '__custom__') setCategory(e.target.value);
           }}
-          className="bg-zinc-800 p-2 rounded text-white"
+          className="field"
         >
           {allCategories.map((cat) => (
             <option key={cat} value={cat}>
@@ -146,16 +145,16 @@ export default function EditTransactionModal({
           value={category}
           onChange={(e) => setCategory(e.target.value)}
           placeholder="Categoria"
-          className="bg-zinc-800 p-2 rounded text-white"
+          className="field"
         />
 
         {kind === 'expense' && cards.length > 0 && (
-          <label className="grid gap-1 text-sm text-zinc-400">
+          <label className="field-label">
             Pago no cartão de crédito? (compõe a fatura)
             <select
               value={cardId}
               onChange={(e) => setCardId(e.target.value)}
-              className="bg-zinc-800 p-2 rounded text-white"
+              className="field"
             >
               <option value="">Não (boleto/débito/pix)</option>
               {cards.map((c) => (
@@ -211,14 +210,14 @@ export default function EditTransactionModal({
           </label>
 
           {isRecurring && (
-            <div className="ml-6 grid gap-2 rounded bg-zinc-800/60 p-3">
+            <div className="ml-1 grid gap-2.5 rounded-xl border border-white/[0.04] bg-black/20 p-3 sm:ml-6">
               <label className="grid gap-1">
                 Repetir até (vazio = sempre)
                 <input
                   type="month"
                   value={recurringUntil}
                   onChange={(e) => setRecurringUntil(e.target.value)}
-                  className="bg-zinc-900 p-2 rounded text-white"
+                  className="field-sm"
                 />
               </label>
 
@@ -231,7 +230,7 @@ export default function EditTransactionModal({
                   placeholder="Ex: 10"
                   value={dueDay}
                   onChange={(e) => setDueDay(e.target.value)}
-                  className="bg-zinc-900 p-2 rounded text-white w-24"
+                  className="field-sm w-24"
                 />
               </label>
             </div>
@@ -239,21 +238,15 @@ export default function EditTransactionModal({
         </div>
 
         <div className="flex gap-2 mt-2">
-          <button
-            onClick={handleSave}
-            className="bg-green-600 px-3 py-1 rounded text-white"
-          >
+          <button onClick={handleSave} className="btn-success flex-1">
             Salvar
           </button>
 
-          <button
-            onClick={onClose}
-            className="bg-zinc-700 px-3 py-1 rounded text-white"
-          >
+          <button onClick={onClose} className="btn-secondary flex-1">
             Cancelar
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

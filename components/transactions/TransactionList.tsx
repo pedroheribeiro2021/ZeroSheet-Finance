@@ -181,7 +181,7 @@ export default function TransactionList({
   };
 
   return (
-    <div className="bg-zinc-900 p-4 rounded grid gap-2">
+    <div className="surface grid gap-3 p-4 sm:p-5">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <h2 className="text-white font-bold">Transações</h2>
 
@@ -190,7 +190,7 @@ export default function TransactionList({
           <select
             value={sortMode}
             onChange={(e) => setSortMode(e.target.value as SortMode)}
-            className="bg-zinc-800 p-1.5 rounded text-white text-xs"
+            className="field-sm"
           >
             {Object.entries(SORT_LABELS).map(([value, label]) => (
               <option key={value} value={value}>
@@ -201,12 +201,12 @@ export default function TransactionList({
         </label>
       </div>
 
-      <div className="grid gap-2 bg-zinc-800/60 p-3 rounded">
+      <div className="grid gap-2.5 rounded-xl border border-white/[0.04] bg-black/20 p-3">
         <div className="flex gap-2 flex-wrap">
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
-            className="bg-zinc-800 p-1.5 rounded text-white text-xs"
+            className="field-sm"
             aria-label="Filtrar por tipo"
           >
             {Object.entries(TYPE_FILTER_LABELS).map(([value, label]) => (
@@ -219,7 +219,7 @@ export default function TransactionList({
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="bg-zinc-800 p-1.5 rounded text-white text-xs"
+            className="field-sm"
             aria-label="Filtrar por categoria"
           >
             <option value="">Todas as categorias</option>
@@ -233,7 +233,7 @@ export default function TransactionList({
           <select
             value={cardFilter}
             onChange={(e) => setCardFilter(e.target.value)}
-            className="bg-zinc-800 p-1.5 rounded text-white text-xs"
+            className="field-sm"
             aria-label="Filtrar por cartão"
           >
             <option value={CARD_FILTER_ALL}>Todos os cartões</option>
@@ -252,7 +252,7 @@ export default function TransactionList({
             placeholder="Buscar por descrição ou categoria..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="bg-zinc-800 p-1.5 rounded text-white text-xs flex-1 min-w-[180px] outline-none"
+            className="field-sm flex-1 min-w-[180px] basis-full sm:basis-auto"
           />
         </div>
 
@@ -326,7 +326,7 @@ export default function TransactionList({
         return (
           <div
             key={t.id}
-            className={`bg-zinc-800 p-3 rounded flex justify-between items-center gap-3 border-l-4 ${borderColor}`}
+            className={`surface-row p-3 flex flex-col gap-2.5 border-l-2 sm:flex-row sm:items-center sm:justify-between ${borderColor}`}
           >
             <div className="min-w-0">
               <p className="text-white font-bold truncate">
@@ -336,39 +336,39 @@ export default function TransactionList({
                 </span>
               </p>
 
-              <div className="text-xs flex gap-1.5 flex-wrap mt-1">
+              <div className="text-xs flex gap-1.5 flex-wrap mt-1.5">
                 {t.description && (
-                  <span className="bg-zinc-700/60 text-zinc-300 px-1.5 py-0.5 rounded font-medium">
+                  <span className="badge bg-zinc-700/50 text-zinc-300">
                     {t.category}
                   </span>
                 )}
                 {t.card && (
-                  <span className="bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded font-medium">
+                  <span className="badge bg-indigo-500/15 text-indigo-400">
                     💳 {cardNames[t.card] ?? 'Cartão'} — na fatura
                   </span>
                 )}
                 {t.isProvision && (
-                  <span className="bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded font-medium">
+                  <span className="badge bg-amber-500/15 text-amber-400">
                     Provisão
                   </span>
                 )}
                 {isReserve && (
-                  <span className="bg-sky-500/20 text-sky-400 px-1.5 py-0.5 rounded font-medium">
+                  <span className="badge bg-sky-500/15 text-sky-400">
                     Reserva
                   </span>
                 )}
                 {t.isReimbursement && (
-                  <span className="bg-zinc-600/40 text-zinc-300 px-1.5 py-0.5 rounded font-medium">
+                  <span className="badge bg-zinc-600/30 text-zinc-300">
                     Reembolso
                   </span>
                 )}
                 {t.isFixed && (
-                  <span className="bg-zinc-600/40 text-zinc-300 px-1.5 py-0.5 rounded font-medium">
+                  <span className="badge bg-zinc-600/30 text-zinc-300">
                     Fixo
                   </span>
                 )}
                 {t.isRecurring && (
-                  <span className="bg-violet-500/20 text-violet-400 px-1.5 py-0.5 rounded font-medium">
+                  <span className="badge bg-violet-500/15 text-violet-400">
                     🔁 {formatUntil(t.recurringUntil)}
                     {t.dueDay ? ` • vence dia ${t.dueDay}` : ''}
                   </span>
@@ -379,14 +379,14 @@ export default function TransactionList({
             <div className="flex gap-2 shrink-0">
               <button
                 onClick={() => setSelected(t)}
-                className="bg-blue-600 px-2 py-1 rounded text-white text-xs hover:bg-blue-700"
+                className="btn-ghost flex-1 bg-white/5 text-zinc-200 hover:text-white sm:flex-initial"
               >
                 Editar
               </button>
 
               <button
                 onClick={() => handleDelete(t.id)}
-                className="bg-red-600 px-2 py-1 rounded text-white text-xs hover:bg-red-700"
+                className="btn-ghost flex-1 text-red-400 hover:bg-red-500/10 hover:text-red-300 sm:flex-initial"
               >
                 Excluir
               </button>
