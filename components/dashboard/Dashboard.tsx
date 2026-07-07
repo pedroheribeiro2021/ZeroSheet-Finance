@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
 import Card from '@/components/ui/Card';
 import Modal from '@/components/ui/Modal';
+import PageLoading from '@/components/ui/PageLoading';
 
 import { getMonths, createMonth } from '@/core/services/month.service';
 import { getTransactions } from '@/core/services/transaction.service';
@@ -308,7 +309,7 @@ export default function Dashboard() {
       : null;
 
   if (!summary) {
-    return <div className="text-white p-6">Carregando...</div>;
+    return <PageLoading />;
   }
 
   const formatCurrency = (value: number): string => {
@@ -344,27 +345,27 @@ export default function Dashboard() {
   });
 
   return (
-    <div className="p-6 grid gap-4">
+    <div className="grid gap-4 p-4 sm:gap-5 sm:p-6">
       {activeMonth && (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={() => prevMonth && goToMonth(prevMonth)}
               disabled={!prevMonth}
-              className="rounded bg-zinc-900 px-3 py-2 text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+              className="btn-icon h-10 w-10"
               aria-label="Mês anterior"
             >
               ‹
             </button>
 
-            <h1 className="text-2xl font-bold text-white">
+            <h1 className="text-xl font-bold text-white sm:text-2xl">
               {formatMonthLabel(activeMonth.month, activeMonth.year)}
             </h1>
 
             <button
               onClick={() => nextMonth && goToMonth(nextMonth)}
               disabled={!nextMonth}
-              className="rounded bg-zinc-900 px-3 py-2 text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+              className="btn-icon h-10 w-10"
               aria-label="Próximo mês"
             >
               ›
@@ -377,7 +378,7 @@ export default function Dashboard() {
               const found = months.find((m) => monthKey(m) === e.target.value);
               if (found) goToMonth(found);
             }}
-            className="rounded bg-zinc-900 px-3 py-2 text-sm text-white outline-none"
+            className="field w-auto min-h-[44px] !py-2"
             aria-label="Selecionar mês"
           >
             {months.map((m) => (
@@ -389,13 +390,13 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
         <Card
           title="Entradas"
           value={formatCurrency(summary.totalIncome)}
           subtitle="Salário, extras e reembolsos — clique para ver cada lançamento"
           onClick={() => handleCardClick('income')}
-          className="border border-green-800"
+          className="border-l-2 border-l-green-500 max-sm:col-span-2"
         />
 
         <Card
@@ -438,7 +439,7 @@ export default function Dashboard() {
           value={formatCurrency(summary.reserveSpending)}
           subtitle="Abate das entradas, mas é patrimônio seu"
           onClick={() => handleCardClick('reserve')}
-          className="border border-sky-700"
+          className="border-l-2 border-l-sky-500"
         />
 
         <Card
@@ -446,11 +447,11 @@ export default function Dashboard() {
           value={formatCurrency(summary.total)}
           subtitle="O que ainda dá pra gastar: entradas − fixos − faturas − parcelas − provisões − reserva"
           onClick={() => handleCardClick('balance')}
-          className={
+          className={`max-sm:col-span-2 ${
             summary.total < 0
-              ? 'border border-red-700'
-              : 'border border-green-800'
-          }
+              ? 'border-l-2 border-l-red-500'
+              : 'border-l-2 border-l-green-500'
+          }`}
         />
 
         <Card
@@ -462,11 +463,12 @@ export default function Dashboard() {
               : 'Saldo ÷ semanas do mês (defina um cartão principal ★ para usar o ciclo da fatura)'
           }
           onClick={() => handleCardClick('weekly-budget')}
+          className="max-sm:col-span-2"
         />
       </div>
 
       {summary.envelopes.length > 0 && (
-        <div className="mt-6 bg-zinc-900 p-5 rounded-xl">
+        <div className="surface p-4 sm:p-5">
           <h2 className="text-base font-semibold text-white mb-1">
             Provisões do mês (envelopes)
           </h2>
@@ -498,9 +500,9 @@ export default function Dashboard() {
                         : `resta ${formatCurrency(env.remaining)}`}
                     </span>
                   </div>
-                  <div className="h-2 rounded bg-zinc-800 overflow-hidden">
+                  <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
                     <div
-                      className={`h-full rounded ${
+                      className={`h-full rounded-full transition-all ${
                         over
                           ? 'bg-red-500'
                           : pct > 80
@@ -517,13 +519,13 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="mt-6 bg-zinc-900 p-5 rounded-xl">
+      <div className="surface p-4 sm:p-5">
         <h2 className="text-base font-semibold text-white mb-4">
           Acompanhamento Semanal{primaryCard ? ` — ${primaryCard.name}` : ''}
         </h2>
 
         {!primaryCard && (
-          <p className="text-amber-400 text-sm">
+          <p className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-400">
             Marque um cartão como principal (★ na tela de Cartões) para
             ativar o acompanhamento semanal — ele é calculado só a partir das
             leituras da fatura do cartão principal.
@@ -547,7 +549,7 @@ export default function Dashboard() {
                 return (
                   <div
                     key={week.index}
-                    className="bg-zinc-800 rounded p-3 flex flex-wrap justify-between items-center gap-2"
+                    className="surface-row flex flex-col gap-2 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
                   >
                     <span className="text-white text-sm font-bold">
                       Semana {week.index}
@@ -558,36 +560,39 @@ export default function Dashboard() {
                         </span>
                       )}
                     </span>
-                    <span className="text-zinc-400 text-sm">
-                      Orçamento: {formatCurrency(summary.weeklyBudget)}
-                    </span>
-                    {entry?.isBaseline ? (
-                      <span className="text-zinc-400 text-sm italic">
-                        Leitura inicial (base)
+
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                      <span className="text-zinc-400 text-sm">
+                        Orçamento: {formatCurrency(summary.weeklyBudget)}
                       </span>
-                    ) : entry ? (
-                      <>
-                        <span className="text-white font-bold text-sm">
-                          Gasto: {formatCurrency(week.spent)}
+                      {entry?.isBaseline ? (
+                        <span className="badge bg-zinc-700/50 text-zinc-300">
+                          Leitura inicial (base)
                         </span>
-                        <span
-                          className={`font-bold text-sm ${diff >= 0 ? 'text-green-400' : 'text-red-400'}`}
-                        >
-                          {diff >= 0 ? '+' : ''}
-                          {formatCurrency(diff)}
+                      ) : entry ? (
+                        <>
+                          <span className="text-white font-bold text-sm">
+                            Gasto: {formatCurrency(week.spent)}
+                          </span>
+                          <span
+                            className={`font-bold text-sm ${diff >= 0 ? 'text-green-400' : 'text-red-400'}`}
+                          >
+                            {diff >= 0 ? '+' : ''}
+                            {formatCurrency(diff)}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-zinc-500 text-sm italic">
+                          sem leitura ainda
                         </span>
-                      </>
-                    ) : (
-                      <span className="text-zinc-500 text-sm italic">
-                        sem leitura ainda
-                      </span>
-                    )}
+                      )}
+                    </div>
                   </div>
                 );
               })}
             </div>
 
-            <div className="flex gap-2 items-center mb-4">
+            <div className="flex flex-col gap-2 mb-4 sm:flex-row sm:items-center">
               <input
                 type="text"
                 placeholder="Valor atual da fatura (ex.: 1200,50)"
@@ -595,28 +600,28 @@ export default function Dashboard() {
                 onChange={(e) =>
                   setReadingAmount(sanitizeAmountInput(e.target.value))
                 }
-                className="bg-zinc-800 text-white rounded px-3 py-2 text-sm flex-1 outline-none"
+                className="field flex-1 text-sm"
               />
               <button
                 onClick={handleAddReading}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm"
+                className="btn-primary w-full sm:w-auto"
               >
                 Lançar leitura
               </button>
             </div>
 
             {readings.length > 0 && (
-              <div className="grid gap-1">
+              <div className="grid gap-1.5">
                 <p className="text-zinc-500 text-xs mb-1">Histórico de leituras</p>
                 {readings.map((r) => (
-                  <div key={r.id} className="bg-zinc-800 rounded px-3 py-2 flex justify-between items-center">
-                    <span className="text-zinc-400 text-xs">
+                  <div key={r.id} className="surface-row flex justify-between items-center px-3 py-2 gap-2">
+                    <span className="text-zinc-400 text-xs shrink-0">
                       {new Date(r.read_at).toLocaleDateString('pt-BR')}
                     </span>
-                    <span className="text-white text-sm font-bold">{formatCurrency(Number(r.amount))}</span>
+                    <span className="text-white text-sm font-bold flex-1 text-right sm:text-left">{formatCurrency(Number(r.amount))}</span>
                     <button
                       onClick={() => handleDeleteReading(r.id)}
-                      className="text-red-500 hover:text-red-700 text-xs"
+                      className="btn-ghost text-red-400 hover:text-red-300 shrink-0"
                     >
                       Remover
                     </button>
@@ -628,15 +633,15 @@ export default function Dashboard() {
         )}
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        <div className="bg-zinc-900 p-5 rounded-xl">
+      <div className="grid gap-4 lg:grid-cols-2 sm:gap-5">
+        <div className="surface p-4 sm:p-5">
           <h2 className="text-base font-semibold text-white mb-4">
             Orçamento × Gasto por Semana
           </h2>
           <WeeklyBarChart weeks={chartWeeks} formatCurrency={formatCurrency} />
         </div>
 
-        <div className="bg-zinc-900 p-5 rounded-xl">
+        <div className="surface p-4 sm:p-5">
           <h2 className="text-base font-semibold text-white mb-4">
             Despesas por Categoria
           </h2>
@@ -660,7 +665,7 @@ export default function Dashboard() {
             {filteredTransactions.map((t) => (
               <div
                 key={t.id}
-                className="bg-zinc-800 rounded p-3 flex justify-between items-center gap-3"
+                className="surface-row p-3 flex justify-between items-center gap-3"
               >
                 <div className="min-w-0">
                   <p className="text-white font-bold truncate">
@@ -693,7 +698,7 @@ export default function Dashboard() {
               const disponivel = limite > 0 ? limite - fatura : null;
 
               return (
-                <div key={card.id} className="bg-zinc-800 rounded p-3 grid gap-1">
+                <div key={card.id} className="surface-row p-3 grid gap-1">
                   <p className="text-white font-bold">💳 {card.name}</p>
                   <p className="text-zinc-400 text-sm">
                     Fatura atual: {formatCurrency(fatura)}
@@ -723,7 +728,7 @@ export default function Dashboard() {
               const end = installmentEndLabel(i.startMonth, i.total_installments);
 
               return (
-                <div key={i.id} className="bg-zinc-800 rounded p-3 grid gap-1">
+                <div key={i.id} className="surface-row p-3 grid gap-1">
                   <p className="text-white font-bold">{i.description}</p>
                   <p className="text-orange-400 text-sm font-bold">
                     Parcela {i.currentInstallment}/{i.total_installments} —{' '}
@@ -750,14 +755,14 @@ export default function Dashboard() {
               { label: 'Provisões (envelopes)', value: -summary.envelopeSpending },
               { label: 'Reserva / Investimentos', value: -summary.reserveSpending },
             ].map((row) => (
-              <div key={row.label} className="bg-zinc-800 rounded p-3 flex justify-between">
+              <div key={row.label} className="surface-row p-3 flex justify-between">
                 <span className="text-white">{row.label}</span>
                 <span className={row.value < 0 ? 'text-red-400' : 'text-green-400'}>
                   {formatCurrency(row.value)}
                 </span>
               </div>
             ))}
-            <div className="bg-zinc-800 rounded p-3 flex justify-between border border-zinc-700">
+            <div className="surface-row p-3 flex justify-between border-white/10">
               <span className="text-white font-bold">Saldo do Mês</span>
               <span
                 className={`font-bold ${summary.total < 0 ? 'text-red-400' : 'text-green-400'}`}
@@ -770,15 +775,15 @@ export default function Dashboard() {
 
         {selectedCard === 'weekly-budget' && (
           <div className="grid gap-2">
-            <div className="bg-zinc-800 rounded p-3 flex justify-between">
+            <div className="surface-row p-3 flex justify-between">
               <span className="text-white">Saldo do mês</span>
               <span className="text-white font-bold">{formatCurrency(summary.total)}</span>
             </div>
-            <div className="bg-zinc-800 rounded p-3 flex justify-between">
+            <div className="surface-row p-3 flex justify-between">
               <span className="text-white">÷ semanas restantes do ciclo</span>
               <span className="text-white font-bold">{weeksRemaining}</span>
             </div>
-            <div className="bg-zinc-800 rounded p-3 flex justify-between border border-zinc-700">
+            <div className="surface-row p-3 flex justify-between border-white/10">
               <span className="text-white font-bold">Orçamento semanal</span>
               <span className="text-white font-bold">
                 {formatCurrency(summary.weeklyBudget)}
@@ -804,7 +809,7 @@ export default function Dashboard() {
                 total > 0 ? ((item.total / total) * 100).toFixed(1) : '0';
 
               return (
-                <div key={item.category} className="bg-zinc-800 rounded p-3">
+                <div key={item.category} className="surface-row p-3">
                   <div className="flex justify-between items-center">
                     <div>
                       <p className="text-white font-bold">{item.category}</p>
