@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 
 import TransactionForm from '@/components/transactions/TransactionForm';
 import TransactionList from '@/components/transactions/TransactionList';
+import PageLoading from '@/components/ui/PageLoading';
 import { mapTransaction } from '@/core/models/mappers';
 import { createMonth, getMonths } from '@/core/services/month.service';
 import { getTransactions } from '@/core/services/transaction.service';
@@ -53,12 +54,12 @@ export default function TransactionsPage() {
   }, []);
 
   if (!monthId) {
-    return <div className="p-6 text-white">Carregando...</div>;
+    return <PageLoading />;
   }
 
   return (
-    <div className="p-6 grid gap-4">
-      <h1 className="text-2xl font-bold text-white">Transações</h1>
+    <div className="grid gap-4 p-4 sm:gap-5 sm:p-6">
+      <h1 className="text-xl font-bold text-white sm:text-2xl">Transações</h1>
 
       <TransactionForm monthId={monthId} month={activeMonth} onCreated={load} />
       <TransactionList

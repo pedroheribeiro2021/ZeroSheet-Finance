@@ -38,40 +38,50 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-black">
-      <div className="bg-zinc-900 p-6 rounded w-full max-w-sm grid gap-4">
-        <h1 className="text-white text-2xl font-bold">Login</h1>
+    <div className="flex min-h-screen items-center justify-center p-4">
+      <div className="surface w-full max-w-sm grid gap-5 p-6 sm:p-8">
+        <div className="grid gap-1.5 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-lg font-bold text-white shadow-lg shadow-blue-950/40">
+            Z
+          </div>
+          <h1 className="mt-2 text-2xl font-bold text-white">Bem-vindo de volta</h1>
+          <p className="text-sm text-zinc-500">Entre na sua conta ZeroSheet</p>
+        </div>
 
-        <input
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="bg-zinc-800 p-3 rounded text-white"
-        />
+        <div className="grid gap-3">
+          <input
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+            className="field"
+          />
 
-        <input
-          type="password"
-          placeholder="Senha"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="bg-zinc-800 p-3 rounded text-white"
-        />
+          <input
+            type="password"
+            placeholder="Senha"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+            className="field"
+          />
+        </div>
 
-        {error && <p className="text-red-500 text-sm">{error}</p>}
+        {error && (
+          <p className="rounded-lg border border-red-500/20 bg-red-500/10 p-2.5 text-sm text-red-400">
+            {error}
+          </p>
+        )}
 
-        <button
-          onClick={handleLogin}
-          disabled={loading}
-          className="bg-blue-600 p-3 rounded text-white"
-        >
+        <button onClick={handleLogin} disabled={loading} className="btn-primary">
           {loading ? 'Entrando...' : 'Entrar'}
         </button>
 
         <button
           onClick={() => router.push('/register')}
-          className="text-zinc-400 text-sm"
+          className="text-zinc-400 text-sm hover:text-white transition"
         >
-          Criar conta
+          Não tem conta? <span className="text-blue-400">Criar conta</span>
         </button>
       </div>
     </div>

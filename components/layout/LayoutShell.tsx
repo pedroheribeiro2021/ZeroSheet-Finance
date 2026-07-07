@@ -61,11 +61,12 @@ export default function LayoutShell({
   const pageTitle = pageTitles[pathname] ?? 'ZeroSheet';
 
   return (
-    <div className="flex min-h-screen bg-black text-white">
+    <div className="flex min-h-screen text-white">
       {mobileOpen && (
         <button
           aria-label="Fechar menu"
-          className="fixed inset-0 z-30 bg-black/70 md:hidden"
+          style={{ animation: 'fade-in 150ms ease-out' }}
+          className="fixed inset-0 z-30 bg-black/70 backdrop-blur-sm md:hidden"
           onClick={() => setMobileOpen(false)}
         />
       )}

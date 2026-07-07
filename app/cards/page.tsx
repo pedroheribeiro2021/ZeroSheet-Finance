@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import CardForm from '@/components/cards/CardForm';
 import CardSnapshotForm from '@/components/cards/CardSnapshotForm';
 import CardList from '@/components/cards/CardList';
+import PageLoading from '@/components/ui/PageLoading';
 
 import { getCards } from '@/core/services/card.service';
 import { getCardSnapshots } from '@/core/services/cardSnapshot.service';
@@ -51,12 +52,12 @@ export default function CardsPage() {
   }, []);
 
   if (!monthId) {
-    return <div className="p-6 text-white">Carregando...</div>;
+    return <PageLoading />;
   }
 
   return (
-    <div className="p-6 grid gap-6">
-      <h1 className="text-2xl font-bold text-white">Cartões</h1>
+    <div className="grid gap-4 p-4 sm:gap-5 sm:p-6">
+      <h1 className="text-xl font-bold text-white sm:text-2xl">Cartões</h1>
 
       <CardForm onCreated={load} />
 

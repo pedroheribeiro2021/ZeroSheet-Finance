@@ -83,32 +83,32 @@ export default function InstallmentForm({
   };
 
   return (
-    <div className="bg-zinc-900 p-4 rounded grid gap-3">
+    <div className="surface grid gap-3 p-4 sm:p-5">
       <h2 className="font-bold text-white">Novo Parcelamento</h2>
 
-      <label className="grid gap-1 text-sm text-zinc-400">
+      <label className="field-label">
         Descrição
         <input
           placeholder="Ex: Celular Samsung"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          className="bg-zinc-800 p-2 rounded text-white"
+          className="field"
         />
       </label>
 
       <div className="grid grid-cols-2 gap-3">
-        <label className="grid gap-1 text-sm text-zinc-400">
+        <label className="field-label">
           Valor de cada parcela
           <input
             inputMode="decimal"
             placeholder="Ex: 703,20"
             value={amount}
             onChange={(e) => setAmount(sanitizeAmountInput(e.target.value))}
-            className="bg-zinc-800 p-2 rounded text-white"
+            className="field"
           />
         </label>
 
-        <label className="grid gap-1 text-sm text-zinc-400">
+        <label className="field-label">
           Número de parcelas
           <input
             type="number"
@@ -118,17 +118,17 @@ export default function InstallmentForm({
             onChange={(e) =>
               setTotalInstallments(Math.max(1, Number(e.target.value)))
             }
-            className="bg-zinc-800 p-2 rounded text-white"
+            className="field"
           />
         </label>
       </div>
 
-      <label className="grid gap-1 text-sm text-zinc-400">
+      <label className="field-label">
         Cartão onde foi parcelado
         <select
           value={cardId}
           onChange={(e) => setCardId(e.target.value)}
-          className="bg-zinc-800 p-2 rounded text-white"
+          className="field"
         >
           {cards.map((c) => (
             <option key={c.id} value={c.id}>
@@ -146,10 +146,7 @@ export default function InstallmentForm({
         terminar.
       </p>
 
-      <button
-        onClick={handleSubmit}
-        className="bg-blue-600 p-2 rounded text-white hover:bg-blue-700 font-medium"
-      >
+      <button onClick={handleSubmit} className="btn-primary">
         Salvar
       </button>
     </div>

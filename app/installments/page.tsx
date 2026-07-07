@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 
 import InstallmentForm from '@/components/installments/InstallmentForm';
 import InstallmentList from '@/components/installments/InstallmentList';
+import PageLoading from '@/components/ui/PageLoading';
 import { getInstallments } from '@/core/services/installment.service';
 import type { ActiveInstallment } from '@/core/services/installment.service';
 import { createMonth, getMonths } from '@/core/services/month.service';
@@ -48,12 +49,12 @@ export default function InstallmentsPage() {
   }, []);
 
   if (!monthId) {
-    return <div className="p-6 text-white">Carregando...</div>;
+    return <PageLoading />;
   }
 
   return (
-    <div className="p-6 grid gap-4">
-      <h1 className="text-2xl font-bold text-white">Parcelamentos</h1>
+    <div className="grid gap-4 p-4 sm:gap-5 sm:p-6">
+      <h1 className="text-xl font-bold text-white sm:text-2xl">Parcelamentos</h1>
 
       <InstallmentForm monthId={monthId} monthLabel={monthLabel} onCreated={load} />
       <InstallmentList installments={installments} onUpdated={load} />

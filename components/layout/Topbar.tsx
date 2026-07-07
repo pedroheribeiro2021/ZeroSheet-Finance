@@ -1,5 +1,7 @@
 'use client';
 
+import { Menu } from 'lucide-react';
+
 type TopbarProps = {
   pageTitle: string;
   userEmail: string;
@@ -11,28 +13,43 @@ export default function Topbar({
   userEmail,
   onMenuClick,
 }: TopbarProps) {
+  const initial = userEmail ? userEmail.charAt(0).toUpperCase() : '?';
+
   return (
-    <header className="sticky top-0 z-30 flex items-center justify-between border-b border-zinc-800 bg-black/90 px-4 py-4 backdrop-blur md:px-6">
-      <div className="flex items-center gap-3">
+    <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-white/[0.06] bg-black/80 px-4 py-3.5 backdrop-blur-md sm:px-6 sm:py-4">
+      <div className="flex min-w-0 items-center gap-3">
         <button
           onClick={onMenuClick}
-          className="rounded bg-zinc-900 px-3 py-2 text-white transition hover:bg-zinc-800 md:hidden"
+          className="btn-icon h-10 w-10 shrink-0 md:hidden"
           aria-label="Abrir menu"
         >
-          Menu
+          <Menu size={19} />
         </button>
 
-        <div>
-          <p className="text-sm text-zinc-400">ZeroSheet Finance</p>
-          <h1 className="text-xl font-bold text-white">{pageTitle}</h1>
+        <div className="min-w-0">
+          <p className="hidden text-xs font-medium text-zinc-500 sm:block">
+            ZeroSheet Finance
+          </p>
+          <h1 className="truncate text-lg font-bold text-white sm:text-xl">
+            {pageTitle}
+          </h1>
         </div>
       </div>
 
-      <div className="text-right">
-        <p className="text-xs text-zinc-500">Usuario logado</p>
-        <p className="max-w-[180px] truncate text-sm text-white md:max-w-xs">
-          {userEmail || 'Carregando...'}
-        </p>
+      <div className="flex shrink-0 items-center gap-2.5">
+        <div className="hidden text-right sm:block">
+          <p className="text-[11px] text-zinc-500">Logado como</p>
+          <p className="max-w-[200px] truncate text-sm font-medium text-white">
+            {userEmail || 'Carregando...'}
+          </p>
+        </div>
+
+        <div
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-zinc-700 to-zinc-800 text-sm font-bold text-white ring-1 ring-white/10"
+          title={userEmail}
+        >
+          {initial}
+        </div>
       </div>
     </header>
   );

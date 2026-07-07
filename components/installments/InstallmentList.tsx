@@ -48,7 +48,7 @@ export default function InstallmentList({ installments, onUpdated }: Props) {
   };
 
   return (
-    <div className="bg-zinc-900 p-4 rounded grid gap-2">
+    <div className="surface grid gap-2 p-4 sm:p-5">
       <h2 className="font-bold text-white">Parcelamentos ativos no mês</h2>
 
       {installments.length === 0 && (
@@ -64,7 +64,7 @@ export default function InstallmentList({ installments, onUpdated }: Props) {
         return (
           <div
             key={i.id}
-            className="flex justify-between items-center bg-zinc-800 p-3 rounded border-l-4 border-orange-500 gap-3"
+            className="surface-row flex flex-col gap-2.5 p-3 border-l-2 border-l-orange-500 sm:flex-row sm:items-center sm:justify-between"
           >
             <div className="min-w-0">
               <p className="text-white font-medium truncate">
@@ -74,23 +74,23 @@ export default function InstallmentList({ installments, onUpdated }: Props) {
                 </span>
               </p>
 
-              <div className="text-xs flex gap-1.5 flex-wrap mt-1">
-                <span className="bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded font-medium">
+              <div className="text-xs flex gap-1.5 flex-wrap mt-1.5">
+                <span className="badge bg-orange-500/15 text-orange-400">
                   Parcela vigente: {i.currentInstallment}/
                   {i.total_installments}
                 </span>
                 {start && (
-                  <span className="bg-zinc-600/40 text-zinc-300 px-1.5 py-0.5 rounded">
+                  <span className="badge bg-zinc-600/30 text-zinc-300">
                     Início: {start}
                   </span>
                 )}
                 {end && (
-                  <span className="bg-zinc-600/40 text-zinc-300 px-1.5 py-0.5 rounded">
+                  <span className="badge bg-zinc-600/30 text-zinc-300">
                     Última parcela: {end}
                   </span>
                 )}
                 {i.cards?.name && (
-                  <span className="bg-zinc-600/40 text-zinc-300 px-1.5 py-0.5 rounded">
+                  <span className="badge bg-zinc-600/30 text-zinc-300">
                     💳 {i.cards.name}
                   </span>
                 )}
@@ -99,7 +99,7 @@ export default function InstallmentList({ installments, onUpdated }: Props) {
 
             <button
               onClick={() => handleDelete(i.id)}
-              className="bg-red-600 px-2 py-1 rounded text-white text-xs hover:bg-red-700 shrink-0"
+              className="btn-ghost self-start text-red-400 hover:bg-red-500/10 hover:text-red-300 shrink-0 sm:self-auto"
             >
               Excluir
             </button>
