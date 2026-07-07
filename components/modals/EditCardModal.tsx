@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { updateCard } from '@/core/services/card.service';
 import { parseCurrencyInput } from '@/core/utils/number';
 import { useToast } from '@/components/ui/ToastProvider';
+import Modal from '@/components/ui/Modal';
 import { DBCard } from '@/core/types/database';
 
 type Props = {
@@ -47,21 +48,19 @@ export default function EditCardModal({ card, onClose, onUpdated }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-zinc-900 p-6 rounded w-full max-w-md grid gap-3">
-        <h2 className="text-white font-bold">Editar Cartão</h2>
-
-        <label className="grid gap-1 text-sm text-zinc-400">
+    <Modal open onClose={onClose} title="Editar Cartão">
+      <div className="grid gap-3">
+        <label className="field-label">
           Nome do cartão
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="bg-zinc-800 p-2 rounded text-white"
+            className="field"
           />
         </label>
 
         <div className="grid grid-cols-2 gap-3">
-          <label className="grid gap-1 text-sm text-zinc-400">
+          <label className="field-label">
             Dia de fechamento
             <input
               type="number"
@@ -69,11 +68,11 @@ export default function EditCardModal({ card, onClose, onUpdated }: Props) {
               max={31}
               value={closingDay}
               onChange={(e) => setClosingDay(Number(e.target.value))}
-              className="bg-zinc-800 p-2 rounded text-white"
+              className="field"
             />
           </label>
 
-          <label className="grid gap-1 text-sm text-zinc-400">
+          <label className="field-label">
             Dia de vencimento
             <input
               type="number"
@@ -81,45 +80,42 @@ export default function EditCardModal({ card, onClose, onUpdated }: Props) {
               max={31}
               value={dueDay}
               onChange={(e) => setDueDay(Number(e.target.value))}
-              className="bg-zinc-800 p-2 rounded text-white"
+              className="field"
             />
           </label>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <label className="grid gap-1 text-sm text-zinc-400">
+          <label className="field-label">
             Limite do cartão
             <input
               value={limitAmount}
               onChange={(e) => setLimitAmount(e.target.value)}
-              className="bg-zinc-800 p-2 rounded text-white"
+              className="field"
             />
           </label>
 
-          <label className="grid gap-1 text-sm text-zinc-400">
+          <label className="field-label">
             Cor
             <input
               type="color"
               value={color}
               onChange={(e) => setColor(e.target.value)}
-              className="bg-zinc-800 h-10 rounded"
+              className="h-11 w-full rounded-xl border border-zinc-700/80 bg-zinc-800/80 p-1"
             />
           </label>
         </div>
 
         <div className="flex gap-2 mt-2">
-          <button
-            onClick={handleSave}
-            className="bg-green-600 px-3 py-1 rounded"
-          >
+          <button onClick={handleSave} className="btn-success flex-1">
             Salvar
           </button>
 
-          <button onClick={onClose} className="bg-zinc-700 px-3 py-1 rounded">
+          <button onClick={onClose} className="btn-secondary flex-1">
             Cancelar
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

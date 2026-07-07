@@ -57,28 +57,30 @@ export default function CardSnapshotForm({
   };
 
   return (
-    <div className="bg-zinc-900 p-4 rounded">
-      <h2 className="text-white font-bold mb-4">Atualizar Faturas</h2>
+    <div className="surface p-4 sm:p-5">
+      <h2 className="text-white font-bold mb-1">Atualizar Faturas</h2>
+      <p className="text-zinc-500 text-xs mb-4">
+        Lança automaticamente uma leitura para o acompanhamento semanal.
+      </p>
 
-      <div className="grid gap-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         {cards.map((card) => (
-          <input
-            key={card.id}
-            placeholder={card.name}
-            value={values[card.id] ?? ''}
-            inputMode="decimal"
-            onChange={(e) =>
-              handleChange(card.id, sanitizeAmountInput(e.target.value))
-            }
-            className="p-2 rounded bg-zinc-800 text-white"
-          />
+          <label key={card.id} className="field-label">
+            {card.name}
+            <input
+              placeholder="Ex: 1200,50"
+              value={values[card.id] ?? ''}
+              inputMode="decimal"
+              onChange={(e) =>
+                handleChange(card.id, sanitizeAmountInput(e.target.value))
+              }
+              className="field"
+            />
+          </label>
         ))}
       </div>
 
-      <button
-        onClick={handleSave}
-        className="mt-4 bg-blue-600 px-4 py-2 rounded text-white hover:bg-blue-700"
-      >
+      <button onClick={handleSave} className="btn-primary mt-4 w-full sm:w-auto">
         Salvar Faturas
       </button>
     </div>

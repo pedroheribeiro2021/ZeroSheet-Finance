@@ -45,21 +45,21 @@ export default function CardForm({ onCreated }: { onCreated?: () => void }) {
   };
 
   return (
-    <div className="bg-zinc-900 p-4 rounded grid gap-3">
+    <div className="surface grid gap-3 p-4 sm:p-5">
       <h2 className="text-white font-bold">Novo Cartão</h2>
 
-      <label className="grid gap-1 text-sm text-zinc-400">
+      <label className="field-label">
         Nome do cartão
         <input
           placeholder="Ex: Nubank"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="bg-zinc-800 p-2 rounded text-white"
+          className="field"
         />
       </label>
 
       <div className="grid grid-cols-2 gap-3">
-        <label className="grid gap-1 text-sm text-zinc-400">
+        <label className="field-label">
           Dia de fechamento da fatura
           <input
             type="number"
@@ -67,11 +67,11 @@ export default function CardForm({ onCreated }: { onCreated?: () => void }) {
             max={31}
             value={closingDay}
             onChange={(e) => setClosingDay(Number(e.target.value))}
-            className="bg-zinc-800 p-2 rounded text-white"
+            className="field"
           />
         </label>
 
-        <label className="grid gap-1 text-sm text-zinc-400">
+        <label className="field-label">
           Dia de vencimento
           <input
             type="number"
@@ -79,37 +79,34 @@ export default function CardForm({ onCreated }: { onCreated?: () => void }) {
             max={31}
             value={dueDay}
             onChange={(e) => setDueDay(Number(e.target.value))}
-            className="bg-zinc-800 p-2 rounded text-white"
+            className="field"
           />
         </label>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <label className="grid gap-1 text-sm text-zinc-400">
+        <label className="field-label">
           Limite do cartão
           <input
             placeholder="Ex: 5000,00"
             value={limitAmount}
             onChange={(e) => setLimitAmount(e.target.value)}
-            className="bg-zinc-800 p-2 rounded text-white"
+            className="field"
           />
         </label>
 
-        <label className="grid gap-1 text-sm text-zinc-400">
+        <label className="field-label">
           Cor
           <input
             type="color"
             value={color}
             onChange={(e) => setColor(e.target.value)}
-            className="bg-zinc-800 h-10 rounded"
+            className="h-11 w-full rounded-xl border border-zinc-700/80 bg-zinc-800/80 p-1"
           />
         </label>
       </div>
 
-      <button
-        onClick={handleSubmit}
-        className="bg-blue-600 p-2 rounded text-white"
-      >
+      <button onClick={handleSubmit} className="btn-primary">
         Salvar Cartão
       </button>
     </div>
