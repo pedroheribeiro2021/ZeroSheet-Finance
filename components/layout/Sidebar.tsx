@@ -2,31 +2,26 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import {
+  LayoutDashboard,
+  ArrowLeftRight,
+  Layers,
+  CreditCard,
+  LogOut,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
 
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/ToastProvider';
 
-const items = [
-  {
-    label: 'Dashboard',
-    href: '/dashboard',
-    shortLabel: 'DB',
-  },
-  {
-    label: 'Transações',
-    href: '/transactions',
-    shortLabel: 'TR',
-  },
-  {
-    label: 'Parcelamentos',
-    href: '/installments',
-    shortLabel: 'PA',
-  },
-  {
-    label: 'Cartões',
-    href: '/cards',
-    shortLabel: 'CT',
-  },
+const items: { label: string; href: string; icon: LucideIcon }[] = [
+  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { label: 'Transações', href: '/transactions', icon: ArrowLeftRight },
+  { label: 'Parcelamentos', href: '/installments', icon: Layers },
+  { label: 'Cartões', href: '/cards', icon: CreditCard },
 ];
 
 type SidebarProps = {
@@ -53,67 +48,82 @@ export default function Sidebar({
     router.refresh();
   };
 
+  const showLabels = !collapsed || mobileOpen;
+
   return (
     <aside
       className={`
     fixed inset-y-0 left-0 z-40
     flex flex-col
-    border-r border-zinc-800
+    border-r border-white/[0.06]
     bg-zinc-950
-    p-4
-    transition-all duration-300
+    p-3
+    shadow-2xl shadow-black/50
+    transition-transform duration-300 ease-out
+    md:shadow-none md:transition-[width]
 
     ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
 
     md:translate-x-0
     ${collapsed ? 'md:w-20' : 'md:w-64'}
-    w-64
+    w-72 max-w-[80vw]
   `}
     >
-      <div className="mb-8 flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="truncate text-xl font-bold text-white">
-            {collapsed && !mobileOpen ? 'ZS' : 'ZeroSheet'}
-          </h1>
+      <div className="mb-6 flex items-center justify-between gap-2 px-1 pt-1">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 font-bold text-white shadow-lg shadow-blue-950/40">
+            Z
+          </div>
+          {showLabels && (
+            <h1 className="truncate text-lg font-bold text-white">ZeroSheet</h1>
+          )}
         </div>
 
         <button
           onClick={onToggleCollapse}
-          className="hidden rounded bg-zinc-900 px-3 py-2 text-white transition hover:bg-zinc-800 md:block"
+          className="btn-icon hidden h-9 w-9 md:flex"
           aria-label={collapsed ? 'Expandir sidebar' : 'Colapsar sidebar'}
         >
-          {collapsed ? '->' : '<-'}
+          {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
         </button>
 
         <button
           onClick={onCloseMobile}
-          className="rounded bg-zinc-900 px-3 py-2 text-white transition hover:bg-zinc-800 md:hidden"
+          className="btn-icon h-9 w-9 md:hidden"
           aria-label="Fechar menu"
         >
-          X
+          <X size={18} />
         </button>
       </div>
 
-      <nav className="grid gap-2">
+      <nav className="grid gap-1">
         {items.map((item) => {
           const active = pathname === item.href;
+          const Icon = item.icon;
 
           return (
             <Link
               key={item.href}
               href={item.href}
               onClick={onCloseMobile}
-              className={`flex items-center gap-3 rounded p-3 transition ${
+              className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
                 active
-                  ? 'bg-blue-600 text-white'
-                  : 'text-zinc-300 hover:bg-zinc-900'
-              } ${collapsed ? 'justify-center md:px-2' : ''}`}
+                  ? 'bg-blue-600/15 text-white'
+                  : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+              } ${collapsed ? 'md:justify-center md:px-2' : ''}`}
               title={collapsed && !mobileOpen ? item.label : undefined}
             >
-              <span className="text-xs font-bold tracking-wide text-zinc-200">
-                {item.shortLabel}
-              </span>
-              {(!collapsed || mobileOpen) && <span>{item.label}</span>}
+              <span
+                className={`absolute top-1/2 left-0 h-5 w-1 -translate-y-1/2 rounded-r-full bg-blue-500 transition-opacity ${
+                  active ? 'opacity-100' : 'opacity-0'
+                }`}
+              />
+              <Icon
+                size={19}
+                strokeWidth={2}
+                className={`shrink-0 ${active ? 'text-blue-400' : 'text-zinc-500 group-hover:text-zinc-300'}`}
+              />
+              {showLabels && <span className="truncate">{item.label}</span>}
             </Link>
           );
         })}
@@ -121,11 +131,12 @@ export default function Sidebar({
 
       <button
         onClick={handleLogout}
-        className={`mt-auto rounded bg-red-600 p-3 text-white transition hover:bg-red-700 ${
-          collapsed ? 'md:px-2' : ''
+        className={`mt-auto flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-red-400 transition hover:bg-red-500/10 hover:text-red-300 ${
+          collapsed ? 'md:justify-center md:px-2' : ''
         }`}
       >
-        {collapsed && !mobileOpen ? 'Out' : 'Logout'}
+        <LogOut size={19} strokeWidth={2} className="shrink-0" />
+        {showLabels && <span>Sair</span>}
       </button>
     </aside>
   );
