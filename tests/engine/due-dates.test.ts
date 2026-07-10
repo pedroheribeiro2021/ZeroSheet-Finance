@@ -133,4 +133,13 @@ describe('getDueItems', () => {
 
     expect(getDueItems(transactions, today)).toHaveLength(1);
   });
+
+  it('paidAt sobrepõe o status calculado por data, mesmo atrasada', () => {
+    const transactions: Transaction[] = [
+      makeTransaction({ id: 'paid-overdue', dueDay: 5, paidAt: '2026-07-06T10:00:00Z' }),
+    ];
+
+    const items = getDueItems(transactions, today);
+    expect(items[0].status).toBe('paid');
+  });
 });

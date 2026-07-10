@@ -67,7 +67,9 @@ export function getDueItems(
       (startOfDay(dueDate).getTime() - now.getTime()) / 86_400_000,
     );
 
-    const status = classifyDueStatus(dueDate, today);
+    const status: DueStatus = transaction.paidAt
+      ? 'paid'
+      : classifyDueStatus(dueDate, today);
 
     if (status === 'upcoming' && daysUntil > horizonDays) continue;
 
