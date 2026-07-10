@@ -33,6 +33,7 @@ import { DBCard, DBCardSnapshot, DBCardReading, DBMonth } from '@/core/types/dat
 import { Transaction, Week } from '@/core/types/finance';
 import WeeklyBarChart from './WeeklyBarChart';
 import CategoryBarChart from './CategoryBarChart';
+import DueDatesPanel from './DueDatesPanel';
 
 function formatMonthLabel(month: number, year: number): string {
   const raw = new Intl.DateTimeFormat('pt-BR', {
@@ -344,6 +345,12 @@ export default function Dashboard() {
     };
   });
 
+  const now = new Date();
+  const isCurrentMonth =
+    !!activeMonth &&
+    activeMonth.month === now.getMonth() + 1 &&
+    activeMonth.year === now.getFullYear();
+
   return (
     <div className="grid gap-4 p-4 sm:gap-5 sm:p-6">
       {activeMonth && (
@@ -517,6 +524,15 @@ export default function Dashboard() {
             })}
           </div>
         </div>
+      )}
+
+      {isCurrentMonth && activeMonth && (
+        <DueDatesPanel
+          transactions={transactions}
+          month={activeMonth.month}
+          year={activeMonth.year}
+          onChanged={() => loadMonthData(activeMonth)}
+        />
       )}
 
       <div className="surface p-4 sm:p-5">
