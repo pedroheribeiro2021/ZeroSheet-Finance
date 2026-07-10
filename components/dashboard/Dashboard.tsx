@@ -31,6 +31,7 @@ import { getReadings, addReading, deleteReading } from '@/core/services/cardRead
 import { sanitizeAmountInput } from '@/core/utils/number';
 import { DBCard, DBCardSnapshot, DBCardReading, DBMonth } from '@/core/types/database';
 import { Transaction, Week } from '@/core/types/finance';
+import { getDueItems } from '@/core/engine/dueDates';
 import WeeklyBarChart from './WeeklyBarChart';
 import CategoryBarChart from './CategoryBarChart';
 import DueDatesPanel from './DueDatesPanel';
@@ -351,6 +352,10 @@ export default function Dashboard() {
     activeMonth.month === now.getMonth() + 1 &&
     activeMonth.year === now.getFullYear();
 
+  const dueTodayItems = isCurrentMonth
+    ? getDueItems(transactions, now).filter((i) => i.status === 'today')
+    : [];
+
   return (
     <div className="grid gap-4 p-4 sm:gap-5 sm:p-6">
       {activeMonth && (
@@ -394,6 +399,18 @@ export default function Dashboard() {
               </option>
             ))}
           </select>
+        </div>
+      )}
+
+      {dueTodayItems.length > 0 && (
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-400">
+          🔔 Vence hoje:{' '}
+          {dueTodayItems
+            .map(
+              (i) =>
+                `${i.transaction.description || i.transaction.category} (${formatCurrency(i.transaction.amount)})`,
+            )
+            .join(', ')}
         </div>
       )}
 
