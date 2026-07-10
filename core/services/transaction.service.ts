@@ -61,6 +61,17 @@ export async function updateTransaction(id: string, data: any) {
   if (error) throw error;
 }
 
+export async function markTransactionPaid(
+  id: string,
+  paidAt: string = new Date().toISOString(),
+) {
+  await updateTransaction(id, { paid_at: paidAt });
+}
+
+export async function unmarkTransactionPaid(id: string) {
+  await updateTransaction(id, { paid_at: null });
+}
+
 export async function deleteTransaction(id: string) {
   const user = await getCurrentUser();
 
