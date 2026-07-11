@@ -87,6 +87,19 @@ export type DBCardReading = {
   created_at: string | null;
 };
 
+/**
+ * Assinatura de Web Push do navegador/dispositivo do usuário.
+ * Tabela ainda não existe (migration `20260710_02`).
+ */
+export type DBPushSubscription = {
+  id: string;
+  user_id: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  created_at: string | null;
+};
+
 export type DBInstallment = {
   id: string;
   user_id: string | null;

@@ -1,8 +1,13 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getDueItems, resolveDueDate, DueItem, DueStatus } from '@/core/engine/dueDates';
 import { markTransactionPaid, unmarkTransactionPaid } from '@/core/services/transaction.service';
+import {
+  getPushSubscriptionState,
+  subscribeToPush,
+  unsubscribeFromPush,
+} from '@/core/services/push.service';
 import { useToast } from '@/components/ui/ToastProvider';
 import { Transaction } from '@/core/types/finance';
 
@@ -37,6 +42,37 @@ export default function DueDatesPanel({
 }: DueDatesPanelProps) {
   const { showToast } = useToast();
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [pushState, setPushState] = useState<
+    'unsupported' | 'denied' | 'subscribed' | 'not-subscribed' | 'loading'
+  >('loading');
+
+  useEffect(() => {
+    getPushSubscriptionState()
+      .then(setPushState)
+      .catch(() => setPushState('unsupported'));
+  }, []);
+
+  const handleTogglePush = async () => {
+    setPushState('loading');
+    try {
+      if (pushState === 'subscribed') {
+        await unsubscribeFromPush();
+        showToast('Notificações desativadas');
+      } else {
+        await subscribeToPush();
+        showToast('Notificações ativadas');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast(
+        err instanceof Error ? err.message : 'Não foi possível atualizar as notificações',
+        'error',
+      );
+    } finally {
+      const state = await getPushSubscriptionState().catch(() => 'unsupported' as const);
+      setPushState(state);
+    }
+  };
 
   const today = useMemo(() => new Date(), []);
 
@@ -107,9 +143,28 @@ export default function DueDatesPanel({
 
   return (
     <div className="surface p-4 sm:p-5">
-      <h2 className="mb-1 text-base font-semibold text-white">
-        Vencimentos do mês
-      </h2>
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-base font-semibold text-white">Vencimentos do mês</h2>
+
+        {pushState !== 'unsupported' && (
+          <button
+            onClick={handleTogglePush}
+            disabled={pushState === 'loading' || pushState === 'denied'}
+            className="btn-ghost text-xs"
+            title={
+              pushState === 'denied'
+                ? 'Notificações bloqueadas nas configurações do navegador'
+                : undefined
+            }
+          >
+            {pushState === 'subscribed'
+              ? '🔕 Desativar notificações'
+              : pushState === 'denied'
+                ? '🔕 Notificações bloqueadas'
+                : '🔔 Ativar notificações'}
+          </button>
+        )}
+      </div>
       <p className="mb-4 text-xs text-zinc-500">
         Despesas fixas/recorrentes com dia de vencimento cadastrado.
       </p>
