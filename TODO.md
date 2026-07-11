@@ -14,6 +14,68 @@ indicado entre parênteses). Itens novos vão sempre no topo da seção
 - [ ] Ordenação por arrastar (drag-and-drop) na lista de transações — por ora
       há seletor de ordenação (entradas primeiro/recentes/valor/categoria).
 
+## Feitos em 2026-07-10 — Controle de vencimento das despesas fixas
+
+Pedido do usuário (2026-07-10), implementado em 5 passos/branches a partir de
+`develop` (`feat/due-dates-engine` → `feat/paid-at-transactions` →
+`feat/due-dates-panel` → `feat/due-today-banner` → `feat/push-notifications`).
+
+### Passo 1 — Engine puro
+- [x] `core/engine/dueDates.ts`: `resolveDueDate` (clamp de dia no mês),
+      `classifyDueStatus` (overdue/today/upcoming) e `getDueItems` (resolve +
+      classifica despesas fixas/recorrentes com `dueDay`, dentro de um
+      horizonte de dias). 12 testes em `tests/engine/due-dates.test.ts`.
+
+### Passo 2 — "Pago"
+- [x] Coluna `transactions.paid_at timestamptz null` (migration
+      `20260710_01_transactions_paid_at.sql`) — **APLICADA EM PRODUÇÃO**
+      (2026-07-10, via MCP, a pedido do usuário).
+- [x] `paidAt` em `core/types/finance.ts`, mapper e
+      `markTransactionPaid`/`unmarkTransactionPaid` em
+      `transaction.service.ts` (testados em `tests/services/`).
+- [x] `getDueItems` usa `paidAt` para sobrepor o status calculado por data.
+
+### Passo 3 — UI gerencial
+- [x] `components/dashboard/DueDatesPanel.tsx`: grade de dias do mês
+      (destaca hoje, ponto colorido por status) + lista agrupada (vence hoje /
+      próximos 7 dias / vencido / pago) com marcar/desmarcar pago. Plugado no
+      `Dashboard.tsx`, só quando o mês visualizado é o mês corrente real.
+      Verificado manualmente no navegador (login real, toggle pago/despago).
+
+### Passo 4 — Lembrete in-app
+- [x] Banner "🔔 Vence hoje: ..." no topo do dashboard quando há item com
+      status `today` no mês corrente. Não depende de push. Verificado
+      manualmente no navegador.
+
+### Passo 5 — Notificações push (Web Push/VAPID)
+- [x] Service worker `public/sw.js` (push + notificationclick) e
+      `core/services/push.service.ts` (registro, permissão via clique
+      explícito em "🔔 Ativar notificações" no `DueDatesPanel`, subscribe/
+      unsubscribe) + `core/services/pushSubscription.service.ts` (CRUD
+      Supabase).
+- [x] Migration `supabase/migrations/20260710_02_push_subscriptions.sql`
+      (tabela `push_subscriptions`, RLS por usuário) — **NÃO APLICADA**.
+- [x] `supabase/functions/send-due-notifications/index.ts` (Edge Function
+      Deno): lê `due_day` do dia no mês corrente de cada usuário (não pago),
+      envia Web Push via `npm:web-push` com as chaves VAPID. **NÃO
+      IMPLANTADA**.
+- [x] `supabase/functions/send-due-notifications/schedule.sql`: SQL de
+      agendamento via `pg_cron`/`pg_net` (não executado).
+- [ ] **Depende do usuário para ativar em produção**:
+      1. Gerar chaves VAPID (`npx web-push generate-vapid-keys`).
+      2. Preencher `NEXT_PUBLIC_VAPID_PUBLIC_KEY` no `.env.local` (e nas env
+         vars da Vercel) — ver comentário no `.env.local`.
+      3. Aplicar a migration `20260710_02_push_subscriptions.sql`.
+      4. Implantar a função (`supabase functions deploy
+         send-due-notifications` ou MCP `deploy_edge_function`) e definir os
+         secrets `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`
+         (`supabase secrets set ...`).
+      5. Habilitar as extensões `pg_cron`/`pg_net` e rodar
+         `schedule.sql` (com `<PROJECT_REF>`/`<SERVICE_ROLE_KEY>`
+         preenchidos) no SQL Editor.
+      6. Não testado ponta a ponta (sem ambiente Deno local) — revisar a
+         Edge Function antes de confiar 100% nela em produção.
+
 ## Feitos em 2026-07-06 — ajuste fino do Acompanhamento Semanal
 
 ### Gasto da semana = delta entre leituras (bug da 1ª leitura corrigido)
