@@ -1,7 +1,7 @@
 -- Controle de vencimento das despesas fixas: assinaturas de Web Push por
 -- usuário (um dispositivo/navegador = uma linha). Usada pela Edge Function
 -- agendada que dispara o aviso do dia do vencimento.
--- NÃO APLICADA EM PRODUÇÃO — aguardando confirmação.
+-- Aplicada em produção em 2026-07-12.
 
 CREATE TABLE IF NOT EXISTS public.push_subscriptions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

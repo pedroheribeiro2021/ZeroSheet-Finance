@@ -2,8 +2,12 @@
 // recorrentes que vencem HOJE (due_day = dia de hoje), ainda não pagas
 // (paid_at IS NULL), no mês corrente de cada usuário.
 //
-// NÃO IMPLANTADA/AGENDADA em produção — ver supabase/functions/send-due-notifications/schedule.sql
-// e o TODO.md para o passo a passo de ativação.
+// Chamada pelo pg_cron via supabase/functions/send-due-notifications/schedule.sql.
+//
+// Autenticação própria via CRON_SECRET (não a service_role key): a função
+// roda com verify_jwt=false porque o chamador é o pg_cron, não um usuário
+// autenticado, e a service_role key nunca deve ficar em texto puro na
+// tabela cron.job.
 //
 // Env vars exigidas (Edge Function secrets, não .env.local do Next.js):
 //   SUPABASE_URL               — já injetada automaticamente pelo runtime
@@ -11,11 +15,20 @@
 //   VAPID_PUBLIC_KEY
 //   VAPID_PRIVATE_KEY
 //   VAPID_SUBJECT               — ex.: "mailto:voce@exemplo.com"
+//   CRON_SECRET                 — token aleatório exigido no header
+//                                  Authorization: Bearer <CRON_SECRET>
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import webpush from 'npm:web-push@3';
 
-Deno.serve(async () => {
+Deno.serve(async (req: Request) => {
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  const authHeader = req.headers.get('authorization');
+
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+    return new Response('Unauthorized', { status: 401 });
+  }
+
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY');

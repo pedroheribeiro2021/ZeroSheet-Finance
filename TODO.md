@@ -54,27 +54,27 @@ Pedido do usuário (2026-07-10), implementado em 5 passos/branches a partir de
       unsubscribe) + `core/services/pushSubscription.service.ts` (CRUD
       Supabase).
 - [x] Migration `supabase/migrations/20260710_02_push_subscriptions.sql`
-      (tabela `push_subscriptions`, RLS por usuário) — **NÃO APLICADA**.
+      (tabela `push_subscriptions`, RLS por usuário) — **APLICADA em
+      produção** (2026-07-12).
 - [x] `supabase/functions/send-due-notifications/index.ts` (Edge Function
       Deno): lê `due_day` do dia no mês corrente de cada usuário (não pago),
-      envia Web Push via `npm:web-push` com as chaves VAPID. **NÃO
-      IMPLANTADA**.
+      envia Web Push via `npm:web-push` com as chaves VAPID. Autenticação
+      própria via `CRON_SECRET` (header `Authorization: Bearer`), com
+      `verify_jwt=false` — a service_role key nunca fica em texto puro na
+      tabela `cron.job`. **IMPLANTADA** (2026-07-12).
 - [x] `supabase/functions/send-due-notifications/schedule.sql`: SQL de
-      agendamento via `pg_cron`/`pg_net` (não executado).
-- [ ] **Depende do usuário para ativar em produção**:
-      1. Gerar chaves VAPID (`npx web-push generate-vapid-keys`).
-      2. Preencher `NEXT_PUBLIC_VAPID_PUBLIC_KEY` no `.env.local` (e nas env
-         vars da Vercel) — ver comentário no `.env.local`.
-      3. Aplicar a migration `20260710_02_push_subscriptions.sql`.
-      4. Implantar a função (`supabase functions deploy
-         send-due-notifications` ou MCP `deploy_edge_function`) e definir os
-         secrets `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`
-         (`supabase secrets set ...`).
-      5. Habilitar as extensões `pg_cron`/`pg_net` e rodar
-         `schedule.sql` (com `<PROJECT_REF>`/`<SERVICE_ROLE_KEY>`
-         preenchidos) no SQL Editor.
-      6. Não testado ponta a ponta (sem ambiente Deno local) — revisar a
-         Edge Function antes de confiar 100% nela em produção.
+      agendamento via `pg_cron`/`pg_net`. **EXECUTADO em produção**
+      (2026-07-12), job `send-due-notifications-daily` às 11:00 UTC
+      (08:00 America/Sao_Paulo).
+- [x] Chaves VAPID geradas, `NEXT_PUBLIC_VAPID_PUBLIC_KEY` preenchida no
+      `.env.local` e nas env vars da Vercel (production/preview/dev).
+      Secrets da função (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
+      `VAPID_SUBJECT`, `CRON_SECRET`) setados via `supabase secrets set`.
+      pg_cron/pg_net habilitados no projeto.
+- [ ] Não testado ponta a ponta em produção (sem ambiente Deno local) —
+      confirmar no dia de um vencimento real que a notificação chega, e
+      revisar logs da função (`supabase functions logs
+      send-due-notifications`) após a primeira execução agendada.
 
 ## Feitos em 2026-07-06 — ajuste fino do Acompanhamento Semanal
 
