@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
@@ -41,9 +42,14 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center p-4">
       <div className="surface w-full max-w-sm grid gap-5 p-6 sm:p-8">
         <div className="grid gap-1.5 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-lg font-bold text-white shadow-lg shadow-blue-950/40">
-            Z
-          </div>
+          <Image
+            src="/logo-mark.png"
+            alt="ZeroSheet"
+            width={48}
+            height={48}
+            className="mx-auto h-12 w-12 rounded-2xl shadow-lg shadow-black/40"
+            priority
+          />
           <h1 className="mt-2 text-2xl font-bold text-white">Bem-vindo de volta</h1>
           <p className="text-sm text-zinc-500">Entre na sua conta ZeroSheet</p>
         </div>
