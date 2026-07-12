@@ -25,6 +25,9 @@ export type Transaction = {
   /** Reserva/poupança: abate do total, mas separado de custos fixos. */
   isReserve?: boolean;
 
+  /** Vencimento do mês pago (controle de vencimento); null/undefined = não pago. */
+  paidAt?: string | null;
+
   card?: string | null;
 
   createdAt: string; // 👈 ESSENCIAL

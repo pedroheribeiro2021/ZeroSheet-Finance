@@ -29,6 +29,9 @@ export type DBTransaction = {
   /** Idem is_reimbursement: ainda não existe no schema (item 3). */
   is_reserve?: boolean | null;
 
+  /** Controle de vencimento: quando o vencimento do mês foi pago; null = não pago. */
+  paid_at?: string | null;
+
   card: string | null;
 };
 
@@ -81,6 +84,19 @@ export type DBCardReading = {
   card_id: string | null;
   amount: number;
   read_at: string;
+  created_at: string | null;
+};
+
+/**
+ * Assinatura de Web Push do navegador/dispositivo do usuário.
+ * Tabela ainda não existe (migration `20260710_02`).
+ */
+export type DBPushSubscription = {
+  id: string;
+  user_id: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
   created_at: string | null;
 };
 

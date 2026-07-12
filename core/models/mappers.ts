@@ -18,6 +18,7 @@ export function mapTransaction(db: DBTransaction): Transaction {
     recurringUntil: db.recurring_until ?? null,
     isReimbursement: db.is_reimbursement ?? false,
     isReserve: db.is_reserve ?? false,
+    paidAt: db.paid_at ?? null,
 
     card: db.card,
 

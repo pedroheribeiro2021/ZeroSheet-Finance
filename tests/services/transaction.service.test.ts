@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { copyRecurringTransactions } from '@/core/services/transaction.service';
+import {
+  copyRecurringTransactions,
+  markTransactionPaid,
+  unmarkTransactionPaid,
+} from '@/core/services/transaction.service';
 
 const mockUser = { id: 'user-1' };
 
@@ -18,6 +22,7 @@ const makeBuilder = (result: { data?: unknown; error?: unknown }) => {
   const builder: Record<string, unknown> = {
     select: vi.fn(() => builder),
     insert: vi.fn(() => builder),
+    update: vi.fn(() => builder),
     eq: vi.fn(() => builder),
     order: vi.fn(() => builder),
     single: vi.fn(() => Promise.resolve(result)),
@@ -158,5 +163,46 @@ describe('copyRecurringTransactions', () => {
       .mockReturnValueOnce(insertBuilder as never);
 
     await expect(copyRecurringTransactions('m-from', 'm-to')).rejects.toThrow('insert failed');
+  });
+});
+
+describe('markTransactionPaid', () => {
+  it('atualiza paid_at com o valor informado', async () => {
+    const updateBuilder = makeBuilder({ error: null });
+    vi.mocked(supabase.from).mockReturnValueOnce(updateBuilder as never);
+
+    await markTransactionPaid('t1', '2026-07-10T12:00:00.000Z');
+
+    expect(updateBuilder.update).toHaveBeenCalledWith({
+      paid_at: '2026-07-10T12:00:00.000Z',
+    });
+  });
+
+  it('usa a data atual quando paidAt não é informado', async () => {
+    const updateBuilder = makeBuilder({ error: null });
+    vi.mocked(supabase.from).mockReturnValueOnce(updateBuilder as never);
+
+    await markTransactionPaid('t1');
+
+    const call = vi.mocked(updateBuilder.update as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(typeof call.paid_at).toBe('string');
+    expect(new Date(call.paid_at).toString()).not.toBe('Invalid Date');
+  });
+
+  it('lança erro quando o usuário não está autenticado', async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue(null);
+
+    await expect(markTransactionPaid('t1')).rejects.toThrow('Usuário não autenticado');
+  });
+});
+
+describe('unmarkTransactionPaid', () => {
+  it('limpa paid_at (volta a não pago)', async () => {
+    const updateBuilder = makeBuilder({ error: null });
+    vi.mocked(supabase.from).mockReturnValueOnce(updateBuilder as never);
+
+    await unmarkTransactionPaid('t1');
+
+    expect(updateBuilder.update).toHaveBeenCalledWith({ paid_at: null });
   });
 });
