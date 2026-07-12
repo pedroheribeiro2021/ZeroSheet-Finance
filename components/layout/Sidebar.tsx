@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -71,9 +72,14 @@ export default function Sidebar({
     >
       <div className="mb-6 flex items-center justify-between gap-2 px-1 pt-1">
         <div className="flex min-w-0 items-center gap-2.5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 font-bold text-white shadow-lg shadow-blue-950/40">
-            Z
-          </div>
+          <Image
+            src="/logo-mark.png"
+            alt="ZeroSheet"
+            width={36}
+            height={36}
+            className="h-9 w-9 shrink-0 rounded-xl shadow-lg shadow-black/40"
+            priority
+          />
           {showLabels && (
             <h1 className="truncate text-lg font-bold text-white">ZeroSheet</h1>
           )}
