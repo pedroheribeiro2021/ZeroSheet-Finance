@@ -1,11 +1,12 @@
 -- Agendamento (cron) da Edge Function send-due-notifications.
--- NÃO EXECUTADO — rodar manualmente no SQL Editor do Supabase depois de:
+-- Rodar manualmente no SQL Editor do Supabase depois de:
 --   1. Implantar a função (`supabase functions deploy send-due-notifications`
---      ou via MCP `deploy_edge_function`);
+--      ou via MCP `deploy_edge_function`) com verify_jwt=false;
 --   2. Definir os secrets da função: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY,
---      VAPID_SUBJECT (`supabase secrets set ...`);
---   3. Substituir <PROJECT_REF> e <SERVICE_ROLE_KEY> abaixo pelos valores
---      reais do projeto (Settings → API).
+--      VAPID_SUBJECT, CRON_SECRET (`supabase secrets set ...`);
+--   3. Substituir <PROJECT_REF> e <CRON_SECRET> abaixo pelos valores reais
+--      (o CRON_SECRET é o mesmo valor setado no passo 2 — um token
+--      aleatório gerado por você, nunca a service_role key).
 --
 -- Requer as extensões pg_cron e pg_net habilitadas no projeto
 -- (Database → Extensions).
@@ -22,7 +23,7 @@ select
         url := 'https://<PROJECT_REF>.supabase.co/functions/v1/send-due-notifications',
         headers := jsonb_build_object(
           'Content-Type', 'application/json',
-          'Authorization', 'Bearer <SERVICE_ROLE_KEY>'
+          'Authorization', 'Bearer <CRON_SECRET>'
         ),
         body := '{}'::jsonb
       ) as request_id;
