@@ -271,6 +271,61 @@ export function getWeeksRemainingInCycle(
   return Math.max(1, Math.ceil(daysUntilClosing / 7));
 }
 
+export type KnownCharge = {
+  /** Valor da assinatura/parcela conhecida (já é compromisso fixo). */
+  amount: number;
+  /** Dia do mês (1-31) em que ela é lançada na fatura (dueDay/billing_day). */
+  day: number | null | undefined;
+};
+
+/**
+ * Soma, por semana do ciclo, os valores de assinaturas/parcelas com dia de
+ * lançamento conhecido (`dueDay` em transações recorrentes/fixas,
+ * `billing_day` em parcelamentos) que caem no cartão principal. O dia é
+ * resolvido dentro do mês/ano informado (mesma aproximação de
+ * `resolveDueDate` em `core/engine/dueDates.ts` — não tenta encaixar o dia
+ * num ciclo que atravesse a virada do mês).
+ */
+export function knownChargesByWeek(
+  charges: KnownCharge[],
+  year: number,
+  month: number,
+  closingDay: number,
+): Map<number, number> {
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const byWeek = new Map<number, number>();
+
+  for (const charge of charges) {
+    if (!charge.day || charge.amount <= 0) continue;
+
+    const date = new Date(year, month - 1, Math.min(charge.day, daysInMonth));
+    const weekIndex = weekIndexInCycle(date, closingDay);
+
+    byWeek.set(
+      weekIndex,
+      toCurrency((byWeek.get(weekIndex) ?? 0) + charge.amount),
+    );
+  }
+
+  return byWeek;
+}
+
+/**
+ * Desconta do gasto bruto (delta de leituras) as assinaturas/parcelas
+ * conhecidas que caíram na mesma semana — o que sobra é o gasto livre/
+ * variável, comparável ao orçamento semanal (que já exclui esses valores no
+ * cálculo mensal). Nunca fica negativo.
+ */
+export function adjustWeeklySpendForKnownCharges(
+  weeklySpend: WeeklySpend[],
+  knownCharges: Map<number, number>,
+): WeeklySpend[] {
+  return weeklySpend.map((w) => ({
+    ...w,
+    spent: toCurrency(Math.max(0, w.spent - (knownCharges.get(w.weekIndex) ?? 0))),
+  }));
+}
+
 export function calculateWeekly(
   snapshots: Snapshot[],
   transactions: Transaction[],
