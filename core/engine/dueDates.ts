@@ -1,6 +1,6 @@
 import { Transaction } from '../types/finance';
 
-export type DueStatus = 'overdue' | 'today' | 'upcoming' | 'paid';
+export type DueStatus = 'overdue' | 'today' | 'upcoming' | 'paid' | 'automatic';
 
 export type DueItem = {
   transaction: Transaction;
@@ -45,6 +45,11 @@ export function classifyDueStatus(
  * despesas fixas/recorrentes com `dueDay` definido, ordenados por data.
  * `horizonDays` limita quantos dias à frente entram como `upcoming`
  * (atrasadas e a de hoje sempre entram, independente do horizonte).
+ *
+ * Despesa vinculada a um cartão (`transaction.card`) é cobrada
+ * automaticamente na fatura — não existe "atrasado" nem ação de "marcar como
+ * pago" pra ela, então seu status é sempre `automatic` (sobrepõe `paidAt` e a
+ * data), e ela nunca é cortada pelo horizonte (é só informativa).
  */
 export function getDueItems(
   transactions: Transaction[],
@@ -67,9 +72,11 @@ export function getDueItems(
       (startOfDay(dueDate).getTime() - now.getTime()) / 86_400_000,
     );
 
-    const status: DueStatus = transaction.paidAt
-      ? 'paid'
-      : classifyDueStatus(dueDate, today);
+    const status: DueStatus = transaction.card
+      ? 'automatic'
+      : transaction.paidAt
+        ? 'paid'
+        : classifyDueStatus(dueDate, today);
 
     if (status === 'upcoming' && daysUntil > horizonDays) continue;
 
