@@ -1,3 +1,4 @@
+-- APLICADA EM PRODUÇÃO em 2026-07-12 (via MCP).
 -- Dia do mês em que a parcela é lançada na fatura do cartão (1-31).
 -- Usado para excluir o valor da parcela do "gasto da semana" no
 -- acompanhamento semanal (delta de card_readings) quando ela cai dentro do

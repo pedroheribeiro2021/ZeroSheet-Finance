@@ -14,9 +14,6 @@ indicado entre parênteses). Itens novos vão sempre no topo da seção
       campo novo `billing_day` (dia de lançamento na fatura).
 - [ ] Ordenação por arrastar (drag-and-drop) na lista de transações — por ora
       há seletor de ordenação (entradas primeiro/recentes/valor/categoria).
-- [ ] **Migration pendente de aplicar em produção**: `billing_day` em
-      `installments` (ver "Feitos em 2026-07-12" abaixo) — preparada, não
-      aplicada ainda (aguardando confirmação do usuário).
 
 ## Feitos em 2026-07-12 — Assinaturas/parcelas não contam como gasto livre da semana
 
@@ -31,10 +28,7 @@ descontado à parte no saldo do mês (`fixedCosts`/`installmentSpending` em
       dia em que a parcela é lançada na fatura. Migration
       `supabase/migrations/20260712_01_installments_billing_day.sql`
       (`ADD COLUMN IF NOT EXISTS` + CHECK idempotente via `DO $$`).
-      **NÃO aplicada em produção ainda** — preparada, aguardando eu confirmar
-      (o insert de `createInstallment` já envia `billing_day`, então a
-      migration precisa ser aplicada antes desta branch ir pra produção,
-      senão a criação de parcelamento quebra).
+      **APLICADA EM PRODUÇÃO** (2026-07-12, via MCP, a pedido do usuário).
 - [x] `DBInstallment.billing_day` em `core/types/database.ts`;
       `createInstallment` (`installment.service.ts`) aceita o campo opcional.
 - [x] `InstallmentForm.tsx`: campo "Dia em que cai na fatura (opcional)";
