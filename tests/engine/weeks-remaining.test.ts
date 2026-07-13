@@ -14,8 +14,10 @@ describe('getWeeksRemainingInCycle', () => {
     expect(getWeeksRemainingInCycle(4, new Date(2026, 7, 3))).toBe(1);
   });
 
-  it('no próprio dia do fechamento → resta 1 semana (última do ciclo que está fechando)', () => {
-    expect(getWeeksRemainingInCycle(4, new Date(2026, 7, 4))).toBe(1);
+  it('no próprio dia do fechamento → já é o início do próximo ciclo, restam 5 semanas', () => {
+    // o dia do fechamento já conta como o novo ciclo (ver cycleStartFor) —
+    // não como a última semana do ciclo que está terminando.
+    expect(getWeeksRemainingInCycle(4, new Date(2026, 7, 4))).toBe(5);
   });
 
   it('mês curto (fevereiro, fecha dia 28): início do ciclo → restam 4 semanas', () => {
