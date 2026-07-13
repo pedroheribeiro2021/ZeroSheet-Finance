@@ -13,6 +13,7 @@ import { getTransactions } from '@/core/services/transaction.service';
 import { mapTransaction } from '@/core/models/mappers';
 import { calculateSummary } from '@/core/engine/calculations';
 import {
+  getCycleRange,
   getWeeksInCurrentCycle,
   getWeeksInMonth,
   getWeeksRemainingInCycle,
@@ -27,8 +28,7 @@ import { groupTransactionsByCategory } from '@/core/utils/groupTransactions';
 import { getInstallments } from '@/core/services/installment.service';
 import type { ActiveInstallment } from '@/core/services/installment.service';
 import { getCards } from '@/core/services/card.service';
-import { getReadings, addReading, deleteReading } from '@/core/services/cardReading.service';
-import { sanitizeAmountInput } from '@/core/utils/number';
+import { getReadings, deleteReading } from '@/core/services/cardReading.service';
 import { DBCard, DBCardSnapshot, DBCardReading, DBMonth } from '@/core/types/database';
 import { Transaction, Week } from '@/core/types/finance';
 import { getDueItems } from '@/core/engine/dueDates';
@@ -103,7 +103,7 @@ export default function Dashboard() {
   const [weeklySpend, setWeeklySpend] = useState<WeeklySpend[]>([]);
   const [cycleWeeks, setCycleWeeks] = useState(0);
   const [weeksRemaining, setWeeksRemaining] = useState(0);
-  const [readingAmount, setReadingAmount] = useState('');
+  const [cycleRange, setCycleRange] = useState<{ start: Date; end: Date } | null>(null);
   const [currentMonthId, setCurrentMonthId] = useState<string | null>(null);
   const [primaryCard, setPrimaryCardState] = useState<DBCard | null>(null);
   const [installments, setInstallments] = useState<ActiveInstallment[]>([]);
@@ -188,6 +188,13 @@ export default function Dashboard() {
           : getWeeksInMonth(month.month, month.year);
       setCycleWeeks(weeksInCycle);
 
+      // Intervalo real do ciclo vigente (não os blocos de 7 dias, que podem
+      // ultrapassar o fechamento real) — exibido no card de Orçamento
+      // Semanal pra deixar claro qual ciclo está sendo usado no cálculo.
+      setCycleRange(
+        primary?.closing_day != null ? getCycleRange(primary.closing_day) : null,
+      );
+
       // leituras do cartão principal no mês corrente — única fonte do
       // acompanhamento semanal exibido (nunca soma faturas de dois cartões).
       let weeklySpendData: WeeklySpend[] = [];
@@ -230,21 +237,6 @@ export default function Dashboard() {
       );
 
       setSummary(result);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleAddReading = async () => {
-    if (!primaryCard || !currentMonthId || !activeMonth) return;
-    const amount = parseFloat(readingAmount.replace(',', '.'));
-    if (isNaN(amount) || amount < 0) return;
-    try {
-      await addReading({ month_id: currentMonthId, card_id: primaryCard.id, amount });
-      setReadingAmount('');
-      // recarrega tudo: uma nova leitura muda as semanas restantes e,
-      // portanto, o orçamento semanal vigente.
-      await loadMonthData(activeMonth);
     } catch (err) {
       console.error(err);
     }
@@ -482,13 +474,114 @@ export default function Dashboard() {
           title="Orçamento Semanal"
           value={formatCurrency(summary.weeklyBudget)}
           subtitle={
-            primaryCard?.closing_day != null
-              ? `Saldo ÷ ${weeksRemaining} semanas restantes do ciclo (${primaryCard.name} fecha dia ${primaryCard.closing_day})`
+            primaryCard?.closing_day != null && cycleRange
+              ? `Ciclo vigente: ${formatDateShort(cycleRange.start)}–${formatDateShort(cycleRange.end)} · Saldo ÷ ${weeksRemaining} semanas restantes (${primaryCard.name} fecha dia ${primaryCard.closing_day})`
               : 'Saldo ÷ semanas do mês (defina um cartão principal ★ para usar o ciclo da fatura)'
           }
           onClick={() => handleCardClick('weekly-budget')}
           className="max-sm:col-span-2"
         />
+      </div>
+
+      <div className="surface p-4 sm:p-5">
+        <h2 className="text-base font-semibold text-white mb-4">
+          Acompanhamento Semanal{primaryCard ? ` — ${primaryCard.name}` : ''}
+        </h2>
+
+        {!primaryCard && (
+          <p className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-400">
+            Marque um cartão como principal (★ na tela de Cartões) para
+            ativar o acompanhamento semanal — ele é calculado só a partir das
+            leituras da fatura do cartão principal.
+          </p>
+        )}
+
+        {primaryCard && (
+          <>
+            <div className="grid gap-2 mb-4">
+              {chartWeeks.map((week) => {
+                const entry = weeklySpend.find(
+                  (w) => w.weekIndex === week.index,
+                );
+                const diff = summary.weeklyBudget - week.spent;
+
+                const { start, end } =
+                  primaryCard.closing_day != null
+                    ? weekDateRangeInCycle(week.index, primaryCard.closing_day)
+                    : { start: null, end: null };
+
+                return (
+                  <div
+                    key={week.index}
+                    className="surface-row flex flex-col gap-2 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
+                  >
+                    <span className="text-white text-sm font-bold">
+                      Semana {week.index}
+                      {start && end && (
+                        <span className="text-zinc-500 font-normal">
+                          {' '}
+                          ({formatDateShort(start)}–{formatDateShort(end)})
+                        </span>
+                      )}
+                    </span>
+
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                      <span className="text-zinc-400 text-sm">
+                        Orçamento: {formatCurrency(summary.weeklyBudget)}
+                      </span>
+                      {entry ? (
+                        <>
+                          {entry.isBaseline && (
+                            <span className="badge bg-zinc-700/50 text-zinc-300">
+                              Leitura inicial (base)
+                            </span>
+                          )}
+                          {(!entry.isBaseline || week.spent > 0) && (
+                            <>
+                              <span className="text-white font-bold text-sm">
+                                Gasto: {formatCurrency(week.spent)}
+                              </span>
+                              <span
+                                className={`font-bold text-sm ${diff >= 0 ? 'text-green-400' : 'text-red-400'}`}
+                              >
+                                {diff >= 0 ? '+' : ''}
+                                {formatCurrency(diff)}
+                              </span>
+                            </>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-zinc-500 text-sm italic">
+                          sem leitura ainda
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {readings.length > 0 && (
+              <div className="grid gap-1.5">
+                <p className="text-zinc-500 text-xs mb-1">Histórico de leituras</p>
+                {readings.map((r) => (
+                  <div key={r.id} className="surface-row flex justify-between items-center px-3 py-2 gap-2">
+                    <span className="text-zinc-400 text-xs shrink-0">
+                      {new Date(r.read_at).toLocaleDateString('pt-BR')}
+                    </span>
+                    <span className="text-white text-sm font-bold flex-1 text-right sm:text-left">{formatCurrency(Number(r.amount))}</span>
+                    <button
+                      onClick={() => handleDeleteReading(r.id)}
+                      className="btn-ghost text-red-400 hover:text-red-300 shrink-0"
+                    >
+                      Remover
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {summary.envelopes.length > 0 && (
@@ -551,120 +644,6 @@ export default function Dashboard() {
           onChanged={() => loadMonthData(activeMonth)}
         />
       )}
-
-      <div className="surface p-4 sm:p-5">
-        <h2 className="text-base font-semibold text-white mb-4">
-          Acompanhamento Semanal{primaryCard ? ` — ${primaryCard.name}` : ''}
-        </h2>
-
-        {!primaryCard && (
-          <p className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-400">
-            Marque um cartão como principal (★ na tela de Cartões) para
-            ativar o acompanhamento semanal — ele é calculado só a partir das
-            leituras da fatura do cartão principal.
-          </p>
-        )}
-
-        {primaryCard && (
-          <>
-            <div className="grid gap-2 mb-4">
-              {chartWeeks.map((week) => {
-                const entry = weeklySpend.find(
-                  (w) => w.weekIndex === week.index,
-                );
-                const diff = summary.weeklyBudget - week.spent;
-
-                const { start, end } =
-                  primaryCard.closing_day != null
-                    ? weekDateRangeInCycle(week.index, primaryCard.closing_day)
-                    : { start: null, end: null };
-
-                return (
-                  <div
-                    key={week.index}
-                    className="surface-row flex flex-col gap-2 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
-                  >
-                    <span className="text-white text-sm font-bold">
-                      Semana {week.index}
-                      {start && end && (
-                        <span className="text-zinc-500 font-normal">
-                          {' '}
-                          ({formatDateShort(start)}–{formatDateShort(end)})
-                        </span>
-                      )}
-                    </span>
-
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                      <span className="text-zinc-400 text-sm">
-                        Orçamento: {formatCurrency(summary.weeklyBudget)}
-                      </span>
-                      {entry?.isBaseline ? (
-                        <span className="badge bg-zinc-700/50 text-zinc-300">
-                          Leitura inicial (base)
-                        </span>
-                      ) : entry ? (
-                        <>
-                          <span className="text-white font-bold text-sm">
-                            Gasto: {formatCurrency(week.spent)}
-                          </span>
-                          <span
-                            className={`font-bold text-sm ${diff >= 0 ? 'text-green-400' : 'text-red-400'}`}
-                          >
-                            {diff >= 0 ? '+' : ''}
-                            {formatCurrency(diff)}
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-zinc-500 text-sm italic">
-                          sem leitura ainda
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="flex flex-col gap-2 mb-4 sm:flex-row sm:items-center">
-              <input
-                type="text"
-                placeholder="Valor atual da fatura (ex.: 1200,50)"
-                value={readingAmount}
-                onChange={(e) =>
-                  setReadingAmount(sanitizeAmountInput(e.target.value))
-                }
-                className="field flex-1 text-sm"
-              />
-              <button
-                onClick={handleAddReading}
-                className="btn-primary w-full sm:w-auto"
-              >
-                Lançar leitura
-              </button>
-            </div>
-
-            {readings.length > 0 && (
-              <div className="grid gap-1.5">
-                <p className="text-zinc-500 text-xs mb-1">Histórico de leituras</p>
-                {readings.map((r) => (
-                  <div key={r.id} className="surface-row flex justify-between items-center px-3 py-2 gap-2">
-                    <span className="text-zinc-400 text-xs shrink-0">
-                      {new Date(r.read_at).toLocaleDateString('pt-BR')}
-                    </span>
-                    <span className="text-white text-sm font-bold flex-1 text-right sm:text-left">{formatCurrency(Number(r.amount))}</span>
-                    <button
-                      onClick={() => handleDeleteReading(r.id)}
-                      className="btn-ghost text-red-400 hover:text-red-300 shrink-0"
-                    >
-                      Remover
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </div>
 
       <div className="grid gap-4 lg:grid-cols-2 sm:gap-5">
         <div className="surface p-4 sm:p-5">
@@ -808,6 +787,14 @@ export default function Dashboard() {
 
         {selectedCard === 'weekly-budget' && (
           <div className="grid gap-2">
+            {cycleRange && (
+              <div className="surface-row p-3 flex justify-between">
+                <span className="text-white">Ciclo vigente</span>
+                <span className="text-white font-bold">
+                  {formatDateShort(cycleRange.start)}–{formatDateShort(cycleRange.end)}
+                </span>
+              </div>
+            )}
             <div className="surface-row p-3 flex justify-between">
               <span className="text-white">Saldo do mês</span>
               <span className="text-white font-bold">{formatCurrency(summary.total)}</span>

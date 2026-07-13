@@ -42,17 +42,18 @@ describe('weeklySpendFromReadings', () => {
     expect(result[1].spent).toBe(0);
   });
 
-  it('leituras na mesma semana usam a última (maior read_at) para o cálculo do bloco', () => {
+  it('leituras na mesma semana somam os deltas em vez de descartar as intermediárias', () => {
     const readings: CardReading[] = [
-      { amount: 500, read_at: '2024-07-01T08:00:00Z' }, // dia 1 → semana 1
-      { amount: 700, read_at: '2024-07-03T08:00:00Z' }, // dia 3 → semana 1 (sobrescreve)
+      { amount: 500, read_at: '2024-07-01T08:00:00Z' }, // dia 1 → semana 1 (base)
+      { amount: 700, read_at: '2024-07-03T08:00:00Z' }, // dia 3 → semana 1 (delta 200)
     ];
 
     const result = weeklySpendFromReadings(readings);
 
-    // só 1 semana, e é a base (sem segunda leitura para calcular delta)
+    // continua sendo a semana da leitura inicial (isBaseline), mas o delta
+    // da segunda leitura dentro da mesma semana não pode desaparecer.
     expect(result).toHaveLength(1);
-    expect(result[0]).toEqual({ weekIndex: 1, spent: 0, isBaseline: true });
+    expect(result[0]).toEqual({ weekIndex: 1, spent: 200, isBaseline: true });
   });
 
   it('três semanas consecutivas calculam deltas corretamente a partir da base', () => {
@@ -70,7 +71,7 @@ describe('weeklySpendFromReadings', () => {
   });
 
   it('com closingDay, agrupa pela semana do ciclo (não pelo dia do mês calendário)', () => {
-    // fecha dia 4 → ciclo começa dia 5; 05–11/07 = semana 1, 12–18/07 = semana 2
+    // fecha dia 4 → ciclo começa no próprio dia 4; 04–10/07 = semana 1, 11–17/07 = semana 2
     const readings: CardReading[] = [
       { amount: 995.32, read_at: '2026-07-05T10:00:00Z' }, // leitura inicial da fatura
       { amount: 1200, read_at: '2026-07-14T10:00:00Z' },   // dentro do ciclo, semana 2
@@ -84,5 +85,27 @@ describe('weeklySpendFromReadings', () => {
       spent: 204.68,
       isBaseline: false,
     });
+  });
+
+  it('caso real: 4 leituras na semana 1 não podem esconder o gasto (regressão)', () => {
+    // Dados reais do C6 (fecha dia 4) em julho/2026: quatro atualizações
+    // caíram todas na semana 1 do ciclo (04–10/07) e uma na semana 2
+    // (11–17/07). Antes da correção, a semana 1 virava "base" com a última
+    // leitura (1275.49) e a semana 2 mostrava só 290.28 — escondendo os
+    // 558.79 realmente gastos entre a leitura inicial e a última da semana 1.
+    const readings: CardReading[] = [
+      { amount: 716.7, read_at: '2026-07-06T15:00:32.912Z' },
+      { amount: 1088.48, read_at: '2026-07-07T14:21:32.211Z' },
+      { amount: 1157.54, read_at: '2026-07-08T17:40:07.932Z' },
+      { amount: 1275.49, read_at: '2026-07-10T13:22:03.1Z' },
+      { amount: 1565.77, read_at: '2026-07-12T22:39:37.692Z' },
+    ];
+
+    const result = weeklySpendFromReadings(readings, 4);
+
+    expect(result).toEqual([
+      { weekIndex: 1, spent: 558.79, isBaseline: true },
+      { weekIndex: 2, spent: 290.28, isBaseline: false },
+    ]);
   });
 });
