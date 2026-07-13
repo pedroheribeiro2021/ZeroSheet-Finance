@@ -31,6 +31,7 @@ export default function InstallmentForm({
 
   const [cards, setCards] = useState<DBCard[]>([]);
   const [cardId, setCardId] = useState('');
+  const [billingDay, setBillingDay] = useState('');
 
   useEffect(() => {
     async function loadCards() {
@@ -68,11 +69,13 @@ export default function InstallmentForm({
         installment_amount: parsed,
         total_installments: totalInstallments,
         start_month_id: monthId,
+        billing_day: billingDay ? Number(billingDay) : null,
       });
 
       setDescription('');
       setAmount('');
       setTotalInstallments(1);
+      setBillingDay('');
 
       showToast('Parcelamento salvo com sucesso');
       onCreated?.();
@@ -123,27 +126,43 @@ export default function InstallmentForm({
         </label>
       </div>
 
-      <label className="field-label">
-        Cartão onde foi parcelado
-        <select
-          value={cardId}
-          onChange={(e) => setCardId(e.target.value)}
-          className="field"
-        >
-          {cards.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="field-label">
+          Cartão onde foi parcelado
+          <select
+            value={cardId}
+            onChange={(e) => setCardId(e.target.value)}
+            className="field"
+          >
+            {cards.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field-label">
+          Dia em que cai na fatura (opcional)
+          <input
+            type="number"
+            min={1}
+            max={31}
+            placeholder="Ex: 10"
+            value={billingDay}
+            onChange={(e) => setBillingDay(e.target.value)}
+            className="field"
+          />
+        </label>
+      </div>
 
       <p className="text-xs text-zinc-500">
         A 1ª parcela conta {monthLabel ? `em ${monthLabel}` : 'neste mês'}.
         {parsed > 0 &&
           ` Total da compra: ${formatBRL(total)} (${totalInstallments}× de ${formatBRL(parsed)}).`}{' '}
         A parcela compromete a fatura do cartão selecionado todo mês até
-        terminar.
+        terminar. Informar o dia de lançamento ajuda o Acompanhamento Semanal
+        a não contar a parcela como gasto livre da semana.
       </p>
 
       <button onClick={handleSubmit} className="btn-primary">
