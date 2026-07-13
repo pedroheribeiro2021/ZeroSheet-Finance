@@ -94,6 +94,11 @@ export default function InstallmentList({ installments, onUpdated }: Props) {
                     💳 {i.cards.name}
                   </span>
                 )}
+                {i.billing_day && (
+                  <span className="badge bg-zinc-600/30 text-zinc-300">
+                    Cai na fatura dia {i.billing_day}
+                  </span>
+                )}
               </div>
             </div>
 

@@ -1,6 +1,6 @@
 # TODO — Zerosheet
 
-Atualizado em 2026-07-06. Checkbox marcado = já implementado (commit/PR
+Atualizado em 2026-07-12. Checkbox marcado = já implementado (commit/PR
 indicado entre parênteses). Itens novos vão sempre no topo da seção
 "Pendentes" da categoria correta.
 
@@ -10,9 +10,45 @@ indicado entre parênteses). Itens novos vão sempre no topo da seção
 - [ ] Avaliar integração/import de extrato (OFX/CSV) para reduzir lançamento
       manual de gastos de mercado/gasolina — hoje o fluxo é: provisionar e ir
       lançando os gastos reais na mesma categoria (o envelope abate sozinho).
-- [ ] Edição de parcelamento (hoje só criar/excluir).
+- [ ] Edição de parcelamento (hoje só criar/excluir) — agora inclui também o
+      campo novo `billing_day` (dia de lançamento na fatura).
 - [ ] Ordenação por arrastar (drag-and-drop) na lista de transações — por ora
       há seletor de ordenação (entradas primeiro/recentes/valor/categoria).
+
+## Feitos em 2026-07-12 — Assinaturas/parcelas não contam como gasto livre da semana
+
+Pedido do usuário (2026-07-12): assinaturas e parcelamentos lançados na
+fatura estavam inflando o "gasto da semana" do Acompanhamento Semanal, que é
+puramente o delta bruto entre leituras da fatura (`weeklySpendFromReadings`)
+— esse delta não distinguia gasto discricionário de um compromisso fixo já
+descontado à parte no saldo do mês (`fixedCosts`/`installmentSpending` em
+`calculateSummary`).
+
+- [x] Novo campo `installments.billing_day` (dia do mês, 1-31, nullable) —
+      dia em que a parcela é lançada na fatura. Migration
+      `supabase/migrations/20260712_01_installments_billing_day.sql`
+      (`ADD COLUMN IF NOT EXISTS` + CHECK idempotente via `DO $$`).
+      **APLICADA EM PRODUÇÃO** (2026-07-12, via MCP, a pedido do usuário).
+- [x] `DBInstallment.billing_day` em `core/types/database.ts`;
+      `createInstallment` (`installment.service.ts`) aceita o campo opcional.
+- [x] `InstallmentForm.tsx`: campo "Dia em que cai na fatura (opcional)";
+      `InstallmentList.tsx`: badge "Cai na fatura dia N" quando preenchido.
+- [x] `core/engine/weekly.ts`: `knownChargesByWeek(charges, year, month,
+      closingDay)` resolve o dia (`dueDay`/`billing_day`) dentro do mês
+      corrente (mesma aproximação de `resolveDueDate` em `dueDates.ts`) e soma
+      por semana do ciclo (`weekIndexInCycle`); `adjustWeeklySpendForKnownCharges`
+      desconta esse valor do delta bruto por semana (nunca negativo).
+      Testado em `tests/engine/known-charges.test.ts`.
+- [x] `Dashboard.tsx` (`loadMonthData`): monta as cargas conhecidas a partir
+      de transações fixas/recorrentes de despesa com `dueDay` E parcelas
+      ativas com `billing_day`, **só as vinculadas ao cartão principal**
+      (`card`/`card_id` === id do cartão principal), e ajusta
+      `weeklySpend` antes de exibir. Seção "Acompanhamento Semanal" mostra
+      uma nota "(não conta R$ X de assinaturas/parcelas lançadas na fatura)"
+      quando há desconto na semana.
+- [x] Limitação conhecida: só funciona para quem preencher `dueDay`
+      (assinatura) ou `billing_day` (parcelamento) — sem essa data, o valor
+      continua contando como gasto da semana até o usuário preencher.
 
 ## Feitos em 2026-07-10 — Controle de vencimento das despesas fixas
 

@@ -112,6 +112,14 @@ export type DBInstallment = {
   current_installment: number | null;
   start_month_id: string | null;
 
+  /**
+   * Dia do mês em que a parcela é lançada na fatura (1-31). Ainda não existe
+   * em produção até a migration `20260712_01` ser aplicada; null = sem data
+   * definida (a parcela não é excluída do delta bruto do acompanhamento
+   * semanal até o usuário preencher).
+   */
+  billing_day?: number | null;
+
   created_at: string | null;
 
   /** Relação trazida pelo select de installment.service.ts (`cards (id, name)`). */

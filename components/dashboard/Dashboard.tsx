@@ -13,10 +13,13 @@ import { getTransactions } from '@/core/services/transaction.service';
 import { mapTransaction } from '@/core/models/mappers';
 import { calculateSummary } from '@/core/engine/calculations';
 import {
+  adjustWeeklySpendForKnownCharges,
   getCycleRange,
   getWeeksInCurrentCycle,
   getWeeksInMonth,
   getWeeksRemainingInCycle,
+  knownChargesByWeek,
+  KnownCharge,
   weekDateRangeInCycle,
   weeklySpendFromReadings,
   WeeklySpend,
@@ -101,6 +104,9 @@ export default function Dashboard() {
   const [snapshots, setSnapshots] = useState<DBCardSnapshot[]>([]);
   const [readings, setReadings] = useState<DBCardReading[]>([]);
   const [weeklySpend, setWeeklySpend] = useState<WeeklySpend[]>([]);
+  const [weeklyKnownCharges, setWeeklyKnownCharges] = useState<
+    Map<number, number>
+  >(new Map());
   const [cycleWeeks, setCycleWeeks] = useState(0);
   const [weeksRemaining, setWeeksRemaining] = useState(0);
   const [cycleRange, setCycleRange] = useState<{ start: Date; end: Date } | null>(null);
@@ -205,10 +211,47 @@ export default function Dashboard() {
           readingsData,
           primary.closing_day ?? undefined,
         );
+
+        // Assinaturas e parcelas com dia de lançamento conhecido, lançadas no
+        // cartão principal: já são compromisso fixo (descontado do saldo do
+        // mês em calculateSummary) — não devem contar de novo como "gasto
+        // livre" só porque a fatura subiu naquela semana.
+        let knownCharges = new Map<number, number>();
+        if (primary.closing_day != null) {
+          const subscriptionCharges: KnownCharge[] = transactionsMapped
+            .filter(
+              (t) =>
+                t.type === 'expense' &&
+                t.card === primary.id &&
+                (t.isFixed || t.isRecurring),
+            )
+            .map((t) => ({ amount: t.amount, day: t.dueDay }));
+
+          const installmentCharges: KnownCharge[] = installmentsDB
+            .filter((i) => i.card_id === primary.id)
+            .map((i) => ({
+              amount: Number(i.installment_amount),
+              day: i.billing_day,
+            }));
+
+          knownCharges = knownChargesByWeek(
+            [...subscriptionCharges, ...installmentCharges],
+            month.year,
+            month.month,
+            primary.closing_day,
+          );
+
+          weeklySpendData = adjustWeeklySpendForKnownCharges(
+            weeklySpendData,
+            knownCharges,
+          );
+        }
+        setWeeklyKnownCharges(knownCharges);
         setWeeklySpend(weeklySpendData);
       } else {
         setReadings([]);
         setWeeklySpend([]);
+        setWeeklyKnownCharges(new Map());
       }
 
       // Orçamento semanal decrescente: passou uma semana, divide pelas que
@@ -548,6 +591,15 @@ export default function Dashboard() {
                                 {formatCurrency(diff)}
                               </span>
                             </>
+                          )}
+                          {(weeklyKnownCharges.get(week.index) ?? 0) > 0 && (
+                            <span className="text-zinc-500 text-xs italic">
+                              (não conta{' '}
+                              {formatCurrency(
+                                weeklyKnownCharges.get(week.index) ?? 0,
+                              )}{' '}
+                              de assinaturas/parcelas lançadas na fatura)
+                            </span>
                           )}
                         </>
                       ) : (

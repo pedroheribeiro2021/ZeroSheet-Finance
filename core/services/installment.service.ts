@@ -66,6 +66,7 @@ export async function createInstallment(data: {
   installment_amount: number;
   total_installments: number;
   start_month_id: string;
+  billing_day?: number | null;
 }) {
   const user = await getCurrentUser();
 
@@ -82,6 +83,7 @@ export async function createInstallment(data: {
       total_installments: data.total_installments,
       current_installment: 1,
       start_month_id: data.start_month_id,
+      billing_day: data.billing_day ?? null,
       user_id: user.id,
     },
   ]);
