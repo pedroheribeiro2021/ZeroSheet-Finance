@@ -691,6 +691,7 @@ export default function Dashboard() {
       {isCurrentMonth && activeMonth && (
         <DueDatesPanel
           transactions={transactions}
+          cards={cards}
           month={activeMonth.month}
           year={activeMonth.year}
           onChanged={() => loadMonthData(activeMonth)}
