@@ -15,6 +15,26 @@ indicado entre parênteses). Itens novos vão sempre no topo da seção
 - [ ] Ordenação por arrastar (drag-and-drop) na lista de transações — por ora
       há seletor de ordenação (entradas primeiro/recentes/valor/categoria).
 
+## Feitos em 2026-07-12 — Cobranças automáticas no cartão não são vencimento acionável
+
+Pedido do usuário (2026-07-12): assinaturas/parcelas vinculadas a um cartão
+(ex.: Claude, TotalPass) apareciam no painel "Vencimentos do mês" como
+despesa a pagar, com botão "marcar como pago" e status `overdue` — errado,
+porque são debitadas sozinhas na fatura, sem ação manual do usuário.
+
+- [x] `core/engine/dueDates.ts`: novo status `automatic` — `getDueItems`
+      sobrepõe o status pra `automatic` sempre que `transaction.card` está
+      preenchido (prioridade sobre `paidAt`/data), e esses itens nunca são
+      cortados pelo `horizonDays` (são só informativos, não uma ação
+      pendente). Testado em `tests/engine/due-dates.test.ts`.
+- [x] `DueDatesPanel.tsx`: novo grupo "Cobranças automáticas (cartão)" na
+      lista (sem botão de marcar como pago, com badge do nome do cartão) e
+      cor própria (índigo) no calendário — continua aparecendo no calendário
+      do mês, só não é tratado como vencimento que exige ação.
+- [x] `Dashboard.tsx` passa `cards` pro `DueDatesPanel` (pra resolver o nome
+      do cartão no badge). Verificado manualmente no navegador (login real):
+      Claude/TotalPass aparecem no grupo automático, sem "marcar como pago".
+
 ## Feitos em 2026-07-12 — Assinaturas/parcelas não contam como gasto livre da semana
 
 Pedido do usuário (2026-07-12): assinaturas e parcelamentos lançados na

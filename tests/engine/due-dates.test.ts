@@ -142,4 +142,29 @@ describe('getDueItems', () => {
     const items = getDueItems(transactions, today);
     expect(items[0].status).toBe('paid');
   });
+
+  it('despesa vinculada a cartão é sempre "automatic", mesmo atrasada ou paga', () => {
+    const transactions: Transaction[] = [
+      makeTransaction({ id: 'card-overdue', dueDay: 5, card: 'card-1' }),
+      makeTransaction({
+        id: 'card-paid',
+        dueDay: 5,
+        card: 'card-1',
+        paidAt: '2026-07-06T10:00:00Z',
+      }),
+    ];
+
+    const items = getDueItems(transactions, today);
+    expect(items.map((i) => i.status)).toEqual(['automatic', 'automatic']);
+  });
+
+  it('despesa vinculada a cartão não é cortada pelo horizonte, mesmo longe', () => {
+    const transactions: Transaction[] = [
+      makeTransaction({ id: 'card-far', dueDay: 30, card: 'card-1' }), // 20 dias à frente
+    ];
+
+    const items = getDueItems(transactions, today, { horizonDays: 7 });
+    expect(items).toHaveLength(1);
+    expect(items[0].status).toBe('automatic');
+  });
 });
