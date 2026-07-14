@@ -50,6 +50,48 @@ describe('knownChargesByWeek', () => {
 
     expect([...result.values()].reduce((a, b) => a + b, 0)).toBe(50);
   });
+
+  it('com asOf, ignora cobrança cujo dia ainda não chegou (ainda não lançada na fatura)', () => {
+    // fecha dia 4 → semana 2 é 11–17/07. Leitura mais recente em 12/07: uma
+    // cobrança do dia 16 ou 17 ainda não passou por essa leitura, então não
+    // pode zerar o gasto já observado da semana 2.
+    const charges: KnownCharge[] = [
+      { amount: 110, day: 16 }, // Claude
+      { amount: 703.2, day: 17 }, // parcela Samsung
+    ];
+
+    const result = knownChargesByWeek(
+      charges,
+      2026,
+      7,
+      4,
+      new Date(2026, 6, 12),
+    );
+
+    expect(result.get(2)).toBeUndefined();
+  });
+
+  it('com asOf, inclui cobrança cujo dia já passou pela leitura mais recente', () => {
+    const charges: KnownCharge[] = [{ amount: 39.9, day: 5 }];
+
+    const result = knownChargesByWeek(
+      charges,
+      2026,
+      7,
+      4,
+      new Date(2026, 6, 12),
+    );
+
+    expect(result.get(1)).toBe(39.9);
+  });
+
+  it('sem asOf, mantém o comportamento anterior (todas as cobranças do mês contam)', () => {
+    const charges: KnownCharge[] = [{ amount: 110, day: 16 }];
+
+    const result = knownChargesByWeek(charges, 2026, 7, 4);
+
+    expect(result.get(2)).toBe(110);
+  });
 });
 
 describe('adjustWeeklySpendForKnownCharges', () => {
