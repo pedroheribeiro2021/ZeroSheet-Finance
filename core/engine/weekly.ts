@@ -285,20 +285,32 @@ export type KnownCharge = {
  * resolvido dentro do mês/ano informado (mesma aproximação de
  * `resolveDueDate` em `core/engine/dueDates.ts` — não tenta encaixar o dia
  * num ciclo que atravesse a virada do mês).
+ *
+ * `asOf`, quando informado, ignora cobrança cujo dia resolvido ainda não
+ * chegou (dia > `asOf`) — sem isso, uma assinatura/parcela que só vai cair
+ * na fatura dali a alguns dias já é descontada do gasto da semana corrente,
+ * zerando gasto que JÁ aconteceu (a leitura mais recente da fatura ainda
+ * nem inclui essa cobrança futura). Use a data da leitura mais recente da
+ * fatura, não "hoje" — a leitura é o que efetivamente confirma o que já
+ * está lançado.
  */
 export function knownChargesByWeek(
   charges: KnownCharge[],
   year: number,
   month: number,
   closingDay: number,
+  asOf?: Date,
 ): Map<number, number> {
   const daysInMonth = new Date(year, month, 0).getDate();
   const byWeek = new Map<number, number>();
+  const cutoff = asOf ? startOfDay(asOf).getTime() : null;
 
   for (const charge of charges) {
     if (!charge.day || charge.amount <= 0) continue;
 
     const date = new Date(year, month - 1, Math.min(charge.day, daysInMonth));
+    if (cutoff != null && date.getTime() > cutoff) continue;
+
     const weekIndex = weekIndexInCycle(date, closingDay);
 
     byWeek.set(

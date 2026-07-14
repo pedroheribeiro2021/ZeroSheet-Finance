@@ -234,11 +234,22 @@ export default function Dashboard() {
               day: i.billing_day,
             }));
 
+          // Só desconta cobrança cujo dia já chegou pela leitura mais
+          // recente da fatura — sem isso, uma assinatura/parcela que só cai
+          // dali a alguns dias já zera gasto que já aconteceu de verdade
+          // (a leitura mais recente ainda nem inclui essa cobrança futura).
+          const latestReadingDate = readingsData.length
+            ? new Date(
+                Math.max(...readingsData.map((r) => new Date(r.read_at).getTime())),
+              )
+            : undefined;
+
           knownCharges = knownChargesByWeek(
             [...subscriptionCharges, ...installmentCharges],
             month.year,
             month.month,
             primary.closing_day,
+            latestReadingDate,
           );
 
           weeklySpendData = adjustWeeklySpendForKnownCharges(

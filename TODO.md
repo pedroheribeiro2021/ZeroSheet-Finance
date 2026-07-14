@@ -13,6 +13,32 @@ indicado entre parênteses). Itens novos vão sempre no topo da seção
 - [ ] Ordenação por arrastar (drag-and-drop) na lista de transações — por ora
       há seletor de ordenação (entradas primeiro/recentes/valor/categoria).
 
+## Feitos em 2026-07-14 — Semana do ciclo zerando por cobrança futura ainda não lançada
+
+Pedido do usuário (2026-07-14): "Semana 2" do Acompanhamento Semanal apareceu
+com gasto zero mesmo tendo gasto real. Investigado direto no banco (MCP
+Supabase, projeto `zerosheet-finance`): a leitura mais recente da fatura do
+C6 (12/07) mostrava um delta real de R$ 290,28 na semana 2 (11–17/07), mas
+`knownChargesByWeek` descontava R$ 813,20 (Claude R$110 no dia 16 +
+parcela "Samsung compras" R$703,20 no dia 17) — `adjustWeeklySpendForKnownCharges`
+nunca fica negativo, então zerava. O bug: o desconto por "cobrança
+conhecida" (feature de 12/07, PR `feat/billing-day-weekly-adjustment`) só
+olhava se o dia caía na semana do ciclo, sem checar se aquele dia já tinha
+efetivamente chegado — descontava uma cobrança de dali a 4-5 dias contra um
+delta que só reflete o que já está confirmado pela última leitura.
+
+- [x] `knownChargesByWeek(charges, year, month, closingDay, asOf?)` ganhou
+      parâmetro opcional `asOf` — ignora cobrança cujo dia resolvido é
+      depois de `asOf`. Sem `asOf`, comportamento antigo é preservado.
+- [x] `Dashboard.tsx` passa a data da leitura mais recente da fatura do
+      cartão principal como `asOf` (não "hoje" — a leitura é o que
+      efetivamente confirma o que já está lançado; sem isso um usuário que
+      atualiza a fatura só 1x por semana teria cobranças descontadas antes
+      de qualquer leitura confirmar que elas já postaram).
+- [x] Testes novos em `tests/engine/known-charges.test.ts` reproduzindo o
+      cenário exato (Claude dia 16 + Samsung dia 17, leitura em 12/07 →
+      nenhum desconto na semana 2).
+
 ## Feitos em 2026-07-14 — Parcelamentos em "Cobranças automáticas" + calendário clicável
 
 Pedido do usuário (2026-07-14): (1) parcelamento feito no cartão não aparecia
