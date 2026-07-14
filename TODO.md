@@ -10,8 +10,6 @@ indicado entre parênteses). Itens novos vão sempre no topo da seção
 - [ ] Avaliar integração/import de extrato (OFX/CSV) para reduzir lançamento
       manual de gastos de mercado/gasolina — hoje o fluxo é: provisionar e ir
       lançando os gastos reais na mesma categoria (o envelope abate sozinho).
-- [ ] Edição de parcelamento (hoje só criar/excluir) — agora inclui também o
-      campo novo `billing_day` (dia de lançamento na fatura).
 - [ ] Ordenação por arrastar (drag-and-drop) na lista de transações — por ora
       há seletor de ordenação (entradas primeiro/recentes/valor/categoria).
 
@@ -40,6 +38,23 @@ vence nele.
       dias sem vencimento mostram "Nenhum vencimento neste dia". Extraída a
       renderização de cada item (`renderDueItemRow`) pra reaproveitar entre a
       lista agrupada e o painel do dia selecionado, sem duplicar JSX.
+
+## Feitos em 2026-07-14 — Edição de parcelamento já lançado
+
+Pedido do usuário (2026-07-14): só dava pra criar ou excluir um parcelamento;
+corrigir um valor, o cartão ou a quantidade de parcelas exigia excluir e
+recriar (perdendo o `current_installment` calculado a partir do mês de
+início).
+
+- [x] `updateInstallment(id, data)` em `installment.service.ts` — atualiza
+      `description`, `card_id`, `total_amount`, `installment_amount`,
+      `total_installments` e `billing_day`. Não altera `start_month_id`
+      (mudar o mês de início mudaria quais meses o parcelamento está ativo —
+      fora do escopo desta edição).
+- [x] `components/modals/EditInstallmentModal.tsx` (padrão de
+      `EditCardModal.tsx`): mesmos campos do `InstallmentForm`, pré-preenchidos.
+- [x] `InstallmentList.tsx` ganhou botão "Editar" ao lado de "Excluir",
+      abrindo o modal e recarregando a lista ao salvar.
 
 ## Feitos em 2026-07-12 — Cobranças automáticas no cartão não são vencimento acionável
 
