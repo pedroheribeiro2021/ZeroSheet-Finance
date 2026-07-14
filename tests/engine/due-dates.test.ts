@@ -3,6 +3,7 @@ import {
   resolveDueDate,
   classifyDueStatus,
   getDueItems,
+  getInstallmentDueItems,
 } from '@/core/engine/dueDates';
 import { Transaction } from '@/core/types/finance';
 
@@ -166,5 +167,44 @@ describe('getDueItems', () => {
     const items = getDueItems(transactions, today, { horizonDays: 7 });
     expect(items).toHaveLength(1);
     expect(items[0].status).toBe('automatic');
+  });
+});
+
+describe('getInstallmentDueItems', () => {
+  it('resolve a data a partir do billingDay e marca status automatic', () => {
+    const items = getInstallmentDueItems(
+      [{ id: 'i1', description: 'Celular', amount: 200, cardId: 'card-1', billingDay: 10 }],
+      2026,
+      7,
+    );
+
+    expect(items).toHaveLength(1);
+    expect(items[0].status).toBe('automatic');
+    expect(items[0].dayKnown).toBe(true);
+    expect(items[0].dueDate.getDate()).toBe(10);
+    expect(items[0].transaction.card).toBe('card-1');
+    expect(items[0].transaction.amount).toBe(200);
+  });
+
+  it('sem billingDay ainda entra na lista, mas com dayKnown false', () => {
+    const items = getInstallmentDueItems(
+      [{ id: 'i2', description: 'Notebook', amount: 300, cardId: 'card-1', billingDay: null }],
+      2026,
+      7,
+    );
+
+    expect(items).toHaveLength(1);
+    expect(items[0].status).toBe('automatic');
+    expect(items[0].dayKnown).toBe(false);
+  });
+
+  it('ignora parcelamento sem cartão vinculado', () => {
+    const items = getInstallmentDueItems(
+      [{ id: 'i3', description: 'Sem cartão', amount: 100, cardId: null, billingDay: 10 }],
+      2026,
+      7,
+    );
+
+    expect(items).toHaveLength(0);
   });
 });

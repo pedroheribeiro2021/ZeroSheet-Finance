@@ -85,3 +85,59 @@ export function getDueItems(
 
   return items.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
 }
+
+export type InstallmentCharge = {
+  id: string;
+  description: string;
+  amount: number;
+  cardId: string | null;
+  billingDay?: number | null;
+};
+
+/**
+ * Parcelamentos são uma entidade separada de `transactions` (tabela
+ * `installments`), então nunca passam pelo filtro de `getDueItems`. Toda
+ * parcela ativa no mês é lançada sozinha na fatura do cartão — sempre
+ * `automatic`, igual a uma despesa recorrente vinculada a cartão — e nunca
+ * cortada por horizonte, pelos mesmos motivos de `getDueItems`.
+ *
+ * Sem `billingDay` cadastrado o item ainda entra na lista (o usuário pediu
+ * pra aparecer mesmo sem o dia certo), mas com `dueDate` no dia 1 do mês só
+ * para fins de ordenação — quem for plotar num calendário deve tratar esse
+ * caso à parte (ver `dayKnown`).
+ */
+export function getInstallmentDueItems(
+  installments: InstallmentCharge[],
+  year: number,
+  month: number,
+): (DueItem & { dayKnown: boolean })[] {
+  return installments
+    .filter((i) => i.cardId)
+    .map((i) => {
+      const dayKnown = i.billingDay != null;
+      const dueDate = dayKnown
+        ? resolveDueDate(i.billingDay as number, year, month)
+        : new Date(year, month - 1, 1);
+
+      return {
+        transaction: {
+          id: `installment-${i.id}`,
+          monthId: '',
+          type: 'expense',
+          category: 'Parcelamento',
+          description: i.description,
+          amount: i.amount,
+          isFixed: false,
+          isProvision: false,
+          isRecurring: false,
+          dueDay: i.billingDay ?? null,
+          card: i.cardId,
+          createdAt: '',
+        },
+        dueDate,
+        status: 'automatic',
+        daysUntil: 0,
+        dayKnown,
+      };
+    });
+}

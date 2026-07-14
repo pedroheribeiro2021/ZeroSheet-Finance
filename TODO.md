@@ -13,6 +13,32 @@ indicado entre parênteses). Itens novos vão sempre no topo da seção
 - [ ] Ordenação por arrastar (drag-and-drop) na lista de transações — por ora
       há seletor de ordenação (entradas primeiro/recentes/valor/categoria).
 
+## Feitos em 2026-07-14 — Parcelamentos em "Cobranças automáticas" + calendário clicável
+
+Pedido do usuário (2026-07-14): (1) parcelamento feito no cartão não aparecia
+em "Cobranças automáticas (cartão)" — só despesas fixas/recorrentes vinculadas
+a cartão apareciam, porque `installments` é uma tabela separada de
+`transactions` e nunca era lida por `getDueItems`/`DueDatesPanel`; (2) o
+calendário de vencimentos era só visual, sem clicar num dia pra ver o que
+vence nele.
+
+- [x] `core/engine/dueDates.ts`: nova `getInstallmentDueItems(installments,
+      year, month)` — converte parcela ativa vinculada a cartão em `DueItem`
+      com status sempre `automatic` (mesma regra de despesa vinculada a
+      cartão), usando `billing_day` como dia de vencimento. Sem `billing_day`
+      cadastrado, ainda entra na lista (`dayKnown: false`) — só não aparece
+      como ponto no calendário, pra não sugerir uma data errada. Testado em
+      `tests/engine/due-dates.test.ts`.
+- [x] `DueDatesPanel.tsx` ganhou prop `installments`; mescla os itens de
+      parcelamento nos vencimentos da lista e no `dueByDay` do calendário
+      (só os com `billing_day` conhecido). `Dashboard.tsx` passa
+      `installments={installments}`.
+- [x] Calendário do painel virou interativo: clicar num dia mostra um painel
+      com os vencimentos daquele dia (clicar de novo ou "Fechar" esconde);
+      dias sem vencimento mostram "Nenhum vencimento neste dia". Extraída a
+      renderização de cada item (`renderDueItemRow`) pra reaproveitar entre a
+      lista agrupada e o painel do dia selecionado, sem duplicar JSX.
+
 ## Feitos em 2026-07-14 — Edição de parcelamento já lançado
 
 Pedido do usuário (2026-07-14): só dava pra criar ou excluir um parcelamento;
