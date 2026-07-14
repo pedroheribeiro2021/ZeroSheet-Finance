@@ -1,8 +1,15 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { getDueItems, resolveDueDate, DueItem, DueStatus } from '@/core/engine/dueDates';
+import {
+  getDueItems,
+  getInstallmentDueItems,
+  resolveDueDate,
+  DueItem,
+  DueStatus,
+} from '@/core/engine/dueDates';
 import { markTransactionPaid, unmarkTransactionPaid } from '@/core/services/transaction.service';
+import type { ActiveInstallment } from '@/core/services/installment.service';
 import {
   getPushSubscriptionState,
   subscribeToPush,
@@ -14,6 +21,7 @@ import { DBCard } from '@/core/types/database';
 
 type DueDatesPanelProps = {
   transactions: Transaction[];
+  installments: ActiveInstallment[];
   cards: DBCard[];
   month: number;
   year: number;
@@ -40,6 +48,7 @@ const WEEKDAY_LABELS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 
 export default function DueDatesPanel({
   transactions,
+  installments,
   cards,
   month,
   year,
@@ -81,9 +90,34 @@ export default function DueDatesPanel({
 
   const today = useMemo(() => new Date(), []);
 
+  const [selectedDay, setSelectedDay] = useState<number | null>(null);
+
+  useEffect(() => {
+    setSelectedDay(null);
+  }, [month, year]);
+
+  const installmentDueItems = useMemo(
+    () =>
+      getInstallmentDueItems(
+        installments.map((i) => ({
+          id: i.id,
+          description: i.description,
+          amount: Number(i.installment_amount),
+          cardId: i.card_id,
+          billingDay: i.billing_day,
+        })),
+        year,
+        month,
+      ),
+    [installments, year, month],
+  );
+
   const dueItems = useMemo(
-    () => getDueItems(transactions, today, { horizonDays: 7 }),
-    [transactions, today],
+    () => [
+      ...getDueItems(transactions, today, { horizonDays: 7 }),
+      ...installmentDueItems,
+    ],
+    [transactions, today, installmentDueItems],
   );
 
   const dueByDay = useMemo(() => {
@@ -111,8 +145,20 @@ export default function DueDatesPanel({
       map.set(day, list);
     }
 
+    // Parcelas sem billing_day não têm um dia real — não plotam no calendário
+    // (só entram na lista "Cobranças automáticas"), pra não sugerir uma data
+    // errada.
+    for (const item of installmentDueItems) {
+      if (!item.dayKnown) continue;
+
+      const day = item.dueDate.getDate();
+      const list = map.get(day) ?? [];
+      list.push(item);
+      map.set(day, list);
+    }
+
     return map;
-  }, [transactions, month, year, today]);
+  }, [transactions, installmentDueItems, month, year, today]);
 
   const groups = GROUP_ORDER.map(({ status, label }) => ({
     status,
@@ -148,6 +194,59 @@ export default function DueDatesPanel({
     ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
   ];
 
+  const selectedDayItems = selectedDay != null ? (dueByDay.get(selectedDay) ?? []) : [];
+
+  const renderDueItemRow = (item: DueItem) => {
+    const cardName = cards.find((c) => c.id === item.transaction.card)?.name;
+
+    return (
+      <div
+        key={item.transaction.id}
+        className="surface-row flex items-center justify-between gap-3 p-3"
+      >
+        <div className="min-w-0">
+          <p className="truncate font-bold text-white">
+            {item.transaction.description || item.transaction.category}
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5 text-xs text-zinc-400">
+            <span className="badge bg-zinc-700/50 text-zinc-300">
+              {item.transaction.category}
+            </span>
+            <span>
+              {item.dueDate.toLocaleDateString('pt-BR', {
+                day: '2-digit',
+                month: '2-digit',
+              })}
+            </span>
+            {item.status === 'automatic' && (
+              <span className="badge bg-indigo-500/15 text-indigo-400">
+                💳 cobrança automática{cardName ? ` — ${cardName}` : ''}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-3">
+          <span className="font-bold text-white">
+            {item.transaction.amount.toLocaleString('pt-BR', {
+              style: 'currency',
+              currency: 'BRL',
+            })}
+          </span>
+          {item.status !== 'automatic' && (
+            <button
+              onClick={() => handleTogglePaid(item)}
+              disabled={pendingId === item.transaction.id}
+              className={item.status === 'paid' ? 'btn-ghost text-xs' : 'btn-primary text-xs'}
+            >
+              {item.status === 'paid' ? 'Desmarcar' : 'Marcar como pago'}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="surface p-4 sm:p-5">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
@@ -173,9 +272,11 @@ export default function DueDatesPanel({
         )}
       </div>
       <p className="mb-4 text-xs text-zinc-500">
-        Despesas fixas/recorrentes com dia de vencimento cadastrado. As
-        vinculadas a um cartão são cobradas automaticamente na fatura — só
-        aparecem informativamente, sem exigir marcar como pago.
+        Despesas fixas/recorrentes com dia de vencimento cadastrado e parcelas
+        de cartão ativas no mês. As vinculadas a um cartão (inclusive
+        parcelamentos) são cobradas automaticamente na fatura — só aparecem
+        informativamente, sem exigir marcar como pago. Clique num dia do
+        calendário para ver o que vence nele.
       </p>
 
       <div className="mb-5 grid grid-cols-7 gap-1 text-center">
@@ -203,13 +304,19 @@ export default function DueDatesPanel({
                     ? 'automatic'
                     : undefined;
 
+          const isSelected = selectedDay === day;
+
           return (
-            <div
+            <button
               key={day}
-              className={`flex h-9 flex-col items-center justify-center rounded-lg text-xs sm:h-11 ${
-                isToday
-                  ? 'border border-white/20 bg-zinc-800 font-bold text-white'
-                  : 'text-zinc-400'
+              type="button"
+              onClick={() => setSelectedDay((prev) => (prev === day ? null : day))}
+              className={`flex h-9 cursor-pointer flex-col items-center justify-center rounded-lg text-xs transition-colors sm:h-11 ${
+                isSelected
+                  ? 'border border-sky-500/60 bg-sky-500/15 font-bold text-white'
+                  : isToday
+                    ? 'border border-white/20 bg-zinc-800 font-bold text-white'
+                    : 'text-zinc-400 hover:bg-zinc-800/60'
               }`}
               title={items.map((i) => i.transaction.description || i.transaction.category).join(', ')}
             >
@@ -217,10 +324,29 @@ export default function DueDatesPanel({
               {items.length > 0 && worstStatus && (
                 <span className={`mt-0.5 h-1.5 w-1.5 rounded-full ${STATUS_DOT[worstStatus]}`} />
               )}
-            </div>
+            </button>
           );
         })}
       </div>
+
+      {selectedDay != null && (
+        <div className="mb-5 grid gap-1.5 rounded-xl border border-white/[0.06] bg-black/20 p-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-zinc-400">
+              {String(selectedDay).padStart(2, '0')}/{String(month).padStart(2, '0')}
+            </p>
+            <button onClick={() => setSelectedDay(null)} className="btn-ghost text-xs">
+              Fechar
+            </button>
+          </div>
+
+          {selectedDayItems.length === 0 ? (
+            <p className="text-sm text-zinc-500">Nenhum vencimento neste dia.</p>
+          ) : (
+            <div className="grid gap-1.5">{selectedDayItems.map(renderDueItemRow)}</div>
+          )}
+        </div>
+      )}
 
       {groups.length === 0 && (
         <p className="text-sm text-zinc-500">Nenhum vencimento nos próximos dias.</p>
@@ -234,58 +360,7 @@ export default function DueDatesPanel({
               {group.label}
             </p>
 
-            {group.items.map((item) => {
-              const cardName = cards.find(
-                (c) => c.id === item.transaction.card,
-              )?.name;
-
-              return (
-                <div
-                  key={item.transaction.id}
-                  className="surface-row flex items-center justify-between gap-3 p-3"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate font-bold text-white">
-                      {item.transaction.description || item.transaction.category}
-                    </p>
-                    <div className="flex flex-wrap items-center gap-1.5 text-xs text-zinc-400">
-                      <span className="badge bg-zinc-700/50 text-zinc-300">
-                        {item.transaction.category}
-                      </span>
-                      <span>
-                        {item.dueDate.toLocaleDateString('pt-BR', {
-                          day: '2-digit',
-                          month: '2-digit',
-                        })}
-                      </span>
-                      {item.status === 'automatic' && (
-                        <span className="badge bg-indigo-500/15 text-indigo-400">
-                          💳 cobrança automática{cardName ? ` — ${cardName}` : ''}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex shrink-0 items-center gap-3">
-                    <span className="font-bold text-white">
-                      {item.transaction.amount.toLocaleString('pt-BR', {
-                        style: 'currency',
-                        currency: 'BRL',
-                      })}
-                    </span>
-                    {item.status !== 'automatic' && (
-                      <button
-                        onClick={() => handleTogglePaid(item)}
-                        disabled={pendingId === item.transaction.id}
-                        className={item.status === 'paid' ? 'btn-ghost text-xs' : 'btn-primary text-xs'}
-                      >
-                        {item.status === 'paid' ? 'Desmarcar' : 'Marcar como pago'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+            {group.items.map(renderDueItemRow)}
           </div>
         ))}
       </div>
