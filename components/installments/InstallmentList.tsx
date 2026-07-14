@@ -1,7 +1,10 @@
 'use client';
 
+import { useState } from 'react';
+
 import { deleteInstallment } from '@/core/services/installment.service';
 import type { ActiveInstallment } from '@/core/services/installment.service';
+import EditInstallmentModal from '@/components/modals/EditInstallmentModal';
 import { useToast } from '@/components/ui/ToastProvider';
 import { formatBRL } from '@/core/utils/number';
 
@@ -32,6 +35,7 @@ function endLabel(
 
 export default function InstallmentList({ installments, onUpdated }: Props) {
   const { showToast } = useToast();
+  const [selected, setSelected] = useState<ActiveInstallment | null>(null);
 
   const handleDelete = async (id: string) => {
     const confirmDelete = confirm('Deseja excluir esse parcelamento?');
@@ -102,15 +106,32 @@ export default function InstallmentList({ installments, onUpdated }: Props) {
               </div>
             </div>
 
-            <button
-              onClick={() => handleDelete(i.id)}
-              className="btn-ghost self-start text-red-400 hover:bg-red-500/10 hover:text-red-300 shrink-0 sm:self-auto"
-            >
-              Excluir
-            </button>
+            <div className="flex items-center gap-1.5 self-start shrink-0 sm:self-auto">
+              <button
+                onClick={() => setSelected(i)}
+                className="btn-ghost bg-white/5 text-zinc-200 hover:text-white"
+              >
+                Editar
+              </button>
+
+              <button
+                onClick={() => handleDelete(i.id)}
+                className="btn-ghost text-red-400 hover:bg-red-500/10 hover:text-red-300"
+              >
+                Excluir
+              </button>
+            </div>
           </div>
         );
       })}
+
+      {selected && (
+        <EditInstallmentModal
+          installment={selected}
+          onClose={() => setSelected(null)}
+          onUpdated={onUpdated}
+        />
+      )}
     </div>
   );
 }

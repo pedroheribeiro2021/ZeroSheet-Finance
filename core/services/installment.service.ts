@@ -91,6 +91,39 @@ export async function createInstallment(data: {
   if (error) throw error;
 }
 
+export async function updateInstallment(
+  id: string,
+  data: {
+    description: string;
+    card_id: string;
+    total_amount: number;
+    installment_amount: number;
+    total_installments: number;
+    billing_day?: number | null;
+  },
+) {
+  const user = await getCurrentUser();
+
+  if (!user) {
+    throw new Error('Usuário não autenticado');
+  }
+
+  const { error } = await supabase
+    .from('installments')
+    .update({
+      description: data.description,
+      card_id: data.card_id,
+      total_amount: data.total_amount,
+      installment_amount: data.installment_amount,
+      total_installments: data.total_installments,
+      billing_day: data.billing_day ?? null,
+    })
+    .eq('id', id)
+    .eq('user_id', user.id);
+
+  if (error) throw error;
+}
+
 export async function deleteInstallment(id: string) {
   const user = await getCurrentUser();
 
