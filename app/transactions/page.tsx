@@ -9,6 +9,8 @@ import { mapTransaction } from '@/core/models/mappers';
 import { createMonth, getMonths } from '@/core/services/month.service';
 import { getTransactions } from '@/core/services/transaction.service';
 import { getCards } from '@/core/services/card.service';
+import { Transaction } from '@/core/types/finance';
+import { DBCard } from '@/core/types/database';
 
 export default function TransactionsPage() {
   const [monthId, setMonthId] = useState<string | null>(null);
@@ -16,7 +18,7 @@ export default function TransactionsPage() {
     month: number;
     year: number;
   } | null>(null);
-  const [transactions, setTransactions] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [cardNames, setCardNames] = useState<Record<string, string>>({});
 
   const load = async () => {
@@ -42,7 +44,7 @@ export default function TransactionsPage() {
 
       const cardsDB = await getCards();
       setCardNames(
-        Object.fromEntries(cardsDB.map((c: any) => [c.id, c.name])),
+        Object.fromEntries(cardsDB.map((c: DBCard) => [c.id, c.name])),
       );
     } catch (err) {
       console.error(err);
@@ -50,6 +52,7 @@ export default function TransactionsPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, []);
 

@@ -31,8 +31,8 @@ export default function LoginPage() {
       // 🔥 MUITO IMPORTANTE
       router.push('/dashboard');
       router.refresh();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Não foi possível entrar');
     } finally {
       setLoading(false);
     }

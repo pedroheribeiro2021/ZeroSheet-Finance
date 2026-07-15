@@ -29,6 +29,14 @@ const TYPE_FILTER_LABELS: Record<TypeFilter, string> = {
 const CARD_FILTER_ALL = 'todas';
 const CARD_FILTER_NONE = 'sem-cartao';
 
+type PaidFilter = 'todas' | 'pagas' | 'nao-pagas';
+
+const PAID_FILTER_LABELS: Record<PaidFilter, string> = {
+  todas: 'Pagamento: todas',
+  pagas: 'Contas pagas',
+  'nao-pagas': 'Contas a pagar',
+};
+
 type FlagFilters = {
   provision: boolean;
   fixed: boolean;
@@ -70,6 +78,17 @@ function matchesCardFilter(t: Transaction, filter: string): boolean {
   return t.card === filter;
 }
 
+/** "Conta" = despesa com dia de vencimento cadastrado (mesmo critério do calendário de vencimentos). */
+function isDueTrackedExpense(t: Transaction): boolean {
+  return t.type === 'expense' && !!t.dueDay;
+}
+
+function matchesPaidFilter(t: Transaction, filter: PaidFilter): boolean {
+  if (filter === 'todas') return true;
+  if (!isDueTrackedExpense(t)) return false;
+  return filter === 'pagas' ? !!t.paidAt : !t.paidAt;
+}
+
 function matchesFlags(t: Transaction, flags: FlagFilters): boolean {
   if (flags.provision && !t.isProvision) return false;
   if (flags.fixed && !t.isFixed) return false;
@@ -108,8 +127,10 @@ export default function TransactionList({
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('todas');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [cardFilter, setCardFilter] = useState(CARD_FILTER_ALL);
+  const [paidFilter, setPaidFilter] = useState<PaidFilter>('todas');
   const [flags, setFlags] = useState<FlagFilters>(EMPTY_FLAGS);
   const [search, setSearch] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const categoryOptions = useMemo(() => {
     const set = new Set<string>(
@@ -126,10 +147,11 @@ export default function TransactionList({
         matchesTypeFilter(t, typeFilter) &&
         (!categoryFilter || t.category === categoryFilter) &&
         matchesCardFilter(t, cardFilter) &&
+        matchesPaidFilter(t, paidFilter) &&
         matchesFlags(t, flags) &&
         matchesSearch(t, normalizedSearch),
     );
-  }, [transactions, typeFilter, categoryFilter, cardFilter, flags, search]);
+  }, [transactions, typeFilter, categoryFilter, cardFilter, paidFilter, flags, search]);
 
   const filteredSum = filtered.reduce(
     (acc, t) => acc + (t.type === 'income' ? t.amount : -t.amount),
@@ -164,6 +186,19 @@ export default function TransactionList({
   const toggleFlag = (key: keyof FlagFilters) => {
     setFlags((prev) => ({ ...prev, [key]: !prev[key] }));
   };
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectedSum = sorted
+    .filter((t) => selectedIds.has(t.id))
+    .reduce((acc, t) => acc + (t.type === 'income' ? t.amount : -t.amount), 0);
 
   const handleDelete = async (id: string) => {
     const confirmDelete = confirm('Deseja excluir essa transação?');
@@ -247,6 +282,19 @@ export default function TransactionList({
             )}
           </select>
 
+          <select
+            value={paidFilter}
+            onChange={(e) => setPaidFilter(e.target.value as PaidFilter)}
+            className="field-sm"
+            aria-label="Filtrar por status de pagamento"
+          >
+            {Object.entries(PAID_FILTER_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+
           <input
             type="text"
             placeholder="Buscar por descrição ou categoria..."
@@ -323,56 +371,75 @@ export default function TransactionList({
 
         const sign = isIncome ? '+' : '−';
 
+        const isPaidBill = isDueTrackedExpense(t) && !!t.paidAt;
+
         return (
           <div
             key={t.id}
             className={`surface-row p-3 flex flex-col gap-2.5 border-l-2 sm:flex-row sm:items-center sm:justify-between ${borderColor}`}
           >
-            <div className="min-w-0">
-              <p className="text-white font-bold truncate">
-                {t.description || t.category}{' '}
-                <span className={`${amountColor} font-bold`}>
-                  {sign} {formatBRL(t.amount)}
-                </span>
-              </p>
+            <div className="flex min-w-0 items-start gap-2.5">
+              <input
+                type="checkbox"
+                checked={selectedIds.has(t.id)}
+                onChange={() => toggleSelected(t.id)}
+                aria-label="Selecionar lançamento"
+                className="mt-1 shrink-0"
+              />
 
-              <div className="text-xs flex gap-1.5 flex-wrap mt-1.5">
-                {t.description && (
-                  <span className="badge bg-zinc-700/50 text-zinc-300">
-                    {t.category}
+              <div className="min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="min-w-0 truncate font-bold text-white">
+                    {t.description || t.category}
+                  </p>
+                  <span className={`${amountColor} shrink-0 font-bold`}>
+                    {sign} {formatBRL(t.amount)}
                   </span>
-                )}
-                {t.card && (
-                  <span className="badge bg-indigo-500/15 text-indigo-400">
-                    💳 {cardNames[t.card] ?? 'Cartão'} — na fatura
-                  </span>
-                )}
-                {t.isProvision && (
-                  <span className="badge bg-amber-500/15 text-amber-400">
-                    Provisão
-                  </span>
-                )}
-                {isReserve && (
-                  <span className="badge bg-sky-500/15 text-sky-400">
-                    Reserva
-                  </span>
-                )}
-                {t.isReimbursement && (
-                  <span className="badge bg-zinc-600/30 text-zinc-300">
-                    Reembolso
-                  </span>
-                )}
-                {t.isFixed && (
-                  <span className="badge bg-zinc-600/30 text-zinc-300">
-                    Fixo
-                  </span>
-                )}
-                {t.isRecurring && (
-                  <span className="badge bg-violet-500/15 text-violet-400">
-                    🔁 {formatUntil(t.recurringUntil)}
-                    {t.dueDay ? ` • vence dia ${t.dueDay}` : ''}
-                  </span>
-                )}
+                </div>
+
+                <div className="text-xs flex gap-1.5 flex-wrap mt-1.5">
+                  {t.description && (
+                    <span className="badge bg-zinc-700/50 text-zinc-300">
+                      {t.category}
+                    </span>
+                  )}
+                  {isPaidBill && (
+                    <span className="badge bg-green-500/15 text-green-400">
+                      ✅ Pago
+                    </span>
+                  )}
+                  {t.card && (
+                    <span className="badge bg-indigo-500/15 text-indigo-400">
+                      💳 {cardNames[t.card] ?? 'Cartão'} — na fatura
+                    </span>
+                  )}
+                  {t.isProvision && (
+                    <span className="badge bg-amber-500/15 text-amber-400">
+                      Provisão
+                    </span>
+                  )}
+                  {isReserve && (
+                    <span className="badge bg-sky-500/15 text-sky-400">
+                      Reserva
+                    </span>
+                  )}
+                  {t.isReimbursement && (
+                    <span className="badge bg-zinc-600/30 text-zinc-300">
+                      Reembolso
+                    </span>
+                  )}
+                  {t.isFixed && (
+                    <span className="badge bg-zinc-600/30 text-zinc-300">
+                      Fixo
+                    </span>
+                  )}
+                  {t.isRecurring && (
+                    <span className="badge bg-violet-500/15 text-violet-400">
+                      🔁 {formatUntil(t.recurringUntil)}
+                      {t.dueDay ? ` • vence dia ${t.dueDay}` : ''}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -394,6 +461,22 @@ export default function TransactionList({
           </div>
         );
       })}
+
+      {selectedIds.size > 0 && (
+        <div className="safe-bottom sticky bottom-2 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-500/30 bg-zinc-900/95 p-3 shadow-lg shadow-black/40 backdrop-blur-sm">
+          <span className="text-sm text-white">
+            <span className="font-bold">{selectedIds.size}</span>{' '}
+            selecionado{selectedIds.size === 1 ? '' : 's'} •{' '}
+            <span className="font-bold">{formatBRL(selectedSum)}</span>
+          </span>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="btn-ghost text-xs"
+          >
+            Limpar seleção
+          </button>
+        </div>
+      )}
 
       {selected && (
         <EditTransactionModal
