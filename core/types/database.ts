@@ -70,6 +70,12 @@ export type DBCardSnapshot = {
 
   amount: number;
 
+  /**
+   * Controle de vencimento: quando a fatura do mês foi paga; null = não paga.
+   * Ainda não existe no schema — aguardando migration (20260715_01).
+   */
+  paid_at?: string | null;
+
   created_at: string | null;
 };
 

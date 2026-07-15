@@ -52,3 +52,38 @@ export async function getCardSnapshots(
 
   return (data ?? []) as DBCardSnapshot[];
 }
+
+export async function markCardSnapshotPaid(
+  id: string,
+  paidAt: string = new Date().toISOString(),
+) {
+  const user = await getCurrentUser();
+
+  if (!user) {
+    throw new Error('Usuário não autenticado');
+  }
+
+  const { error } = await supabase
+    .from('card_snapshots')
+    .update({ paid_at: paidAt })
+    .eq('id', id)
+    .eq('user_id', user.id);
+
+  if (error) throw error;
+}
+
+export async function unmarkCardSnapshotPaid(id: string) {
+  const user = await getCurrentUser();
+
+  if (!user) {
+    throw new Error('Usuário não autenticado');
+  }
+
+  const { error } = await supabase
+    .from('card_snapshots')
+    .update({ paid_at: null })
+    .eq('id', id)
+    .eq('user_id', user.id);
+
+  if (error) throw error;
+}

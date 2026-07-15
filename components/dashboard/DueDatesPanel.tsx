@@ -4,11 +4,14 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   getDueItems,
   getInstallmentDueItems,
+  getCardInvoiceDueItems,
   resolveDueDate,
+  CardInvoiceCharge,
   DueItem,
   DueStatus,
 } from '@/core/engine/dueDates';
 import { markTransactionPaid, unmarkTransactionPaid } from '@/core/services/transaction.service';
+import { markCardSnapshotPaid, unmarkCardSnapshotPaid } from '@/core/services/cardSnapshot.service';
 import type { ActiveInstallment } from '@/core/services/installment.service';
 import {
   getPushSubscriptionState,
@@ -17,12 +20,13 @@ import {
 } from '@/core/services/push.service';
 import { useToast } from '@/components/ui/ToastProvider';
 import { Transaction } from '@/core/types/finance';
-import { DBCard } from '@/core/types/database';
+import { DBCard, DBCardSnapshot } from '@/core/types/database';
 
 type DueDatesPanelProps = {
   transactions: Transaction[];
   installments: ActiveInstallment[];
   cards: DBCard[];
+  snapshots: DBCardSnapshot[];
   month: number;
   year: number;
   onChanged: () => void;
@@ -50,6 +54,7 @@ export default function DueDatesPanel({
   transactions,
   installments,
   cards,
+  snapshots,
   month,
   year,
   onChanged,
@@ -114,12 +119,33 @@ export default function DueDatesPanel({
     [installments, year, month],
   );
 
+  const cardInvoiceItems = useMemo(() => {
+    const charges: CardInvoiceCharge[] = cards
+      .filter((c) => c.due_day != null)
+      .map((c) => {
+        const snapshot = snapshots.find((s) => s.card_id === c.id);
+        return {
+          cardId: c.id,
+          cardName: c.name,
+          dueDay: c.due_day as number,
+          snapshotId: snapshot?.id ?? '',
+          amount: Number(snapshot?.amount ?? 0),
+          paidAt: snapshot?.paid_at,
+        };
+      });
+
+    return getCardInvoiceDueItems(charges, year, month, today, {
+      horizonDays: 7,
+    });
+  }, [cards, snapshots, year, month, today]);
+
   const dueItems = useMemo(
     () => [
       ...getDueItems(transactions, today, { horizonDays: 7 }),
       ...installmentDueItems,
+      ...cardInvoiceItems,
     ],
-    [transactions, today, installmentDueItems],
+    [transactions, today, installmentDueItems, cardInvoiceItems],
   );
 
   const dueByDay = useMemo(() => {
@@ -159,8 +185,18 @@ export default function DueDatesPanel({
       map.set(day, list);
     }
 
+    // Vencimento da fatura do cartão (dia cadastrado no cartão) — o
+    // pagamento que o usuário de fato faz, separado das cobranças que
+    // compõem a fatura.
+    for (const item of cardInvoiceItems) {
+      const day = item.dueDate.getDate();
+      const list = map.get(day) ?? [];
+      list.push(item);
+      map.set(day, list);
+    }
+
     return map;
-  }, [transactions, installmentDueItems, month, year, today]);
+  }, [transactions, installmentDueItems, cardInvoiceItems, month, year, today]);
 
   const groups = GROUP_ORDER.map(({ status, label }) => {
     const items = dueItems.filter((i) => i.status === status);
@@ -171,7 +207,15 @@ export default function DueDatesPanel({
   const handleTogglePaid = async (item: DueItem) => {
     setPendingId(item.transaction.id);
     try {
-      if (item.status === 'paid') {
+      if (item.cardInvoiceSnapshotId) {
+        if (item.status === 'paid') {
+          await unmarkCardSnapshotPaid(item.cardInvoiceSnapshotId);
+          showToast('Fatura desmarcada como paga');
+        } else {
+          await markCardSnapshotPaid(item.cardInvoiceSnapshotId);
+          showToast('Fatura marcada como paga');
+        }
+      } else if (item.status === 'paid') {
         await unmarkTransactionPaid(item.transaction.id);
         showToast('Vencimento desmarcado como pago');
       } else {
@@ -274,11 +318,13 @@ export default function DueDatesPanel({
         )}
       </div>
       <p className="mb-4 text-xs text-zinc-500">
-        Despesas fixas/recorrentes com dia de vencimento cadastrado e parcelas
-        de cartão ativas no mês. As vinculadas a um cartão (inclusive
-        parcelamentos) são cobradas automaticamente na fatura — só aparecem
-        informativamente, sem exigir marcar como pago. Clique num dia do
-        calendário para ver o que vence nele.
+        Despesas fixas/recorrentes com dia de vencimento cadastrado, parcelas
+        de cartão ativas no mês e a fatura de cada cartão (dia cadastrado em
+        Cartões). Despesas e parcelas vinculadas a um cartão são cobradas
+        automaticamente na fatura — só aparecem informativamente, sem exigir
+        marcar como pago; já a fatura em si é o pagamento que você faz de
+        fato, e pode ser marcada. Clique num dia do calendário para ver o que
+        vence nele.
       </p>
 
       <div className="mb-5 grid grid-cols-7 gap-1 text-center">

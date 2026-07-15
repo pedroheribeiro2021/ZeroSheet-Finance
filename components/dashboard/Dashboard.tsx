@@ -732,6 +732,7 @@ export default function Dashboard() {
           transactions={transactions}
           installments={installments}
           cards={cards}
+          snapshots={snapshots}
           month={activeMonth.month}
           year={activeMonth.year}
           onChanged={() => loadMonthData(activeMonth)}

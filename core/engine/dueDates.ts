@@ -7,6 +7,12 @@ export type DueItem = {
   dueDate: Date;
   status: DueStatus;
   daysUntil: number;
+  /**
+   * Presente só quando o item representa o vencimento da FATURA do cartão
+   * (não uma transação real) — id do card_snapshot a marcar/desmarcar como
+   * pago. Quem renderiza usa isso pra decidir qual serviço chamar.
+   */
+  cardInvoiceSnapshotId?: string;
 };
 
 function startOfDay(date: Date): Date {
@@ -140,4 +146,73 @@ export function getInstallmentDueItems(
         dayKnown,
       };
     });
+}
+
+export type CardInvoiceCharge = {
+  cardId: string;
+  cardName: string;
+  dueDay: number;
+  /** id do card_snapshot do mês — necessário pra marcar/desmarcar como paga. */
+  snapshotId: string;
+  amount: number;
+  paidAt?: string | null;
+};
+
+/**
+ * Vencimento da FATURA do cartão em si (o pagamento que o usuário faz de
+ * fato pro banco), a partir do `due_day` cadastrado no cartão — diferente
+ * das despesas/parcelas lançadas NA fatura, que já são `automatic` porque
+ * pagar a fatura cobre todas elas de uma vez. Só entra quem já tem fatura
+ * lançada no mês (`snapshotId`) e valor > 0; sem isso não há o que pagar
+ * ainda. `paidAt` (do snapshot) sobrepõe o status por data, como em
+ * `getDueItems`.
+ */
+export function getCardInvoiceDueItems(
+  charges: CardInvoiceCharge[],
+  year: number,
+  month: number,
+  today: Date,
+  { horizonDays = 7 }: { horizonDays?: number } = {},
+): DueItem[] {
+  const now = startOfDay(today);
+
+  const items: DueItem[] = [];
+
+  for (const charge of charges) {
+    if (!charge.snapshotId || charge.amount <= 0) continue;
+
+    const dueDate = resolveDueDate(charge.dueDay, year, month);
+    const daysUntil = Math.round(
+      (startOfDay(dueDate).getTime() - now.getTime()) / 86_400_000,
+    );
+
+    const status: DueStatus = charge.paidAt
+      ? 'paid'
+      : classifyDueStatus(dueDate, today);
+
+    if (status === 'upcoming' && daysUntil > horizonDays) continue;
+
+    items.push({
+      transaction: {
+        id: `card-invoice-${charge.cardId}`,
+        monthId: '',
+        type: 'expense',
+        category: 'Fatura do cartão',
+        description: charge.cardName,
+        amount: charge.amount,
+        isFixed: false,
+        isProvision: false,
+        isRecurring: false,
+        dueDay: charge.dueDay,
+        card: charge.cardId,
+        createdAt: '',
+      },
+      dueDate,
+      status,
+      daysUntil,
+      cardInvoiceSnapshotId: charge.snapshotId,
+    });
+  }
+
+  return items.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
 }

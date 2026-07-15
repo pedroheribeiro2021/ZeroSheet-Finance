@@ -4,6 +4,8 @@ import {
   classifyDueStatus,
   getDueItems,
   getInstallmentDueItems,
+  getCardInvoiceDueItems,
+  CardInvoiceCharge,
 } from '@/core/engine/dueDates';
 import { Transaction } from '@/core/types/finance';
 
@@ -206,5 +208,103 @@ describe('getInstallmentDueItems', () => {
     );
 
     expect(items).toHaveLength(0);
+  });
+});
+
+describe('getCardInvoiceDueItems', () => {
+  const today = new Date(2026, 6, 10); // 10/07/2026
+
+  function makeCharge(overrides: Partial<CardInvoiceCharge> = {}): CardInvoiceCharge {
+    return {
+      cardId: 'card-1',
+      cardName: 'C6',
+      dueDay: 10,
+      snapshotId: 'snap-1',
+      amount: 1000,
+      paidAt: null,
+      ...overrides,
+    };
+  }
+
+  it('classifica atrasada, hoje e próxima por data, igual às outras contas', () => {
+    const items = getCardInvoiceDueItems(
+      [
+        makeCharge({ cardId: 'c-overdue', snapshotId: 's-overdue', dueDay: 5 }),
+        makeCharge({ cardId: 'c-today', snapshotId: 's-today', dueDay: 10 }),
+        makeCharge({ cardId: 'c-upcoming', snapshotId: 's-upcoming', dueDay: 15 }),
+      ],
+      2026,
+      7,
+      today,
+    );
+
+    expect(items.map((i) => i.status)).toEqual(['overdue', 'today', 'upcoming']);
+    expect(items.every((i) => i.transaction.category === 'Fatura do cartão')).toBe(true);
+  });
+
+  it('paidAt do snapshot sobrepõe o status por data, mesmo atrasada', () => {
+    const items = getCardInvoiceDueItems(
+      [makeCharge({ dueDay: 5, paidAt: '2026-07-06T10:00:00Z' })],
+      2026,
+      7,
+      today,
+    );
+
+    expect(items).toHaveLength(1);
+    expect(items[0].status).toBe('paid');
+  });
+
+  it('não entra sem fatura lançada no mês (sem snapshotId)', () => {
+    const items = getCardInvoiceDueItems(
+      [makeCharge({ snapshotId: '' })],
+      2026,
+      7,
+      today,
+    );
+
+    expect(items).toHaveLength(0);
+  });
+
+  it('não entra com valor zero/negativo', () => {
+    const items = getCardInvoiceDueItems(
+      [makeCharge({ amount: 0 })],
+      2026,
+      7,
+      today,
+    );
+
+    expect(items).toHaveLength(0);
+  });
+
+  it('exclui upcoming além do horizonte, mas mantém pagas mesmo distantes', () => {
+    const items = getCardInvoiceDueItems(
+      [
+        makeCharge({ cardId: 'far', snapshotId: 's-far', dueDay: 30 }), // 20 dias à frente
+        makeCharge({
+          cardId: 'far-paid',
+          snapshotId: 's-far-paid',
+          dueDay: 30,
+          paidAt: '2026-07-01T00:00:00Z',
+        }),
+      ],
+      2026,
+      7,
+      today,
+      { horizonDays: 7 },
+    );
+
+    expect(items).toHaveLength(1);
+    expect(items[0].status).toBe('paid');
+  });
+
+  it('expõe cardInvoiceSnapshotId pra quem for marcar/desmarcar como paga', () => {
+    const items = getCardInvoiceDueItems(
+      [makeCharge({ snapshotId: 'snap-abc' })],
+      2026,
+      7,
+      today,
+    );
+
+    expect(items[0].cardInvoiceSnapshotId).toBe('snap-abc');
   });
 });
