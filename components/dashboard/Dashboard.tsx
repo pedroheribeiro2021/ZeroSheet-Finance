@@ -112,6 +112,7 @@ export default function Dashboard() {
   const [cycleRange, setCycleRange] = useState<{ start: Date; end: Date } | null>(null);
   const [currentMonthId, setCurrentMonthId] = useState<string | null>(null);
   const [primaryCard, setPrimaryCardState] = useState<DBCard | null>(null);
+  const [readingsOpen, setReadingsOpen] = useState(false);
   const [installments, setInstallments] = useState<ActiveInstallment[]>([]);
 
   const handleCardClick = (type: string) => {
@@ -626,21 +627,44 @@ export default function Dashboard() {
 
             {readings.length > 0 && (
               <div className="grid gap-1.5">
-                <p className="text-zinc-500 text-xs mb-1">Histórico de leituras</p>
-                {readings.map((r) => (
-                  <div key={r.id} className="surface-row flex justify-between items-center px-3 py-2 gap-2">
-                    <span className="text-zinc-400 text-xs shrink-0">
-                      {new Date(r.read_at).toLocaleDateString('pt-BR')}
-                    </span>
-                    <span className="text-white text-sm font-bold flex-1 text-right sm:text-left">{formatCurrency(Number(r.amount))}</span>
-                    <button
-                      onClick={() => handleDeleteReading(r.id)}
-                      className="btn-ghost text-red-400 hover:text-red-300 shrink-0"
+                <button
+                  type="button"
+                  onClick={() => setReadingsOpen((v) => !v)}
+                  className="flex items-center justify-between gap-2 rounded-lg px-1 py-1 text-left transition hover:bg-white/5"
+                >
+                  <span className="text-zinc-400 text-xs">
+                    Histórico de leituras ({readings.length}) · última:{' '}
+                    {formatCurrency(Number(readings[readings.length - 1].amount))}
+                  </span>
+                  <span
+                    className={`text-zinc-500 text-xs shrink-0 transition-transform ${readingsOpen ? 'rotate-180' : ''}`}
+                  >
+                    ▾
+                  </span>
+                </button>
+
+                {readingsOpen &&
+                  readings.map((r) => (
+                    <div
+                      key={r.id}
+                      className="surface-row flex flex-col gap-1.5 p-3 sm:flex-row sm:items-center sm:justify-between"
                     >
-                      Remover
-                    </button>
-                  </div>
-                ))}
+                      <span className="text-zinc-400 text-xs shrink-0">
+                        {new Date(r.read_at).toLocaleDateString('pt-BR')}
+                      </span>
+                      <div className="flex items-center justify-between gap-2 sm:justify-end">
+                        <span className="text-white text-sm font-bold">
+                          {formatCurrency(Number(r.amount))}
+                        </span>
+                        <button
+                          onClick={() => handleDeleteReading(r.id)}
+                          className="btn-ghost text-red-400 hover:text-red-300 shrink-0"
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    </div>
+                  ))}
               </div>
             )}
           </>
