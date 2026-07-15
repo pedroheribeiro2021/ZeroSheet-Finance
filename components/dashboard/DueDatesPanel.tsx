@@ -92,7 +92,9 @@ export default function DueDatesPanel({
 
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
+  // fecha o detalhe do dia selecionado ao trocar de mês/ano exibido
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedDay(null);
   }, [month, year]);
 

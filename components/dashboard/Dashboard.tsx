@@ -307,11 +307,15 @@ export default function Dashboard() {
     }
   };
 
+  // carrega a lista de meses uma vez, ao montar — sem sistema externo pra
+  // sincronizar, é o fetch inicial da tela.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadMonthsList();
   }, []);
 
   // mês ativo: vem da URL (?month=YYYY-MM); sem parâmetro, usa o mais recente
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const activeMonth = useMemo(() => {
     if (!months.length) return null;
 
@@ -333,13 +337,13 @@ export default function Dashboard() {
     if (searchParams.get('month') !== key) {
       router.replace(`${pathname}?month=${key}`);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeMonth, pathname, router, searchParams]);
 
   // recarrega tudo (transações, snapshots, leituras, parcelas, summary) ao trocar de mês
   useEffect(() => {
     if (!activeMonth) return;
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadMonthData(activeMonth);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeMonth?.id]);
