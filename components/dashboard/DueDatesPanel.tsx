@@ -160,11 +160,11 @@ export default function DueDatesPanel({
     return map;
   }, [transactions, installmentDueItems, month, year, today]);
 
-  const groups = GROUP_ORDER.map(({ status, label }) => ({
-    status,
-    label,
-    items: dueItems.filter((i) => i.status === status),
-  })).filter((g) => g.items.length > 0);
+  const groups = GROUP_ORDER.map(({ status, label }) => {
+    const items = dueItems.filter((i) => i.status === status);
+    const total = items.reduce((acc, i) => acc + i.transaction.amount, 0);
+    return { status, label, items, total };
+  }).filter((g) => g.items.length > 0);
 
   const handleTogglePaid = async (item: DueItem) => {
     setPendingId(item.transaction.id);
@@ -358,6 +358,9 @@ export default function DueDatesPanel({
             <p className="flex items-center gap-1.5 text-xs font-medium text-zinc-400">
               <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[group.status]}`} />
               {group.label}
+              <span className="text-zinc-500">
+                · {group.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              </span>
             </p>
 
             {group.items.map(renderDueItemRow)}
