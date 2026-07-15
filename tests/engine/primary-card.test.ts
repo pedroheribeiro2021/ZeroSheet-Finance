@@ -64,6 +64,7 @@ describe('is_primary — lógica de cartão principal', () => {
   });
 
   it('lista sem is_primary retorna undefined (coluna ainda não existe)', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const legacy: DBCard[] = base.map(({ is_primary: _, ...rest }) => rest as DBCard);
     expect(getPrimaryCard(legacy)).toBeUndefined();
   });

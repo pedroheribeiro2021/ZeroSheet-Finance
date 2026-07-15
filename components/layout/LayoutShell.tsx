@@ -31,6 +31,7 @@ export default function LayoutShell({
 
   useEffect(() => {
     const saved = localStorage.getItem('sidebar-collapsed');
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCollapsed(saved === 'true');
   }, []);
 
@@ -39,6 +40,7 @@ export default function LayoutShell({
   }, [collapsed]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMobileOpen(false);
   }, [pathname]);
 
