@@ -10,8 +10,8 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { groupTransactionsByCategory } from '@/core/utils/groupTransactions';
 import { Transaction } from '@/core/types/finance';
+import { normalizeCategory } from '@/core/utils/normalize';
 
 type Props = {
   transactions: Transaction[];
@@ -29,9 +29,37 @@ const BAR_COLORS = [
   '#c084fc', '#e879f9', '#f472b6', '#fb923c',
 ];
 
+/**
+ * Agrupa despesas por categoria SEM somar provisão com gasto efetivo.
+ * Mesma regra do envelope: por categoria vale o MAIOR entre o planejado
+ * (provisão) e o realizado — provisão é meta, não um gasto a mais.
+ */
+function groupExpensesByCategory(expenses: Transaction[]) {
+  const byCat: Record<
+    string,
+    { category: string; planned: number; realized: number }
+  > = {};
+
+  for (const t of expenses) {
+    const key = normalizeCategory(t.category) || 'sem categoria';
+    if (!byCat[key]) {
+      byCat[key] = { category: t.category.trim(), planned: 0, realized: 0 };
+    }
+    if (t.isProvision) byCat[key].planned += Number(t.amount);
+    else byCat[key].realized += Number(t.amount);
+  }
+
+  return Object.values(byCat)
+    .map((c) => ({
+      category: c.category,
+      total: Math.max(c.planned, c.realized),
+    }))
+    .sort((a, b) => b.total - a.total);
+}
+
 export default function CategoryBarChart({ transactions, formatCurrency }: Props) {
   const expenses = transactions.filter((t) => t.type === 'expense');
-  const grouped = groupTransactionsByCategory(expenses).slice(0, 8);
+  const grouped = groupExpensesByCategory(expenses).slice(0, 8);
 
   if (grouped.length === 0) {
     return (

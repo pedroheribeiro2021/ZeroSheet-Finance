@@ -92,6 +92,45 @@ describe('knownChargesByWeek', () => {
 
     expect(result.get(2)).toBe(110);
   });
+
+  it('com baseline, ignora cobrança que já estava dentro da leitura inicial', () => {
+    // Cenário real de julho/2026: fecha dia 4; leitura inicial em 06/07 de
+    // 716,70 já continha a parcela Samsung (703,20, dia 4) e o Smart Nutri
+    // (13,52, dia 4). Essas cobranças nunca aparecem nos deltas — descontar
+    // de novo zerava o gasto livre real da semana 1.
+    const charges: KnownCharge[] = [
+      { amount: 703.2, day: 4 }, // parcela Samsung — dentro da baseline
+      { amount: 13.52, day: 4 }, // Smart Nutri — dentro da baseline
+      { amount: 110, day: 16 }, // Claude — caiu DEPOIS da baseline, desconta
+    ];
+
+    const result = knownChargesByWeek(
+      charges,
+      2026,
+      7,
+      4,
+      new Date(2026, 6, 17), // leitura mais recente: 17/07
+      new Date(2026, 6, 6), // leitura inicial (baseline): 06/07
+    );
+
+    expect(result.get(1)).toBeUndefined(); // nada a descontar na semana 1
+    expect(result.get(2)).toBe(110); // Claude desconta na semana 2
+  });
+
+  it('com baseline, cobrança no MESMO dia da leitura inicial é tratada como já incluída', () => {
+    const charges: KnownCharge[] = [{ amount: 50, day: 6 }];
+
+    const result = knownChargesByWeek(
+      charges,
+      2026,
+      7,
+      4,
+      new Date(2026, 6, 17),
+      new Date(2026, 6, 6),
+    );
+
+    expect(result.size).toBe(0);
+  });
 });
 
 describe('adjustWeeklySpendForKnownCharges', () => {

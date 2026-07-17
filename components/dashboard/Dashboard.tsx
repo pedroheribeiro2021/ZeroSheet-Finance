@@ -245,12 +245,22 @@ export default function Dashboard() {
               )
             : undefined;
 
+          // E só desconta cobrança que caiu DEPOIS da leitura inicial (base):
+          // o que já estava dentro da base nunca aparece nos deltas, então
+          // descontar de novo apagaria gasto livre real da semana.
+          const baselineReadingDate = readingsData.length
+            ? new Date(
+                Math.min(...readingsData.map((r) => new Date(r.read_at).getTime())),
+              )
+            : undefined;
+
           knownCharges = knownChargesByWeek(
             [...subscriptionCharges, ...installmentCharges],
             month.year,
             month.month,
             primary.closing_day,
             latestReadingDate,
+            baselineReadingDate,
           );
 
           weeklySpendData = adjustWeeklySpendForKnownCharges(
@@ -380,6 +390,21 @@ export default function Dashboard() {
     0,
   );
 
+  // Composição do card de Assinaturas — mesmos lançamentos do modal.
+  const subscriptionTransactions = transactions.filter(
+    (t) =>
+      t.type === 'expense' && normalizeCategory(t.category) === 'assinaturas',
+  );
+  const subscriptionTotal = subscriptionTransactions.reduce(
+    (acc, t) => acc + Number(t.amount),
+    0,
+  );
+  const subscriptionNames = subscriptionTransactions
+    .map((t) => t.description || t.category)
+    .slice(0, 3)
+    .join(', ');
+  const subscriptionExtra = subscriptionTransactions.length - 3;
+
   // Semanas do ciclo, na mesma forma usada pelo gráfico e pela lista —
   // única fonte: leituras da fatura do cartão principal.
   const chartWeeks: Week[] = Array.from({ length: cycleWeeks }, (_, i) => {
@@ -490,22 +515,22 @@ export default function Dashboard() {
         <Card
           title="Parcelamentos"
           value={formatCurrency(totalInstallments)}
-          subtitle="Parcelas ativas no mês"
+          subtitle={
+            summary.installmentsInCardBills > 0
+              ? `Parcelas ativas no mês — ${formatCurrency(summary.installmentsInCardBills)} já dentro das faturas`
+              : 'Parcelas ativas no mês'
+          }
           onClick={() => handleCardClick('installments')}
         />
 
         <Card
           title="Assinaturas"
-          value={formatCurrency(
-            transactions
-              .filter(
-                (t) =>
-                  t.type === 'expense' &&
-                  normalizeCategory(t.category) === 'assinaturas',
-              )
-              .reduce((acc, t) => acc + Number(t.amount), 0),
-          )}
-          subtitle="Recorrentes no cartão — compõem a fatura"
+          value={formatCurrency(subscriptionTotal)}
+          subtitle={
+            subscriptionTransactions.length > 0
+              ? `${subscriptionNames}${subscriptionExtra > 0 ? ` +${subscriptionExtra}` : ''} — compõem a fatura`
+              : 'Nenhuma assinatura lançada neste mês'
+          }
           onClick={() => handleCardClick('subscriptions')}
         />
 
@@ -857,15 +882,27 @@ export default function Dashboard() {
               { label: 'Entradas', value: summary.totalIncome },
               { label: 'Custos Fixos', value: -summary.fixedCosts },
               { label: 'Cartões (faturas)', value: -summary.cardSpending },
-              { label: 'Parcelamentos', value: -summary.installmentSpending },
+              {
+                label: 'Parcelamentos (fora das faturas)',
+                value: -summary.installmentSpending,
+                note:
+                  summary.installmentsInCardBills > 0
+                    ? `${formatCurrency(summary.installmentsInCardBills)} em parcelas já estão dentro das faturas acima — não abatem duas vezes`
+                    : undefined,
+              },
               { label: 'Provisões (envelopes)', value: -summary.envelopeSpending },
               { label: 'Reserva / Investimentos', value: -summary.reserveSpending },
             ].map((row) => (
-              <div key={row.label} className="surface-row p-3 flex justify-between">
-                <span className="text-white">{row.label}</span>
-                <span className={row.value < 0 ? 'text-red-400' : 'text-green-400'}>
-                  {formatCurrency(row.value)}
-                </span>
+              <div key={row.label} className="surface-row p-3 grid gap-1">
+                <div className="flex justify-between">
+                  <span className="text-white">{row.label}</span>
+                  <span className={row.value < 0 ? 'text-red-400' : 'text-green-400'}>
+                    {formatCurrency(row.value)}
+                  </span>
+                </div>
+                {'note' in row && row.note && (
+                  <p className="text-zinc-500 text-xs">{row.note}</p>
+                )}
               </div>
             ))}
             <div className="surface-row p-3 flex justify-between border-white/10">
@@ -906,9 +943,45 @@ export default function Dashboard() {
           </div>
         )}
 
-        {(selectedCard === 'fixed' ||
-          selectedCard === 'subscriptions' ||
-          selectedCard === 'reserve') && (
+        {selectedCard === 'subscriptions' && (
+          <div className="grid gap-2">
+            {filteredTransactions.length === 0 && (
+              <p className="text-zinc-400">Nenhum registro</p>
+            )}
+            {filteredTransactions.map((t) => {
+              const card = cards.find((c) => c.id === t.card);
+              const percent =
+                subscriptionTotal > 0
+                  ? ((Number(t.amount) / subscriptionTotal) * 100).toFixed(1)
+                  : '0';
+
+              return (
+                <div
+                  key={t.id}
+                  className="surface-row p-3 flex justify-between items-center gap-3"
+                >
+                  <div className="min-w-0">
+                    <p className="text-white font-bold truncate">
+                      {t.description || t.category}
+                    </p>
+                    <p className="text-zinc-400 text-sm">
+                      {card ? `💳 ${card.name} — na fatura` : 'Sem cartão'}
+                      {t.dueDay ? ` • lança dia ${t.dueDay}` : ''}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-white font-bold">
+                      {formatCurrency(Number(t.amount))}
+                    </p>
+                    <p className="text-zinc-400 text-sm">{percent}%</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {(selectedCard === 'fixed' || selectedCard === 'reserve') && (
           <div className="grid gap-2">
             {filteredTransactions.length === 0 && (
               <p className="text-zinc-400">Nenhum registro</p>
