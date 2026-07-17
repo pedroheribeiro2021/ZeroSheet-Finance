@@ -149,10 +149,17 @@ export function calculateSummary(
 
   // Parcela cujo cartão tem fatura fechada (snapshot) no mês NÃO soma de
   // novo: ela já está dentro do valor da fatura. Evita dupla contagem.
-  const installmentSpending = installments.reduce((acc, i) => {
-    if (i.card_id && snapshotCardIds.has(i.card_id)) return acc;
-    return acc + Number(i.installment_amount);
-  }, 0);
+  // O valor coberto vai para installmentsInCardBills, para a UI conseguir
+  // mostrar "parcelas já dentro das faturas" em vez de um 0 sem explicação.
+  let installmentSpending = 0;
+  let installmentsInCardBills = 0;
+  for (const i of installments) {
+    if (i.card_id && snapshotCardIds.has(i.card_id)) {
+      installmentsInCardBills += Number(i.installment_amount);
+    } else {
+      installmentSpending += Number(i.installment_amount);
+    }
+  }
 
   const total = toCurrency(
     totalIncome -
@@ -191,6 +198,8 @@ export function calculateSummary(
     envelopeSpending,
 
     installmentSpending: toCurrency(installmentSpending),
+    /** Parcelas que já estão dentro de faturas (snapshots) — não abatem de novo. */
+    installmentsInCardBills: toCurrency(installmentsInCardBills),
 
     total,
     weeklyBudget,

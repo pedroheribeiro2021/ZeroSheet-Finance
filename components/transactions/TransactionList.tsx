@@ -153,8 +153,15 @@ export default function TransactionList({
     );
   }, [transactions, typeFilter, categoryFilter, cardFilter, paidFilter, flags, search]);
 
-  const filteredSum = filtered.reduce(
-    (acc, t) => acc + (t.type === 'income' ? t.amount : -t.amount),
+  // Provisão é meta/envelope, não gasto a mais: fica FORA da soma efetiva
+  // (senão gasolina provisionada + gasolina gasta contam em dobro).
+  const filteredSum = filtered.reduce((acc, t) => {
+    if (t.isProvision) return acc;
+    return acc + (t.type === 'income' ? t.amount : -t.amount);
+  }, 0);
+
+  const provisionSum = filtered.reduce(
+    (acc, t) => acc + (t.isProvision ? t.amount : 0),
     0,
   );
 
@@ -342,6 +349,12 @@ export default function TransactionList({
         <p className="text-zinc-400 text-xs">
           {filtered.length} lançamento{filtered.length === 1 ? '' : 's'} •{' '}
           {formatBRL(filteredSum)}
+          {provisionSum > 0 && (
+            <span className="text-zinc-500">
+              {' '}
+              (+ {formatBRL(provisionSum)} em provisões — não somam no total)
+            </span>
+          )}
         </p>
       </div>
 

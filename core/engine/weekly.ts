@@ -293,6 +293,14 @@ export type KnownCharge = {
  * nem inclui essa cobrança futura). Use a data da leitura mais recente da
  * fatura, não "hoje" — a leitura é o que efetivamente confirma o que já
  * está lançado.
+ *
+ * `baseline`, quando informado, ignora cobrança cujo dia resolvido é ≤ à
+ * data da PRIMEIRA leitura do ciclo — essa cobrança já está DENTRO do valor
+ * da leitura inicial (que não conta como gasto), então nunca aparece em
+ * nenhum delta. Descontá-la de novo apagaria gasto livre real da semana.
+ * Ex.: baseline de 716,70 em 06/07 já contém a parcela do dia 4; sem esse
+ * corte, a parcela seria descontada do delta da semana 1, zerando gasto
+ * que de fato aconteceu depois da leitura inicial.
  */
 export function knownChargesByWeek(
   charges: KnownCharge[],
@@ -300,16 +308,19 @@ export function knownChargesByWeek(
   month: number,
   closingDay: number,
   asOf?: Date,
+  baseline?: Date,
 ): Map<number, number> {
   const daysInMonth = new Date(year, month, 0).getDate();
   const byWeek = new Map<number, number>();
   const cutoff = asOf ? startOfDay(asOf).getTime() : null;
+  const baselineCut = baseline ? startOfDay(baseline).getTime() : null;
 
   for (const charge of charges) {
     if (!charge.day || charge.amount <= 0) continue;
 
     const date = new Date(year, month - 1, Math.min(charge.day, daysInMonth));
     if (cutoff != null && date.getTime() > cutoff) continue;
+    if (baselineCut != null && date.getTime() <= baselineCut) continue;
 
     const weekIndex = weekIndexInCycle(date, closingDay);
 
