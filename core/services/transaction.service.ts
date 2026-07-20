@@ -72,6 +72,15 @@ export async function unmarkTransactionPaid(id: string) {
   await updateTransaction(id, { paid_at: null });
 }
 
+/**
+ * "Pausar este mês": o lançamento fica na lista, mas fora de todos os
+ * cálculos. Só vale para o mês corrente — copyRecurringTransactions não
+ * propaga a coluna, então o mês seguinte nasce com o lançamento ativo.
+ */
+export async function setTransactionSkipped(id: string, skipped: boolean) {
+  await updateTransaction(id, { skipped });
+}
+
 export async function deleteTransaction(id: string) {
   const user = await getCurrentUser();
 
@@ -120,6 +129,8 @@ export async function copyRecurringTransactions(
 
   if (active.length === 0) return;
 
+  // `skipped` fica deliberadamente FORA do payload: pausa vale só para o
+  // mês em que foi feita — o mês novo nasce com o lançamento ativo.
   const payload = active.map((t) => ({
     month_id: toMonthId,
     user_id: user.id,

@@ -118,13 +118,17 @@ export default function Dashboard() {
   const handleCardClick = (type: string) => {
     let filtered: Transaction[] = [];
 
+    // Pausados neste mês não compõem nenhum card — ficam só na lista de
+    // Transações, com o badge de pausado.
+    const active = transactions.filter((t) => !t.skipped);
+
     switch (type) {
       case 'income':
-        filtered = transactions.filter((t) => t.type === 'income');
+        filtered = active.filter((t) => t.type === 'income');
         break;
 
       case 'subscriptions':
-        filtered = transactions.filter(
+        filtered = active.filter(
           (t) =>
             t.type === 'expense' &&
             normalizeCategory(t.category) === 'assinaturas',
@@ -132,11 +136,11 @@ export default function Dashboard() {
         break;
 
       case 'fixed':
-        filtered = transactions.filter((t) => t.isFixed);
+        filtered = active.filter((t) => t.isFixed);
         break;
 
       case 'reserve':
-        filtered = transactions.filter((t) => t.isReserve);
+        filtered = active.filter((t) => t.isReserve);
         break;
 
       default:
@@ -222,6 +226,7 @@ export default function Dashboard() {
           const subscriptionCharges: KnownCharge[] = transactionsMapped
             .filter(
               (t) =>
+                !t.skipped &&
                 t.type === 'expense' &&
                 t.card === primary.id &&
                 (t.isFixed || t.isRecurring),
@@ -393,7 +398,9 @@ export default function Dashboard() {
   // Composição do card de Assinaturas — mesmos lançamentos do modal.
   const subscriptionTransactions = transactions.filter(
     (t) =>
-      t.type === 'expense' && normalizeCategory(t.category) === 'assinaturas',
+      !t.skipped &&
+      t.type === 'expense' &&
+      normalizeCategory(t.category) === 'assinaturas',
   );
   const subscriptionTotal = subscriptionTransactions.reduce(
     (acc, t) => acc + Number(t.amount),

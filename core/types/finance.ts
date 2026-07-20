@@ -28,6 +28,9 @@ export type Transaction = {
   /** Vencimento do mês pago (controle de vencimento); null/undefined = não pago. */
   paidAt?: string | null;
 
+  /** "Pausado neste mês": não conta em nenhum cálculo; volta ativo no mês seguinte. */
+  skipped?: boolean;
+
   card?: string | null;
 
   createdAt: string; // 👈 ESSENCIAL

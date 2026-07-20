@@ -19,6 +19,7 @@ export function mapTransaction(db: DBTransaction): Transaction {
     isReimbursement: db.is_reimbursement ?? false,
     isReserve: db.is_reserve ?? false,
     paidAt: db.paid_at ?? null,
+    skipped: db.skipped ?? false,
 
     card: db.card,
 

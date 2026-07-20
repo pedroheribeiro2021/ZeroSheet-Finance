@@ -1,7 +1,10 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { deleteTransaction } from '@/core/services/transaction.service';
+import {
+  deleteTransaction,
+  setTransactionSkipped,
+} from '@/core/services/transaction.service';
 import EditTransactionModal from '../modals/EditTransactionModal';
 import { useToast } from '@/components/ui/ToastProvider';
 import { formatBRL } from '@/core/utils/number';
@@ -155,13 +158,14 @@ export default function TransactionList({
 
   // Provisão é meta/envelope, não gasto a mais: fica FORA da soma efetiva
   // (senão gasolina provisionada + gasolina gasta contam em dobro).
+  // Pausado neste mês também não soma — só aparece na lista.
   const filteredSum = filtered.reduce((acc, t) => {
-    if (t.isProvision) return acc;
+    if (t.isProvision || t.skipped) return acc;
     return acc + (t.type === 'income' ? t.amount : -t.amount);
   }, 0);
 
   const provisionSum = filtered.reduce(
-    (acc, t) => acc + (t.isProvision ? t.amount : 0),
+    (acc, t) => acc + (t.isProvision && !t.skipped ? t.amount : 0),
     0,
   );
 
@@ -206,6 +210,21 @@ export default function TransactionList({
   const selectedSum = sorted
     .filter((t) => selectedIds.has(t.id))
     .reduce((acc, t) => acc + (t.type === 'income' ? t.amount : -t.amount), 0);
+
+  const handleToggleSkipped = async (t: Transaction) => {
+    try {
+      await setTransactionSkipped(t.id, !t.skipped);
+      showToast(
+        t.skipped
+          ? 'Lançamento reativado neste mês'
+          : 'Pausado neste mês — volta ativo no mês que vem',
+      );
+      onUpdated?.();
+    } catch (err) {
+      console.error(err);
+      showToast('Erro ao pausar/reativar lançamento', 'error');
+    }
+  };
 
   const handleDelete = async (id: string) => {
     const confirmDelete = confirm('Deseja excluir essa transação?');
@@ -389,7 +408,9 @@ export default function TransactionList({
         return (
           <div
             key={t.id}
-            className={`surface-row p-3 flex flex-col gap-2.5 border-l-2 sm:flex-row sm:items-center sm:justify-between ${borderColor}`}
+            className={`surface-row p-3 flex flex-col gap-2.5 border-l-2 sm:flex-row sm:items-center sm:justify-between ${
+              t.skipped ? 'border-zinc-600 opacity-55' : borderColor
+            }`}
           >
             <div className="flex min-w-0 items-start gap-2.5">
               <input
@@ -411,6 +432,11 @@ export default function TransactionList({
                 </div>
 
                 <div className="text-xs flex gap-1.5 flex-wrap mt-1.5">
+                  {t.skipped && (
+                    <span className="badge bg-zinc-600/40 text-zinc-300">
+                      ⏸ Pausado — não conta neste mês
+                    </span>
+                  )}
                   {t.description && (
                     <span className="badge bg-zinc-700/50 text-zinc-300">
                       {t.category}
@@ -457,6 +483,20 @@ export default function TransactionList({
             </div>
 
             <div className="flex gap-2 shrink-0">
+              {t.isRecurring && (
+                <button
+                  onClick={() => handleToggleSkipped(t)}
+                  className="btn-ghost flex-1 text-zinc-300 hover:text-white sm:flex-initial"
+                  title={
+                    t.skipped
+                      ? 'Voltar a contar neste mês'
+                      : 'Não contar neste mês — volta ativo no mês que vem'
+                  }
+                >
+                  {t.skipped ? '▶ Reativar' : '⏸ Pausar mês'}
+                </button>
+              )}
+
               <button
                 onClick={() => setSelected(t)}
                 className="btn-ghost flex-1 bg-white/5 text-zinc-200 hover:text-white sm:flex-initial"

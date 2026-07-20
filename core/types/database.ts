@@ -32,6 +32,9 @@ export type DBTransaction = {
   /** Controle de vencimento: quando o vencimento do mês foi pago; null = não pago. */
   paid_at?: string | null;
 
+  /** "Pausado neste mês": não conta em nenhum cálculo; a cópia de recorrência não propaga. */
+  skipped?: boolean | null;
+
   card: string | null;
 };
 

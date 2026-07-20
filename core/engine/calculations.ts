@@ -45,6 +45,9 @@ export function calculateSummary(
   };
 
   for (const t of transactions) {
+    // "Pausado neste mês": existe na lista, mas não conta em nenhum bucket.
+    if (t.skipped) continue;
+
     const cat = normalizeCategory(t.category);
     if (!categoryLabel[cat]) categoryLabel[cat] = t.category.trim();
 
