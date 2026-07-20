@@ -69,6 +69,7 @@ export function getDueItems(
   const items: DueItem[] = [];
 
   for (const transaction of transactions) {
+    if (transaction.skipped) continue; // pausado neste mês: sem vencimento
     if (transaction.type !== 'expense') continue;
     if (!transaction.dueDay) continue;
     if (!transaction.isFixed && !transaction.isRecurring) continue;

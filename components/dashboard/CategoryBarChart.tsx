@@ -41,6 +41,8 @@ function groupExpensesByCategory(expenses: Transaction[]) {
   > = {};
 
   for (const t of expenses) {
+    if (t.skipped) continue; // pausado neste mês: fora do gráfico
+
     const key = normalizeCategory(t.category) || 'sem categoria';
     if (!byCat[key]) {
       byCat[key] = { category: t.category.trim(), planned: 0, realized: 0 };
