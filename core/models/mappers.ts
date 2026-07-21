@@ -1,5 +1,5 @@
-import { DBTransaction } from '../types/database';
-import { Transaction } from '../types/finance';
+import { DBAccount, DBAccountReading, DBTransaction, DBTransfer } from '../types/database';
+import { Account, AccountReading, Transaction, Transfer } from '../types/finance';
 
 export function mapTransaction(db: DBTransaction): Transaction {
   return {
@@ -22,6 +22,50 @@ export function mapTransaction(db: DBTransaction): Transaction {
     skipped: db.skipped ?? false,
 
     card: db.card,
+
+    createdAt: db.created_at,
+  };
+}
+
+export function mapAccount(db: DBAccount): Account {
+  return {
+    id: db.id,
+    userId: db.user_id,
+
+    name: db.name,
+    kind: db.kind,
+    color: db.color,
+
+    isPaymentDefault: db.is_payment_default,
+
+    createdAt: db.created_at,
+  };
+}
+
+export function mapAccountReading(db: DBAccountReading): AccountReading {
+  return {
+    id: db.id,
+    userId: db.user_id,
+    accountId: db.account_id,
+    amount: db.amount,
+    readAt: db.read_at,
+    createdAt: db.created_at,
+  };
+}
+
+export function mapTransfer(db: DBTransfer): Transfer {
+  return {
+    id: db.id,
+    userId: db.user_id,
+
+    fromAccountId: db.from_account_id,
+    toAccountId: db.to_account_id,
+    amount: db.amount,
+
+    kind: db.kind,
+    linkedTransferId: db.linked_transfer_id,
+    note: db.note,
+    transferredAt: db.transferred_at,
 
     createdAt: db.created_at,
   };

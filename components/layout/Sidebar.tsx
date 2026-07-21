@@ -8,6 +8,7 @@ import {
   ArrowLeftRight,
   Layers,
   CreditCard,
+  Wallet,
   LogOut,
   ChevronLeft,
   ChevronRight,
@@ -23,6 +24,7 @@ const items: { label: string; href: string; icon: LucideIcon }[] = [
   { label: 'Transações', href: '/transactions', icon: ArrowLeftRight },
   { label: 'Parcelamentos', href: '/installments', icon: Layers },
   { label: 'Cartões', href: '/cards', icon: CreditCard },
+  { label: 'Contas', href: '/accounts', icon: Wallet },
 ];
 
 type SidebarProps = {

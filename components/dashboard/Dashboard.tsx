@@ -32,9 +32,28 @@ import { getInstallments } from '@/core/services/installment.service';
 import type { ActiveInstallment } from '@/core/services/installment.service';
 import { getCards } from '@/core/services/card.service';
 import { getReadings, deleteReading } from '@/core/services/cardReading.service';
-import { DBCard, DBCardSnapshot, DBCardReading, DBMonth } from '@/core/types/database';
+import { getAccounts, getAccountReadings } from '@/core/services/account.service';
+import { getTransfers } from '@/core/services/transfer.service';
+import {
+  DBCard,
+  DBCardSnapshot,
+  DBCardReading,
+  DBMonth,
+  DBAccount,
+  DBAccountReading,
+} from '@/core/types/database';
 import { Transaction, Week } from '@/core/types/finance';
 import { getDueItems } from '@/core/engine/dueDates';
+import {
+  latestReadingByAccount,
+  openBillsFromTransactions,
+  openInvoicesFromSnapshots,
+  pendingReturns,
+  projectBalance,
+  PendingReturn,
+  ProjectionLine,
+} from '@/core/engine/accounts';
+import { mapAccountReading, mapTransfer } from '@/core/models/mappers';
 import WeeklyBarChart from './WeeklyBarChart';
 import CategoryBarChart from './CategoryBarChart';
 import DueDatesPanel from './DueDatesPanel';
@@ -83,6 +102,7 @@ const MODAL_TITLES: Record<string, string> = {
   reserve: 'Reserva / Investimentos',
   balance: 'Saldo do Mês',
   'weekly-budget': 'Orçamento Semanal',
+  accounts: 'Contas',
 };
 
 export default function Dashboard() {
@@ -114,6 +134,13 @@ export default function Dashboard() {
   const [primaryCard, setPrimaryCardState] = useState<DBCard | null>(null);
   const [readingsOpen, setReadingsOpen] = useState(false);
   const [installments, setInstallments] = useState<ActiveInstallment[]>([]);
+  const [accounts, setAccounts] = useState<DBAccount[]>([]);
+  const [accountReadings, setAccountReadings] = useState<DBAccountReading[]>([]);
+  const [openComplements, setOpenComplements] = useState<PendingReturn[]>([]);
+  const [defaultAccountProjection, setDefaultAccountProjection] = useState<{
+    lines: ProjectionLine[];
+    projected: number;
+  } | null>(null);
 
   const handleCardClick = (type: string) => {
     let filtered: Transaction[] = [];
@@ -190,6 +217,48 @@ export default function Dashboard() {
       const primary = cardsDB.find((c) => c.is_primary === true) ?? null;
       setPrimaryCardState(primary);
       setCurrentMonthId(month.id);
+
+      // Contas & Complementos: saldo projetado da conta de pagamento default
+      // (leitura − contas a pagar em aberto − faturas em aberto − devoluções
+      // pendentes). Transferências nunca entram em calculateSummary — só
+      // afetam esta visão.
+      const [accountsData, accountReadingsData, transfersData] = await Promise.all([
+        getAccounts(),
+        getAccountReadings(),
+        getTransfers(),
+      ]);
+      setAccounts(accountsData);
+      setAccountReadings(accountReadingsData);
+
+      const accountReadingsMapped = accountReadingsData.map(mapAccountReading);
+      const transfersMapped = transfersData.map(mapTransfer);
+      const pending = pendingReturns(transfersMapped);
+      setOpenComplements(pending);
+
+      const defaultAccount = accountsData.find((a) => a.is_payment_default) ?? null;
+      if (defaultAccount) {
+        const latestByAccount = latestReadingByAccount(accountReadingsMapped);
+        const latest = latestByAccount.get(defaultAccount.id) ?? null;
+        const nameById = new Map(accountsData.map((a) => [a.id, a.name]));
+
+        const returnsForDefault = pending
+          .filter((p) => p.holdingAccountId === defaultAccount.id)
+          .map((p) => ({
+            label: `Devolver p/ ${nameById.get(p.toAccountId) ?? '?'}`,
+            amount: p.amount,
+          }));
+
+        setDefaultAccountProjection(
+          projectBalance({
+            reading: latest ? { label: defaultAccount.name, amount: latest.amount } : null,
+            openBills: openBillsFromTransactions(transactionsMapped),
+            openInvoices: openInvoicesFromSnapshots(cardsDB, snapshotsData),
+            pendingReturns: returnsForDefault,
+          }),
+        );
+      } else {
+        setDefaultAccountProjection(null);
+      }
 
       // Semanas do ciclo da fatura do cartão principal: é o total de linhas
       // exibidas no acompanhamento semanal (ex.: fecha dia 4 → ciclo de ~5 semanas).
@@ -412,6 +481,29 @@ export default function Dashboard() {
     .join(', ');
   const subscriptionExtra = subscriptionTransactions.length - 3;
 
+  // Card "Contas": composição resumida das últimas leituras + pendências,
+  // truncada para caber no subtítulo do card.
+  const defaultAccount = accounts.find((a) => a.is_payment_default) ?? null;
+  const latestAccountReadings = latestReadingByAccount(
+    accountReadings.map(mapAccountReading),
+  );
+  const accountSummaryParts = accounts
+    .map((a) => {
+      const latest = latestAccountReadings.get(a.id);
+      return latest ? `${a.name} ${formatCurrency(latest.amount)}` : null;
+    })
+    .filter((s): s is string => !!s);
+  const totalPendingReturns = openComplements.reduce((acc, p) => acc + p.amount, 0);
+  const accountsSubtitle =
+    accountSummaryParts.length === 0
+      ? 'Cadastre uma conta e lance a leitura de saldo'
+      : [
+          ...accountSummaryParts.slice(0, 2),
+          totalPendingReturns > 0 ? `devolver ${formatCurrency(totalPendingReturns)}` : null,
+        ]
+          .filter((s): s is string => !!s)
+          .join(' · ');
+
   // Semanas do ciclo, na mesma forma usada pelo gráfico e pela lista —
   // única fonte: leituras da fatura do cartão principal.
   const chartWeeks: Week[] = Array.from({ length: cycleWeeks }, (_, i) => {
@@ -570,6 +662,18 @@ export default function Dashboard() {
               : 'Saldo ÷ semanas do mês (defina um cartão principal ★ para usar o ciclo da fatura)'
           }
           onClick={() => handleCardClick('weekly-budget')}
+          className="max-sm:col-span-2"
+        />
+
+        <Card
+          title="Contas"
+          value={
+            defaultAccount && defaultAccountProjection
+              ? formatCurrency(defaultAccountProjection.projected)
+              : 'Sem conta de pagamento'
+          }
+          subtitle={accountsSubtitle}
+          onClick={() => setSelectedCard('accounts')}
           className="max-sm:col-span-2"
         />
       </div>
@@ -947,6 +1051,83 @@ export default function Dashboard() {
                 {formatCurrency(summary.weeklyBudget)}
               </span>
             </div>
+          </div>
+        )}
+
+        {selectedCard === 'accounts' && (
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              {accounts.length === 0 && (
+                <p className="text-zinc-400">Nenhuma conta cadastrada</p>
+              )}
+              {accounts.map((account) => {
+                const latest = latestAccountReadings.get(account.id);
+                return (
+                  <div
+                    key={account.id}
+                    className="surface-row p-3 flex items-center justify-between gap-3"
+                  >
+                    <p className="text-white font-medium flex items-center gap-1.5">
+                      {account.name}
+                      {account.is_payment_default && (
+                        <span className="badge bg-yellow-500/15 text-yellow-400">
+                          ★ Pagamento
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-zinc-400 text-sm">
+                      {latest
+                        ? `${formatCurrency(latest.amount)} · lida em ${new Date(latest.readAt).toLocaleDateString('pt-BR')}`
+                        : 'Sem leitura'}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+
+            {defaultAccount && defaultAccountProjection && (
+              <div className="grid gap-1">
+                <h3 className="text-white font-bold text-sm mb-1">
+                  Projeção — {defaultAccount.name}
+                </h3>
+                {defaultAccountProjection.lines.map((line, i) => (
+                  <div key={i} className="surface-row p-3 flex justify-between">
+                    <span className="text-white">{line.label}</span>
+                    <span className={line.amount < 0 ? 'text-red-400' : 'text-green-400'}>
+                      {formatCurrency(line.amount)}
+                    </span>
+                  </div>
+                ))}
+                <div className="surface-row p-3 flex justify-between border-white/10">
+                  <span className="text-white font-bold">Sobra projetada</span>
+                  <span
+                    className={`font-bold ${defaultAccountProjection.projected < 0 ? 'text-red-400' : 'text-green-400'}`}
+                  >
+                    {formatCurrency(defaultAccountProjection.projected)}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {openComplements.length > 0 && (
+              <div className="grid gap-1">
+                <h3 className="text-white font-bold text-sm mb-1">Complementos em aberto</h3>
+                {openComplements.map((p) => (
+                  <div
+                    key={p.complementId}
+                    className="surface-row p-3 flex justify-between"
+                  >
+                    <span className="text-white">
+                      Devolver p/{' '}
+                      {accounts.find((a) => a.id === p.toAccountId)?.name ?? '?'}
+                    </span>
+                    <span className="text-amber-400 font-bold">
+                      {formatCurrency(p.amount)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

@@ -109,6 +109,56 @@ export type DBPushSubscription = {
   created_at: string | null;
 };
 
+/** Conta bancária com saldo informado manualmente (tabela `accounts`). */
+export type DBAccount = {
+  id: string;
+  user_id: string;
+
+  name: string;
+  kind: 'corrente' | 'guardado';
+  color: string | null;
+
+  /** Conta de onde saem os pagamentos por padrão (projeção do dashboard). */
+  is_payment_default: boolean;
+
+  created_at: string;
+};
+
+/** Leitura manual de saldo de uma conta (tabela `account_readings`). */
+export type DBAccountReading = {
+  id: string;
+  user_id: string;
+  account_id: string;
+  amount: number;
+  read_at: string;
+  created_at: string;
+};
+
+/**
+ * Transferência entre contas próprias (tabela `transfers`). NÃO é receita
+ * nem despesa — não entra em calculateSummary.
+ */
+export type DBTransfer = {
+  id: string;
+  user_id: string;
+
+  from_account_id: string;
+  to_account_id: string;
+  amount: number;
+
+  /**
+   * complemento = empréstimo entre contas (gera pendência de devolução)
+   * devolucao   = quita um complemento (via linked_transfer_id)
+   * movimentacao = transferência comum, sem pendência
+   */
+  kind: 'complemento' | 'devolucao' | 'movimentacao';
+  linked_transfer_id: string | null;
+  note: string | null;
+  transferred_at: string;
+
+  created_at: string;
+};
+
 export type DBInstallment = {
   id: string;
   user_id: string | null;
