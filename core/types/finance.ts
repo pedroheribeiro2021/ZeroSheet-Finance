@@ -53,3 +53,46 @@ export interface CardSnapshot {
   card: string;
   amount: number;
 }
+
+export type AccountKind = 'corrente' | 'guardado';
+
+export type Account = {
+  id: string;
+  userId: string;
+
+  name: string;
+  kind: AccountKind;
+  color: string | null;
+
+  /** Conta de onde saem os pagamentos por padrão (projeção do dashboard). */
+  isPaymentDefault: boolean;
+
+  createdAt: string;
+};
+
+export type AccountReading = {
+  id: string;
+  userId: string;
+  accountId: string;
+  amount: number;
+  readAt: string;
+  createdAt: string;
+};
+
+export type TransferKind = 'complemento' | 'devolucao' | 'movimentacao';
+
+export type Transfer = {
+  id: string;
+  userId: string;
+
+  fromAccountId: string;
+  toAccountId: string;
+  amount: number;
+
+  kind: TransferKind;
+  linkedTransferId: string | null;
+  note: string | null;
+  transferredAt: string;
+
+  createdAt: string;
+};
