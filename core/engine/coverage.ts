@@ -14,12 +14,37 @@ import { toCurrency } from '../utils/number';
  * o salário?** = tudo que vence de hoje até a véspera do salário, menos o que
  * já está na conta de pagamento.
  *
+ * ⚠️ A janela quase sempre atravessa a virada do mês (ex.: em 30/07 ela vai
+ * até 15/08), então NÃO basta resolver os vencimentos na competência
+ * exibida — ver `resolveOccurrence`.
+ *
  * É função pura (sem I/O) e NÃO altera `calculateSummary` — assim como as
  * transferências, isto é uma visão de caixa, não de orçamento do mês.
  */
 
 function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+/** Ocorrência do `day` na competência de `today` deslocada de `monthOffset`. */
+function occurrenceInMonth(day: number, today: Date, monthOffset: number): Date {
+  const ref = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
+
+  return resolveDueDate(day, ref.getFullYear(), ref.getMonth() + 1);
+}
+
+/**
+ * Data em que a obrigação de fato sai do bolso, dado o estado dela hoje:
+ *
+ * - **em aberto** → a ocorrência da competência corrente, mesmo que já tenha
+ *   passado (é atraso: o dinheiro continua tendo que sair);
+ * - **já paga** → a próxima ocorrência, na competência seguinte. É o caso da
+ *   fatura paga dia 16/07 que volta a vencer em 10/08, dentro da janela.
+ *
+ * Sem isso, tudo que já foi pago no mês some da janela e a cobertura dá zero.
+ */
+export function resolveOccurrence(day: number, today: Date, paid: boolean): Date {
+  return occurrenceInMonth(day, today, paid ? 1 : 0);
 }
 
 /**
@@ -46,23 +71,16 @@ export function resolvePaydayDay(transactions: Transaction[]): number | null {
 
 /**
  * Próxima ocorrência do dia do salário a partir de `today` (inclusive): se o
- * dia ainda não passou neste mês é este mês, senão o mês que vem. Usa
- * `resolveDueDate` para clampar dia 31 em mês curto.
+ * dia ainda não passou neste mês é este mês, senão o mês que vem.
  */
 export function resolveNextPayday(paydayDay: number, today: Date): Date {
-  const thisMonth = resolveDueDate(
-    paydayDay,
-    today.getFullYear(),
-    today.getMonth() + 1,
-  );
+  const thisMonth = occurrenceInMonth(paydayDay, today, 0);
 
   if (startOfDay(thisMonth).getTime() >= startOfDay(today).getTime()) {
     return thisMonth;
   }
 
-  const next = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-
-  return resolveDueDate(paydayDay, next.getFullYear(), next.getMonth() + 1);
+  return occurrenceInMonth(paydayDay, today, 1);
 }
 
 export type CoverageKind = 'bill' | 'invoice';
@@ -75,6 +93,13 @@ export type CoverageItem = {
   kind: CoverageKind;
   /** Vencimento já passou e segue em aberto. */
   overdue: boolean;
+  /**
+   * Valor ainda não é definitivo: fatura de ciclo aberto (vinda da última
+   * leitura) ou conta cujo valor foi repetido da competência anterior.
+   */
+  partial: boolean;
+  /** Dia de fechamento do cartão — só em fatura parcial, para o aviso. */
+  closingDay?: number | null;
 };
 
 export type CoverageSource = {
@@ -86,16 +111,35 @@ export type CoverageSource = {
   insufficient: boolean;
 };
 
+export type CoverageBill = {
+  id: string;
+  label: string;
+  amount: number;
+  dueDay: number;
+  paid: boolean;
+  /** Só despesa recorrente/fixa reaparece na competência seguinte. */
+  recurring: boolean;
+};
+
+export type CoverageInvoice = {
+  id: string;
+  label: string;
+  amount: number;
+  dueDate: Date;
+  partial: boolean;
+  closingDay?: number | null;
+};
+
 export type CoverageInput = {
   today: Date;
   /** Dia do salário (1–31); null = não dá pra calcular a janela. */
   paydayDay: number | null;
   /** Última leitura da conta de pagamento padrão; null = sem leitura. */
   balance: number | null;
-  /** Despesas em aberto do mês (sem cartão — o que tem cartão vem na fatura). */
-  bills: { id: string; label: string; amount: number; dueDay: number }[];
-  /** Faturas de cartão do mês ainda não pagas. */
-  invoices: { id: string; label: string; amount: number; dueDay: number }[];
+  /** Despesas do mês sem cartão (o que tem cartão vem na fatura). */
+  bills: CoverageBill[];
+  /** Faturas já resolvidas por `coverageInvoices`. */
+  invoices: CoverageInvoice[];
   /** Complementos ainda não devolvidos (contexto: o saldo já pode incluí-los). */
   borrowed?: number;
   /** Conta guardada sugerida como fonte do complemento. */
@@ -115,6 +159,8 @@ export type Coverage = {
   leftover: number;
   /** Complementos em aberto já embutidos no saldo lido. */
   borrowed: number;
+  /** Algum item tem valor ainda não fechado — o total é um piso. */
+  hasPartial: boolean;
   source: CoverageSource | null;
   /** Sem dia de salário cadastrado não há janela — a UI mostra o aviso. */
   hasPayday: boolean;
@@ -122,8 +168,7 @@ export type Coverage = {
 
 /**
  * Monta a janela `[hoje, salário)` e confronta o que vence nela com o saldo
- * disponível. Conta atrasada e ainda em aberto entra na janela mesmo com
- * `dueDate` no passado — ela continua sendo dinheiro que precisa sair.
+ * disponível.
  */
 export function calculateCoverage(input: CoverageInput): Coverage {
   const today = startOfDay(input.today);
@@ -140,6 +185,7 @@ export function calculateCoverage(input: CoverageInput): Coverage {
       shortfall: 0,
       leftover: balance,
       borrowed,
+      hasPartial: false,
       source: null,
       hasPayday: false,
     };
@@ -150,31 +196,41 @@ export function calculateCoverage(input: CoverageInput): Coverage {
     (startOfDay(payday).getTime() - today.getTime()) / 86_400_000,
   );
 
-  const year = input.today.getFullYear();
-  const month = input.today.getMonth() + 1;
-
-  const toItem =
-    (kind: CoverageKind) =>
-    (entry: { id: string; label: string; amount: number; dueDay: number }): CoverageItem => {
-      const dueDate = resolveDueDate(entry.dueDay, year, month);
+  const billItems: CoverageItem[] = input.bills
+    // Despesa avulsa já paga não volta na competência seguinte.
+    .filter((bill) => !bill.paid || bill.recurring)
+    .map((bill) => {
+      const dueDate = resolveOccurrence(bill.dueDay, input.today, bill.paid);
 
       return {
-        id: entry.id,
-        label: entry.label,
-        amount: toCurrency(entry.amount),
+        id: bill.id,
+        label: bill.label,
+        amount: toCurrency(bill.amount),
         dueDate,
-        kind,
+        kind: 'bill' as const,
         overdue: startOfDay(dueDate).getTime() < today.getTime(),
+        // Repetida da competência anterior: o valor pode mudar (conta de luz etc.).
+        partial: bill.paid,
       };
-    };
+    });
 
-  const items = [
-    ...input.bills.map(toItem('bill')),
-    ...input.invoices.map(toItem('invoice')),
-  ]
+  const invoiceItems: CoverageItem[] = input.invoices.map((invoice) => ({
+    id: invoice.id,
+    label: invoice.label,
+    amount: toCurrency(invoice.amount),
+    dueDate: invoice.dueDate,
+    kind: 'invoice' as const,
+    overdue: startOfDay(invoice.dueDate).getTime() < today.getTime(),
+    partial: invoice.partial,
+    closingDay: invoice.closingDay ?? null,
+  }));
+
+  const items = [...billItems, ...invoiceItems]
     // Vence antes do salário — o que cai no dia do salário ou depois já é
     // pago com o dinheiro que entrou, não precisa de cobertura.
-    .filter((item) => startOfDay(item.dueDate).getTime() < startOfDay(payday).getTime())
+    .filter(
+      (item) => startOfDay(item.dueDate).getTime() < startOfDay(payday).getTime(),
+    )
     .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
 
   const dueBeforePayday = toCurrency(items.reduce((acc, i) => acc + i.amount, 0));
@@ -199,6 +255,7 @@ export function calculateCoverage(input: CoverageInput): Coverage {
     shortfall,
     leftover,
     borrowed,
+    hasPartial: items.some((i) => i.partial),
     source,
     hasPayday: true,
   };
@@ -232,51 +289,108 @@ export function suggestCoverageSource(
 }
 
 /**
- * Despesas em aberto elegíveis à cobertura: mesma regra de
- * `openBillsFromTransactions` (não paga, não pausada, sem cartão) e com
- * `dueDay` — sem dia não dá pra saber se cai antes ou depois do salário.
+ * Despesas elegíveis à cobertura: sem cartão (o que tem cartão já é coberto
+ * pela fatura), não pausada e com `dueDay` — sem dia não dá pra saber se cai
+ * antes ou depois do salário. Diferente de `openBillsFromTransactions`, a
+ * já paga NÃO é descartada: ela reaparece na competência seguinte, que
+ * costuma ser justamente onde a janela cai.
  */
 export function coverageBillsFromTransactions(
   transactions: Transaction[],
-): { id: string; label: string; amount: number; dueDay: number }[] {
+): CoverageBill[] {
   return transactions
     .filter(
-      (t) =>
-        t.type === 'expense' &&
-        t.dueDay != null &&
-        !t.paidAt &&
-        !t.skipped &&
-        !t.card,
+      (t) => t.type === 'expense' && t.dueDay != null && !t.skipped && !t.card,
     )
     .map((t) => ({
       id: t.id,
       label: t.description || t.category,
       amount: Number(t.amount),
       dueDay: t.dueDay as number,
+      paid: !!t.paidAt,
+      recurring: !!t.isRecurring || !!t.isFixed,
     }));
 }
 
+type CoverageCard = {
+  id: string;
+  name: string;
+  due_day?: number | null;
+  closing_day?: number | null;
+};
+
+type CoverageSnapshot = {
+  id: string;
+  card_id: string | null;
+  amount: number;
+  paid_at?: string | null;
+};
+
+type CoverageReading = {
+  card_id: string | null;
+  amount: number;
+  read_at: string;
+};
+
 /**
- * Faturas em aberto elegíveis: snapshot do mês com valor > 0, ainda não pago
- * e cujo cartão tem `due_day` cadastrado.
+ * Próximo vencimento de fatura de cada cartão, com o melhor valor disponível:
+ *
+ * - **fatura da competência ainda em aberto** → vence na competência
+ *   corrente e vale o valor lançado (`card_snapshots`), que é fechado;
+ * - **fatura da competência já paga (ou não lançada)** → o próximo
+ *   vencimento é o do ciclo seguinte, cujo valor ainda não virou snapshot.
+ *   Aí vale a última leitura da fatura (`card_readings`), marcada como
+ *   `partial`: é o acumulado até hoje e ainda sobe até o fechamento.
+ *
+ * Cartão sem `due_day`, ou sem snapshot e sem leitura, fica de fora — não há
+ * o que projetar.
  */
-export function coverageInvoicesFromSnapshots(
-  cards: { id: string; name: string; due_day?: number | null }[],
-  snapshots: { id: string; card_id: string | null; amount: number; paid_at?: string | null }[],
-): { id: string; label: string; amount: number; dueDay: number }[] {
-  return snapshots
-    .filter((s) => !s.paid_at && Number(s.amount) > 0)
-    .map((s) => {
-      const card = cards.find((c) => c.id === s.card_id);
+export function coverageInvoices(
+  cards: CoverageCard[],
+  snapshots: CoverageSnapshot[],
+  readings: CoverageReading[],
+  today: Date,
+): CoverageInvoice[] {
+  const invoices: CoverageInvoice[] = [];
 
-      if (!card?.due_day) return null;
+  for (const card of cards) {
+    if (!card.due_day) continue;
 
-      return {
-        id: s.id,
+    const openSnapshot = snapshots.find(
+      (s) => s.card_id === card.id && !s.paid_at && Number(s.amount) > 0,
+    );
+
+    if (openSnapshot) {
+      invoices.push({
+        id: openSnapshot.id,
         label: `Fatura ${card.name}`,
-        amount: Number(s.amount),
-        dueDay: card.due_day,
-      };
-    })
-    .filter((i): i is { id: string; label: string; amount: number; dueDay: number } => !!i);
+        amount: Number(openSnapshot.amount),
+        dueDate: resolveOccurrence(card.due_day, today, false),
+        partial: false,
+      });
+
+      continue;
+    }
+
+    const latestReading = readings
+      .filter((r) => r.card_id === card.id)
+      .reduce<CoverageReading | null>(
+        (latest, r) =>
+          !latest || new Date(r.read_at) > new Date(latest.read_at) ? r : latest,
+        null,
+      );
+
+    if (!latestReading || Number(latestReading.amount) <= 0) continue;
+
+    invoices.push({
+      id: `card-${card.id}`,
+      label: `Fatura ${card.name}`,
+      amount: Number(latestReading.amount),
+      dueDate: resolveOccurrence(card.due_day, today, true),
+      partial: true,
+      closingDay: card.closing_day ?? null,
+    });
+  }
+
+  return invoices;
 }
