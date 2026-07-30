@@ -222,16 +222,24 @@ export default function EditTransactionModal({
               </label>
 
               <label className="grid gap-1">
-                Dia de vencimento (opcional)
+                {kind === 'income'
+                  ? 'Dia do recebimento (opcional)'
+                  : 'Dia de vencimento (opcional)'}
                 <input
                   type="number"
                   min={1}
                   max={31}
-                  placeholder="Ex: 10"
+                  placeholder={kind === 'income' ? 'Ex: 15' : 'Ex: 10'}
                   value={dueDay}
                   onChange={(e) => setDueDay(e.target.value)}
                   className="field-sm w-24"
                 />
+                {kind === 'income' && (
+                  <span className="text-zinc-500 text-xs">
+                    Dia em que a entrada cai — define o card “Cobertura até o
+                    salário”. Não vira conta a pagar.
+                  </span>
+                )}
               </label>
             </div>
           )}

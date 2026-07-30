@@ -53,7 +53,15 @@ import {
   PendingReturn,
   ProjectionLine,
 } from '@/core/engine/accounts';
-import { mapAccountReading, mapTransfer } from '@/core/models/mappers';
+import {
+  calculateCoverage,
+  coverageBillsFromTransactions,
+  coverageInvoicesFromSnapshots,
+  resolvePaydayDay,
+  suggestCoverageSource,
+  Coverage,
+} from '@/core/engine/coverage';
+import { mapAccount, mapAccountReading, mapTransfer } from '@/core/models/mappers';
 import WeeklyBarChart from './WeeklyBarChart';
 import CategoryBarChart from './CategoryBarChart';
 import DueDatesPanel from './DueDatesPanel';
@@ -103,6 +111,7 @@ const MODAL_TITLES: Record<string, string> = {
   balance: 'Saldo do Mês',
   'weekly-budget': 'Orçamento Semanal',
   accounts: 'Contas',
+  coverage: 'Cobertura até o salário',
 };
 
 export default function Dashboard() {
@@ -141,6 +150,7 @@ export default function Dashboard() {
     lines: ProjectionLine[];
     projected: number;
   } | null>(null);
+  const [coverage, setCoverage] = useState<Coverage | null>(null);
 
   const handleCardClick = (type: string) => {
     let filtered: Transaction[] = [];
@@ -235,9 +245,10 @@ export default function Dashboard() {
       const pending = pendingReturns(transfersMapped);
       setOpenComplements(pending);
 
+      const latestByAccount = latestReadingByAccount(accountReadingsMapped);
+
       const defaultAccount = accountsData.find((a) => a.is_payment_default) ?? null;
       if (defaultAccount) {
-        const latestByAccount = latestReadingByAccount(accountReadingsMapped);
         const latest = latestByAccount.get(defaultAccount.id) ?? null;
         const nameById = new Map(accountsData.map((a) => [a.id, a.name]));
 
@@ -258,6 +269,38 @@ export default function Dashboard() {
         );
       } else {
         setDefaultAccountProjection(null);
+      }
+
+      // Cobertura até o salário: o gap entre hoje e o dia em que a entrada
+      // cai. Só faz sentido no mês corrente — em mês passado/futuro o "hoje"
+      // não pertence à competência exibida.
+      const now = new Date();
+      const isCurrentMonth =
+        month.month === now.getMonth() + 1 && month.year === now.getFullYear();
+
+      if (isCurrentMonth) {
+        const paymentReading = defaultAccount
+          ? (latestByAccount.get(defaultAccount.id)?.amount ?? null)
+          : null;
+
+        setCoverage(
+          calculateCoverage({
+            today: now,
+            paydayDay: resolvePaydayDay(transactionsMapped),
+            balance: paymentReading,
+            bills: coverageBillsFromTransactions(transactionsMapped),
+            invoices: coverageInvoicesFromSnapshots(cardsDB, snapshotsData),
+            borrowed: pending
+              .filter((p) => !defaultAccount || p.holdingAccountId === defaultAccount.id)
+              .reduce((acc, p) => acc + p.amount, 0),
+            source: suggestCoverageSource(
+              accountsData.map(mapAccount),
+              latestByAccount,
+            ),
+          }),
+        );
+      } else {
+        setCoverage(null);
       }
 
       // Semanas do ciclo da fatura do cartão principal: é o total de linhas
@@ -504,6 +547,27 @@ export default function Dashboard() {
           .filter((s): s is string => !!s)
           .join(' · ');
 
+  // Card "Cobertura até o salário": quanto falta pra atravessar o gap entre
+  // hoje e o dia em que a entrada cai (as faturas vencem antes).
+  const coverageSourceName = coverage?.source?.accountName;
+  const coverageValue = !coverage
+    ? '—'
+    : !coverage.hasPayday
+      ? '—'
+      : coverage.shortfall > 0
+        ? formatCurrency(coverage.shortfall)
+        : 'Coberto';
+
+  const coverageSubtitle = !coverage
+    ? 'Só calculado no mês corrente'
+    : !coverage.hasPayday
+      ? 'Marque o dia do recebimento na sua entrada recorrente para calcular'
+      : coverage.items.length === 0
+        ? `Nada vence antes de ${coverage.payday ? formatDateShort(coverage.payday) : ''}`
+        : coverage.shortfall > 0
+          ? `${coverage.items.length} conta(s) de ${formatCurrency(coverage.dueBeforePayday)} até ${coverage.payday ? formatDateShort(coverage.payday) : ''} · saldo ${formatCurrency(coverage.balance)}${coverageSourceName ? ` · tirar de ${coverageSourceName}` : ''}`
+          : `${formatCurrency(coverage.dueBeforePayday)} até ${coverage.payday ? formatDateShort(coverage.payday) : ''} · sobra ${formatCurrency(coverage.leftover)}`;
+
   // Semanas do ciclo, na mesma forma usada pelo gráfico e pela lista —
   // única fonte: leituras da fatura do cartão principal.
   const chartWeeks: Week[] = Array.from({ length: cycleWeeks }, (_, i) => {
@@ -675,6 +739,18 @@ export default function Dashboard() {
           subtitle={accountsSubtitle}
           onClick={() => setSelectedCard('accounts')}
           className="max-sm:col-span-2"
+        />
+
+        <Card
+          title="Cobertura até o salário"
+          value={coverageValue}
+          subtitle={coverageSubtitle}
+          onClick={() => setSelectedCard('coverage')}
+          className={`max-sm:col-span-2 ${
+            coverage?.hasPayday && coverage.shortfall > 0
+              ? 'border-l-2 border-l-amber-500'
+              : 'border-l-2 border-l-green-500'
+          }`}
         />
       </div>
 
@@ -1127,6 +1203,133 @@ export default function Dashboard() {
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+        )}
+
+        {selectedCard === 'coverage' && (
+          <div className="grid gap-4">
+            {!coverage && (
+              <p className="text-zinc-400">
+                A cobertura só é calculada no mês corrente — troque a competência
+                para o mês atual.
+              </p>
+            )}
+
+            {coverage && !coverage.hasPayday && (
+              <p className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-400">
+                Nenhuma entrada com dia de recebimento cadastrado. Edite seu
+                salário em Transações e preencha o dia — é ele que define até
+                quando a cobertura precisa durar.
+              </p>
+            )}
+
+            {coverage?.hasPayday && (
+              <>
+                <div className="surface-row p-3">
+                  <p className="text-white font-bold">
+                    {coverage.shortfall > 0
+                      ? `Faltam ${formatCurrency(coverage.shortfall)} para chegar no salário`
+                      : 'O saldo cobre tudo até o salário'}
+                  </p>
+                  <p className="text-zinc-400 text-sm mt-1">
+                    Salário em{' '}
+                    {coverage.payday ? formatDateShort(coverage.payday) : ''}
+                    {coverage.daysUntilPayday > 0
+                      ? ` (${coverage.daysUntilPayday} dia(s))`
+                      : ' (hoje)'}
+                    {coverage.source
+                      ? ` · sugestão: tirar de ${coverage.source.accountName} (${formatCurrency(coverage.source.available)} disponível)`
+                      : ''}
+                  </p>
+                  {coverage.source?.insufficient && (
+                    <p className="text-amber-400 text-sm mt-1">
+                      ⚠️ {coverage.source.accountName} não cobre esse valor sozinho.
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid gap-1">
+                  <h3 className="text-white font-bold text-sm mb-1">
+                    Vence antes do salário
+                  </h3>
+
+                  {coverage.items.length === 0 && (
+                    <p className="text-zinc-400">
+                      Nada em aberto vence antes do salário.
+                    </p>
+                  )}
+
+                  {coverage.items.map((item) => (
+                    <div
+                      key={item.id}
+                      className="surface-row p-3 flex justify-between items-center gap-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-white font-medium truncate">
+                          {item.label}
+                        </p>
+                        <p className="text-zinc-400 text-sm">
+                          {item.kind === 'invoice' ? '💳 fatura' : 'conta'} · vence{' '}
+                          {formatDateShort(item.dueDate)}
+                          {item.overdue ? ' · atrasada' : ''}
+                        </p>
+                      </div>
+                      <span
+                        className={`font-bold shrink-0 ${item.overdue ? 'text-red-400' : 'text-white'}`}
+                      >
+                        {formatCurrency(item.amount)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid gap-1">
+                  <div className="surface-row p-3 flex justify-between">
+                    <span className="text-white">Total a pagar até o salário</span>
+                    <span className="text-red-400">
+                      {formatCurrency(coverage.dueBeforePayday)}
+                    </span>
+                  </div>
+                  <div className="surface-row p-3 flex justify-between">
+                    <span className="text-white">
+                      Saldo na conta de pagamento
+                      {defaultAccount ? ` (${defaultAccount.name})` : ''}
+                    </span>
+                    <span className="text-green-400">
+                      {formatCurrency(coverage.balance)}
+                    </span>
+                  </div>
+                  {coverage.borrowed > 0 && (
+                    <div className="surface-row p-3 flex justify-between">
+                      <span className="text-zinc-400">
+                        Do saldo, já é complemento a devolver
+                      </span>
+                      <span className="text-amber-400">
+                        {formatCurrency(coverage.borrowed)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="surface-row p-3 flex justify-between border-white/10">
+                    <span className="text-white font-bold">
+                      {coverage.shortfall > 0 ? 'Falta cobrir' : 'Sobra até o salário'}
+                    </span>
+                    <span
+                      className={`font-bold ${coverage.shortfall > 0 ? 'text-amber-400' : 'text-green-400'}`}
+                    >
+                      {formatCurrency(
+                        coverage.shortfall > 0 ? coverage.shortfall : coverage.leftover,
+                      )}
+                    </span>
+                  </div>
+                </div>
+
+                <p className="text-zinc-500 text-xs leading-relaxed">
+                  Depois de puxar o valor, registre em Contas como{' '}
+                  <strong className="text-zinc-400">complemento</strong> — assim a
+                  devolução fica pendente e some quando o salário cair.
+                </p>
+              </>
             )}
           </div>
         )}
