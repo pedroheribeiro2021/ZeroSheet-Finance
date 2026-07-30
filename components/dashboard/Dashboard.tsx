@@ -31,7 +31,11 @@ import { groupTransactionsByCategory } from '@/core/utils/groupTransactions';
 import { getInstallments } from '@/core/services/installment.service';
 import type { ActiveInstallment } from '@/core/services/installment.service';
 import { getCards } from '@/core/services/card.service';
-import { getReadings, deleteReading } from '@/core/services/cardReading.service';
+import {
+  getReadings,
+  getAllReadings,
+  deleteReading,
+} from '@/core/services/cardReading.service';
 import { getAccounts, getAccountReadings } from '@/core/services/account.service';
 import { getTransfers } from '@/core/services/transfer.service';
 import {
@@ -56,7 +60,7 @@ import {
 import {
   calculateCoverage,
   coverageBillsFromTransactions,
-  coverageInvoicesFromSnapshots,
+  coverageInvoices,
   resolvePaydayDay,
   suggestCoverageSource,
   Coverage,
@@ -283,13 +287,17 @@ export default function Dashboard() {
           ? (latestByAccount.get(defaultAccount.id)?.amount ?? null)
           : null;
 
+        // Leituras de todos os cartões: a fatura que vence depois da virada
+        // do mês ainda não tem snapshot, e é a leitura do ciclo que dá o valor.
+        const allCardReadings = await getAllReadings(month.id);
+
         setCoverage(
           calculateCoverage({
             today: now,
             paydayDay: resolvePaydayDay(transactionsMapped),
             balance: paymentReading,
             bills: coverageBillsFromTransactions(transactionsMapped),
-            invoices: coverageInvoicesFromSnapshots(cardsDB, snapshotsData),
+            invoices: coverageInvoices(cardsDB, snapshotsData, allCardReadings, now),
             borrowed: pending
               .filter((p) => !defaultAccount || p.holdingAccountId === defaultAccount.id)
               .reduce((acc, p) => acc + p.amount, 0),
@@ -565,8 +573,8 @@ export default function Dashboard() {
       : coverage.items.length === 0
         ? `Nada vence antes de ${coverage.payday ? formatDateShort(coverage.payday) : ''}`
         : coverage.shortfall > 0
-          ? `${coverage.items.length} conta(s) de ${formatCurrency(coverage.dueBeforePayday)} até ${coverage.payday ? formatDateShort(coverage.payday) : ''} · saldo ${formatCurrency(coverage.balance)}${coverageSourceName ? ` · tirar de ${coverageSourceName}` : ''}`
-          : `${formatCurrency(coverage.dueBeforePayday)} até ${coverage.payday ? formatDateShort(coverage.payday) : ''} · sobra ${formatCurrency(coverage.leftover)}`;
+          ? `${coverage.items.length} conta(s) de ${formatCurrency(coverage.dueBeforePayday)}${coverage.hasPartial ? '+' : ''} até ${coverage.payday ? formatDateShort(coverage.payday) : ''} · saldo ${formatCurrency(coverage.balance)}${coverageSourceName ? ` · tirar de ${coverageSourceName}` : ''}`
+          : `${formatCurrency(coverage.dueBeforePayday)}${coverage.hasPartial ? '+' : ''} até ${coverage.payday ? formatDateShort(coverage.payday) : ''} · sobra ${formatCurrency(coverage.leftover)}`;
 
   // Semanas do ciclo, na mesma forma usada pelo gráfico e pela lista —
   // única fonte: leituras da fatura do cartão principal.
@@ -1273,6 +1281,11 @@ export default function Dashboard() {
                           {item.kind === 'invoice' ? '💳 fatura' : 'conta'} · vence{' '}
                           {formatDateShort(item.dueDate)}
                           {item.overdue ? ' · atrasada' : ''}
+                          {item.partial
+                            ? item.kind === 'invoice'
+                              ? ` · parcial${item.closingDay ? `, fecha dia ${item.closingDay}` : ''}`
+                              : ' · valor do mês anterior'
+                            : ''}
                         </p>
                       </div>
                       <span
@@ -1286,9 +1299,13 @@ export default function Dashboard() {
 
                 <div className="grid gap-1">
                   <div className="surface-row p-3 flex justify-between">
-                    <span className="text-white">Total a pagar até o salário</span>
+                    <span className="text-white">
+                      Total a pagar até o salário
+                      {coverage.hasPartial ? ' (piso)' : ''}
+                    </span>
                     <span className="text-red-400">
                       {formatCurrency(coverage.dueBeforePayday)}
+                      {coverage.hasPartial ? '+' : ''}
                     </span>
                   </div>
                   <div className="surface-row p-3 flex justify-between">
@@ -1323,6 +1340,14 @@ export default function Dashboard() {
                     </span>
                   </div>
                 </div>
+
+                {coverage.hasPartial && (
+                  <p className="text-zinc-500 text-xs leading-relaxed">
+                    Itens marcados como parciais são de ciclo ainda aberto — o
+                    valor é o acumulado até a última leitura e ainda pode subir
+                    até o fechamento. Trate o total como piso.
+                  </p>
+                )}
 
                 <p className="text-zinc-500 text-xs leading-relaxed">
                   Depois de puxar o valor, registre em Contas como{' '}

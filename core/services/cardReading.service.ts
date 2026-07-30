@@ -30,6 +30,30 @@ export async function getReadings(
   return (data ?? []) as DBCardReading[];
 }
 
+/**
+ * Leituras de fatura de TODOS os cartões no mês — usado pela cobertura até o
+ * salário, que precisa do valor do ciclo em aberto de cada cartão, não só do
+ * principal. Mesma tolerância à tabela inexistente de `getReadings`.
+ */
+export async function getAllReadings(monthId: string): Promise<DBCardReading[]> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error('Usuário não autenticado');
+
+  const { data, error } = await supabase
+    .from('card_readings')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('month_id', monthId)
+    .order('read_at');
+
+  if (error) {
+    if (error.code === '42P01') return [];
+    throw error;
+  }
+
+  return (data ?? []) as DBCardReading[];
+}
+
 export async function addReading(data: {
   month_id: string;
   card_id: string;
