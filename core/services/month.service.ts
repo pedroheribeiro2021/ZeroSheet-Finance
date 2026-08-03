@@ -1,6 +1,7 @@
 import { getCurrentUser } from './auth.service';
 import { supabase } from '@/lib/supabase';
 import { copyRecurringTransactions } from './transaction.service';
+import { findPreviousMonth } from '@/core/engine/month';
 
 export async function getMonths() {
   const user = await getCurrentUser();
@@ -55,21 +56,23 @@ export async function createMonth(month: number, year: number) {
   }
 
   /*
-    Busca último mês
-    para copiar recorrências
+    Busca o mês anterior POR COMPETÊNCIA (não por created_at) para copiar as
+    recorrências: abrir um mês retroativo depois de um mais novo não pode
+    fazer a cópia puxar do mês errado.
   */
 
   const { data: existingMonths, error: existingMonthsError } = await supabase
     .from('months')
     .select('*')
     .eq('user_id', user.id)
-    .order('created_at');
+    .order('year')
+    .order('month');
 
   if (existingMonthsError) {
     throw existingMonthsError;
   }
 
-  const lastMonth = existingMonths?.[existingMonths.length - 1];
+  const lastMonth = findPreviousMonth(existingMonths ?? [], { month, year });
 
   /*
     Cria novo mês

@@ -53,6 +53,29 @@ export async function getCardSnapshots(
   return (data ?? []) as DBCardSnapshot[];
 }
 
+/**
+ * Todas as faturas ainda não pagas do usuário, de qualquer competência.
+ * O filtro por "mês anterior ao exibido" é feito por `carriedOverInvoices`
+ * (função pura) — aqui só se busca o conjunto em aberto.
+ */
+export async function getOpenCardSnapshots(): Promise<DBCardSnapshot[]> {
+  const user = await getCurrentUser();
+
+  if (!user) {
+    throw new Error('Usuário não autenticado');
+  }
+
+  const { data, error } = await supabase
+    .from('card_snapshots')
+    .select('*')
+    .eq('user_id', user.id)
+    .is('paid_at', null);
+
+  if (error) throw error;
+
+  return (data ?? []) as DBCardSnapshot[];
+}
+
 export async function markCardSnapshotPaid(
   id: string,
   paidAt: string = new Date().toISOString(),
