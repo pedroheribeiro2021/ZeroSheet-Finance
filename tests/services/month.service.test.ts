@@ -89,6 +89,48 @@ describe('createMonth', () => {
     });
   });
 
+  it('copies from the previous COMPETENCE, not the last row created', async () => {
+    // set/2026 foi criado antes de ago/2026 (mês retroativo). A cópia tem que
+    // vir de jul/2026, não de setembro.
+    const jul = { id: 'm-jul', month: 7, year: 2026, created_at: '2026-07-01' };
+    const set = { id: 'm-set', month: 9, year: 2026, created_at: '2026-09-01' };
+    const ago = { id: 'm-ago', month: 8, year: 2026 };
+
+    const maybeSingleBuilder = makeBuilder({ data: null, error: null });
+    const listBuilder = makeBuilder({ data: [jul, set], error: null });
+    const insertBuilder = makeBuilder({ data: ago, error: null });
+
+    vi.mocked(supabase.from)
+      .mockReturnValueOnce(maybeSingleBuilder as never)
+      .mockReturnValueOnce(listBuilder as never)
+      .mockReturnValueOnce(insertBuilder as never);
+
+    await createMonth(8, 2026);
+
+    expect(copyRecurringTransactions).toHaveBeenCalledWith('m-jul', 'm-ago', {
+      month: 8,
+      year: 2026,
+    });
+  });
+
+  it('does not copy when every existing month is later than the target', async () => {
+    const set = { id: 'm-set', month: 9, year: 2026 };
+    const jan = { id: 'm-jan', month: 1, year: 2026 };
+
+    const maybeSingleBuilder = makeBuilder({ data: null, error: null });
+    const listBuilder = makeBuilder({ data: [set], error: null });
+    const insertBuilder = makeBuilder({ data: jan, error: null });
+
+    vi.mocked(supabase.from)
+      .mockReturnValueOnce(maybeSingleBuilder as never)
+      .mockReturnValueOnce(listBuilder as never)
+      .mockReturnValueOnce(insertBuilder as never);
+
+    await createMonth(1, 2026);
+
+    expect(copyRecurringTransactions).not.toHaveBeenCalled();
+  });
+
   it('creates a new month without copying when there are no previous months', async () => {
     const newMonth = { id: 'm-new', month: 1, year: 2026 };
 

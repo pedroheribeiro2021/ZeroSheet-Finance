@@ -25,7 +25,15 @@ import {
   WeeklySpend,
 } from '@/core/engine/weekly';
 import { normalizeCategory } from '@/core/utils/normalize';
-import { getCardSnapshots } from '@/core/services/cardSnapshot.service';
+import {
+  getCardSnapshots,
+  getOpenCardSnapshots,
+} from '@/core/services/cardSnapshot.service';
+import {
+  carriedOverInvoices,
+  nextMonthToOpen,
+  CarriedInvoice,
+} from '@/core/engine/month';
 import { groupTransactionsByCategory } from '@/core/utils/groupTransactions';
 
 import { getInstallments } from '@/core/services/installment.service';
@@ -155,6 +163,8 @@ export default function Dashboard() {
     projected: number;
   } | null>(null);
   const [coverage, setCoverage] = useState<Coverage | null>(null);
+  const [carriedInvoices, setCarriedInvoices] = useState<CarriedInvoice[]>([]);
+  const [openingMonth, setOpeningMonth] = useState(false);
 
   const handleCardClick = (type: string) => {
     let filtered: Transaction[] = [];
@@ -208,8 +218,33 @@ export default function Dashboard() {
       }
 
       setMonths(monthsData);
+      return monthsData;
     } catch (err) {
       console.error(err);
+      return null;
+    }
+  };
+
+  /**
+   * Abre a competência seguinte à mais recente. Explícito de propósito: é o
+   * clique que fecha o mês corrente e dispara a cópia das recorrentes. Se
+   * houver mais de um mês em atraso, abre um por vez — a cadeia de
+   * recorrências precisa passar por cada competência.
+   */
+  const handleOpenNextMonth = async () => {
+    const target = nextMonthToOpen(months);
+    if (!target || openingMonth) return;
+
+    setOpeningMonth(true);
+
+    try {
+      const created = await createMonth(target.month, target.year);
+      await loadMonthsList();
+      router.push(`${pathname}?month=${monthKey(created)}`);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setOpeningMonth(false);
     }
   };
 
@@ -236,11 +271,25 @@ export default function Dashboard() {
       // (leitura − contas a pagar em aberto − faturas em aberto − devoluções
       // pendentes). Transferências nunca entram em calculateSummary — só
       // afetam esta visão.
-      const [accountsData, accountReadingsData, transfersData] = await Promise.all([
-        getAccounts(),
-        getAccountReadings(),
-        getTransfers(),
-      ]);
+      const [accountsData, accountReadingsData, transfersData, openSnapshots] =
+        await Promise.all([
+          getAccounts(),
+          getAccountReadings(),
+          getTransfers(),
+          getOpenCardSnapshots(),
+        ]);
+
+      // Faturas de meses anteriores que continuam em aberto. Não viram
+      // transação neste mês (dupla contagem em calculateSummary) — entram só
+      // aqui e na projeção de saldo, que é onde a obrigação de caixa pesa.
+      const carried = carriedOverInvoices({
+        months,
+        snapshots: openSnapshots,
+        cards: cardsDB,
+        current: { month: month.month, year: month.year },
+      });
+      setCarriedInvoices(carried);
+
       setAccounts(accountsData);
       setAccountReadings(accountReadingsData);
 
@@ -267,7 +316,13 @@ export default function Dashboard() {
           projectBalance({
             reading: latest ? { label: defaultAccount.name, amount: latest.amount } : null,
             openBills: openBillsFromTransactions(transactionsMapped),
-            openInvoices: openInvoicesFromSnapshots(cardsDB, snapshotsData),
+            openInvoices: [
+              ...openInvoicesFromSnapshots(cardsDB, snapshotsData),
+              ...carried.map((c) => ({
+                label: `Fatura ${c.cardName} (${formatMonthLabel(c.competence.month, c.competence.year)})`,
+                amount: c.amount,
+              })),
+            ],
             pendingReturns: returnsForDefault,
           }),
         );
@@ -487,6 +542,9 @@ export default function Dashboard() {
     router.push(`${pathname}?month=${monthKey(month)}`);
   };
 
+  // competência seguinte à mais recente cadastrada — alvo do botão de virada
+  const monthToOpen = useMemo(() => nextMonthToOpen(months), [months]);
+
   const activeIndex = activeMonth
     ? months.findIndex((m) => m.id === activeMonth.id)
     : -1;
@@ -629,6 +687,20 @@ export default function Dashboard() {
             >
               ›
             </button>
+
+            {/* Virada de mês: o mês seguinte só nasce por clique explícito —
+                é ele que dispara a cópia das recorrentes. */}
+            {!nextMonth && monthToOpen && (
+              <button
+                onClick={handleOpenNextMonth}
+                disabled={openingMonth}
+                className="btn-secondary min-h-[44px] whitespace-nowrap px-3 text-sm"
+              >
+                {openingMonth
+                  ? 'Abrindo…'
+                  : `+ Abrir ${formatMonthLabel(monthToOpen.month, monthToOpen.year)}`}
+              </button>
+            )}
           </div>
 
           <select
@@ -646,6 +718,35 @@ export default function Dashboard() {
               </option>
             ))}
           </select>
+        </div>
+      )}
+
+      {/* Faturas que ficaram para trás: aparecem no mês novo para não sumirem
+          junto com a competência, mas não entram em calculateSummary — só na
+          projeção de saldo da conta de pagamento. */}
+      {carriedInvoices.length > 0 && (
+        <div className="rounded-xl border border-orange-500/20 bg-orange-500/10 p-3 text-sm text-orange-300">
+          <p className="font-semibold">Faturas de meses anteriores em aberto</p>
+          <ul className="mt-1 grid gap-0.5">
+            {carriedInvoices.map((invoice) => (
+              <li key={invoice.snapshotId} className="flex justify-between gap-3">
+                <span>
+                  {invoice.cardName} ·{' '}
+                  {formatMonthLabel(
+                    invoice.competence.month,
+                    invoice.competence.year,
+                  )}
+                </span>
+                <span className="font-semibold">
+                  {formatCurrency(invoice.amount)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-xs text-orange-300/70">
+            Já descontadas da projeção de saldo. Marque como paga na competência
+            de origem para sair daqui.
+          </p>
         </div>
       )}
 
