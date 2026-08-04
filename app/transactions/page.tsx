@@ -1,75 +1,12 @@
-'use client';
+import { Suspense } from 'react';
 
-import { useEffect, useState } from 'react';
-
-import TransactionForm from '@/components/transactions/TransactionForm';
-import TransactionList from '@/components/transactions/TransactionList';
+import TransactionsView from '@/components/transactions/TransactionsView';
 import PageLoading from '@/components/ui/PageLoading';
-import { mapTransaction } from '@/core/models/mappers';
-import { createMonth, getMonths } from '@/core/services/month.service';
-import { getTransactions } from '@/core/services/transaction.service';
-import { getCards } from '@/core/services/card.service';
-import { Transaction } from '@/core/types/finance';
-import { DBCard } from '@/core/types/database';
 
 export default function TransactionsPage() {
-  const [monthId, setMonthId] = useState<string | null>(null);
-  const [activeMonth, setActiveMonth] = useState<{
-    month: number;
-    year: number;
-  } | null>(null);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [cardNames, setCardNames] = useState<Record<string, string>>({});
-
-  const load = async () => {
-    try {
-      let monthsData = await getMonths();
-
-      if (!monthsData.length) {
-        const now = new Date();
-        const newMonth = await createMonth(
-          now.getMonth() + 1,
-          now.getFullYear(),
-        );
-
-        monthsData = [newMonth];
-      }
-
-      const latestMonth = monthsData[monthsData.length - 1];
-      setMonthId(latestMonth.id);
-      setActiveMonth({ month: latestMonth.month, year: latestMonth.year });
-
-      const transactionsDB = await getTransactions(latestMonth.id);
-      setTransactions(transactionsDB.map(mapTransaction));
-
-      const cardsDB = await getCards();
-      setCardNames(
-        Object.fromEntries(cardsDB.map((c: DBCard) => [c.id, c.name])),
-      );
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
-  }, []);
-
-  if (!monthId) {
-    return <PageLoading />;
-  }
-
   return (
-    <div className="grid gap-4 p-4 sm:gap-5 sm:p-6">
-      <h1 className="text-xl font-bold text-white sm:text-2xl">Transações</h1>
-
-      <TransactionForm monthId={monthId} month={activeMonth} onCreated={load} />
-      <TransactionList
-        transactions={transactions}
-        cardNames={cardNames}
-        onUpdated={load}
-      />
-    </div>
+    <Suspense fallback={<PageLoading />}>
+      <TransactionsView />
+    </Suspense>
   );
 }

@@ -254,18 +254,20 @@ describe('getCardInvoiceDueItems', () => {
     expect(items[0].status).toBe('paid');
   });
 
-  it('não entra sem fatura lançada no mês (sem snapshotId)', () => {
+  it('entra mesmo sem fatura lançada no mês (sem snapshotId), com amountKnown false', () => {
     const items = getCardInvoiceDueItems(
-      [makeCharge({ snapshotId: '' })],
+      [makeCharge({ snapshotId: '', amount: 0 })],
       2026,
       7,
       today,
     );
 
-    expect(items).toHaveLength(0);
+    expect(items).toHaveLength(1);
+    expect(items[0].amountKnown).toBe(false);
+    expect(items[0].cardInvoiceSnapshotId).toBeUndefined();
   });
 
-  it('não entra com valor zero/negativo', () => {
+  it('entra com valor zero quando a fatura já foi lançada (amountKnown true)', () => {
     const items = getCardInvoiceDueItems(
       [makeCharge({ amount: 0 })],
       2026,
@@ -273,7 +275,8 @@ describe('getCardInvoiceDueItems', () => {
       today,
     );
 
-    expect(items).toHaveLength(0);
+    expect(items).toHaveLength(1);
+    expect(items[0].amountKnown).toBe(true);
   });
 
   it('exclui upcoming além do horizonte, mas mantém pagas mesmo distantes', () => {
