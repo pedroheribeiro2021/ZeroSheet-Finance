@@ -15,7 +15,6 @@ import { calculateSummary } from '@/core/engine/calculations';
 import {
   adjustWeeklySpendForKnownCharges,
   getCycleRange,
-  getWeeksInCurrentCycle,
   getWeeksInMonth,
   getWeeksRemainingInCycle,
   knownChargesByWeek,
@@ -89,6 +88,13 @@ function formatMonthLabel(month: number, year: number): string {
 
 function monthKey(m: { month: number; year: number }): string {
   return `${m.year}-${String(m.month).padStart(2, '0')}`;
+}
+
+/** Semanas do intervalo (inclusive nas duas pontas) — mesmo critério de bucket (ceil/7) do resto do engine. */
+function cycleLengthInWeeks(range: { start: Date; end: Date }): number {
+  const days =
+    Math.round((range.end.getTime() - range.start.getTime()) / 86_400_000) + 1;
+  return Math.max(1, Math.ceil(days / 7));
 }
 
 function installmentMonthLabel(
@@ -369,20 +375,32 @@ export default function Dashboard() {
         setCoverage(null);
       }
 
-      // Semanas do ciclo da fatura do cartão principal: é o total de linhas
-      // exibidas no acompanhamento semanal (ex.: fecha dia 4 → ciclo de ~5 semanas).
-      const weeksInCycle =
-        primary?.closing_day != null
-          ? getWeeksInCurrentCycle(primary.closing_day)
-          : getWeeksInMonth(month.month, month.year);
-      setCycleWeeks(weeksInCycle);
+      // Data de referência pra resolver QUAL ciclo da fatura estamos vendo:
+      // "hoje" só corresponde ao ciclo certo quando a competência exibida é
+      // o mês corrente de verdade. Navegando pra um mês passado/futuro, usar
+      // "hoje" sempre resolveria pro ciclo vigente DE HOJE — por isso julho
+      // aparecia com o ciclo/leituras de agosto. Uma data dentro da própria
+      // competência exibida resolve pro ciclo daquele mês.
+      const cycleReferenceDate = isCurrentMonth
+        ? now
+        : new Date(month.year, month.month, 0); // último dia da competência exibida
 
-      // Intervalo real do ciclo vigente (não os blocos de 7 dias, que podem
+      // Intervalo real do ciclo (não os blocos de 7 dias, que podem
       // ultrapassar o fechamento real) — exibido no card de Orçamento
       // Semanal pra deixar claro qual ciclo está sendo usado no cálculo.
       const cycleRangeForPrimary =
-        primary?.closing_day != null ? getCycleRange(primary.closing_day) : null;
+        primary?.closing_day != null
+          ? getCycleRange(primary.closing_day, cycleReferenceDate)
+          : null;
       setCycleRange(cycleRangeForPrimary);
+
+      // Semanas do ciclo: derivadas do MESMO intervalo acima (não de uma
+      // função à parte com outra noção de "ciclo atual"), pra nunca divergir
+      // do "Ciclo vigente: dd/mm–dd/mm" mostrado na tela.
+      const weeksInCycle = cycleRangeForPrimary
+        ? cycleLengthInWeeks(cycleRangeForPrimary)
+        : getWeeksInMonth(month.month, month.year);
+      setCycleWeeks(weeksInCycle);
 
       // leituras do cartão principal DENTRO DO CICLO da fatura — não da
       // competência exibida. O ciclo quase sempre atravessa a virada do mês
@@ -476,7 +494,10 @@ export default function Dashboard() {
 
       // Orçamento semanal decrescente: passou uma semana, divide pelas que
       // restam. Com leituras lançadas, usa o maior índice de semana já
-      // registrado (mínimo 1 restante); sem leituras, cai no cálculo por data.
+      // registrado (mínimo 1 restante); sem leituras E no mês corrente, cai
+      // no cálculo por data ("hoje" só é válido pro ciclo em andamento —
+      // num mês passado/futuro sem leitura nenhuma, o ciclo inteiro é a
+      // melhor estimativa, não "quanto falta a partir de hoje").
       let weeksForBudget = weeksInCycle;
       if (primary?.closing_day != null) {
         if (weeklySpendData.length > 0) {
@@ -484,7 +505,7 @@ export default function Dashboard() {
             ...weeklySpendData.map((w) => w.weekIndex),
           );
           weeksForBudget = Math.max(1, weeksInCycle - maxWeekIndex);
-        } else {
+        } else if (isCurrentMonth) {
           weeksForBudget = getWeeksRemainingInCycle(primary.closing_day);
         }
       }
@@ -903,9 +924,16 @@ export default function Dashboard() {
                 );
                 const diff = summary.weeklyBudget - week.spent;
 
+                // `cycleRange.start` (já resolvido pra competência exibida,
+                // não "hoje") garante que as datas de cada semana batem com
+                // o ciclo mostrado, mesmo navegando por um mês passado.
                 const { start, end } =
-                  primaryCard.closing_day != null
-                    ? weekDateRangeInCycle(week.index, primaryCard.closing_day)
+                  primaryCard.closing_day != null && cycleRange
+                    ? weekDateRangeInCycle(
+                        week.index,
+                        primaryCard.closing_day,
+                        cycleRange.start,
+                      )
                     : { start: null, end: null };
 
                 return (
