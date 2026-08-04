@@ -13,6 +13,13 @@ export type DueItem = {
    * pago. Quem renderiza usa isso pra decidir qual serviço chamar.
    */
   cardInvoiceSnapshotId?: string;
+  /**
+   * Só existe em item de fatura de cartão: false quando o valor da fatura
+   * do mês ainda não foi lançado em Cartões — o dia de vencimento é fixo e
+   * conhecido de antemão, então o item aparece mesmo assim, só sem valor
+   * nem ação de marcar como pago.
+   */
+  amountKnown?: boolean;
 };
 
 function startOfDay(date: Date): Date {
@@ -163,9 +170,11 @@ export type CardInvoiceCharge = {
  * Vencimento da FATURA do cartão em si (o pagamento que o usuário faz de
  * fato pro banco), a partir do `due_day` cadastrado no cartão — diferente
  * das despesas/parcelas lançadas NA fatura, que já são `automatic` porque
- * pagar a fatura cobre todas elas de uma vez. Só entra quem já tem fatura
- * lançada no mês (`snapshotId`) e valor > 0; sem isso não há o que pagar
- * ainda. `paidAt` (do snapshot) sobrepõe o status por data, como em
+ * pagar a fatura cobre todas elas de uma vez. O dia é fixo por cartão, então
+ * o item entra sempre que o cartão tem `dueDay` — mesmo antes do valor do
+ * mês ser lançado em Cartões (`amountKnown` fica `false` e não há
+ * `cardInvoiceSnapshotId` pra marcar como paga ainda). `paidAt` (do
+ * snapshot, quando existe) sobrepõe o status por data, como em
  * `getDueItems`.
  */
 export function getCardInvoiceDueItems(
@@ -180,12 +189,12 @@ export function getCardInvoiceDueItems(
   const items: DueItem[] = [];
 
   for (const charge of charges) {
-    if (!charge.snapshotId || charge.amount <= 0) continue;
-
     const dueDate = resolveDueDate(charge.dueDay, year, month);
     const daysUntil = Math.round(
       (startOfDay(dueDate).getTime() - now.getTime()) / 86_400_000,
     );
+
+    const amountKnown = Boolean(charge.snapshotId);
 
     const status: DueStatus = charge.paidAt
       ? 'paid'
@@ -211,7 +220,8 @@ export function getCardInvoiceDueItems(
       dueDate,
       status,
       daysUntil,
-      cardInvoiceSnapshotId: charge.snapshotId,
+      cardInvoiceSnapshotId: charge.snapshotId || undefined,
+      amountKnown,
     });
   }
 

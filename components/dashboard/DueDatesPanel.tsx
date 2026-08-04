@@ -269,17 +269,24 @@ export default function DueDatesPanel({
                 💳 cobrança automática{cardName ? ` — ${cardName}` : ''}
               </span>
             )}
+            {item.amountKnown === false && (
+              <span className="badge bg-zinc-700/50 text-zinc-400">
+                valor ainda não lançado
+              </span>
+            )}
           </div>
         </div>
 
         <div className="flex shrink-0 items-center gap-3">
           <span className="font-bold text-white">
-            {item.transaction.amount.toLocaleString('pt-BR', {
-              style: 'currency',
-              currency: 'BRL',
-            })}
+            {item.amountKnown === false
+              ? '—'
+              : item.transaction.amount.toLocaleString('pt-BR', {
+                  style: 'currency',
+                  currency: 'BRL',
+                })}
           </span>
-          {item.status !== 'automatic' && (
+          {item.status !== 'automatic' && item.amountKnown !== false && (
             <button
               onClick={() => handleTogglePaid(item)}
               disabled={pendingId === item.transaction.id}

@@ -41,6 +41,7 @@ import type { ActiveInstallment } from '@/core/services/installment.service';
 import { getCards } from '@/core/services/card.service';
 import {
   getReadings,
+  getReadingsInRange,
   getAllReadings,
   deleteReading,
 } from '@/core/services/cardReading.service';
@@ -59,7 +60,6 @@ import { getDueItems } from '@/core/engine/dueDates';
 import {
   latestReadingByAccount,
   openBillsFromTransactions,
-  openInvoicesFromSnapshots,
   pendingReturns,
   projectBalance,
   PendingReturn,
@@ -143,7 +143,7 @@ export default function Dashboard() {
   const groupedTransactions = groupTransactionsByCategory(filteredTransactions);
   const [cards, setCards] = useState<DBCard[]>([]);
   const [snapshots, setSnapshots] = useState<DBCardSnapshot[]>([]);
-  const [readings, setReadings] = useState<DBCardReading[]>([]);
+  const [monthReadings, setMonthReadings] = useState<DBCardReading[]>([]);
   const [weeklySpend, setWeeklySpend] = useState<WeeklySpend[]>([]);
   const [weeklyKnownCharges, setWeeklyKnownCharges] = useState<
     Map<number, number>
@@ -312,17 +312,20 @@ export default function Dashboard() {
             amount: p.amount,
           }));
 
+        // A fatura da PRÓPRIA competência exibida ainda não é uma obrigação
+        // de pagamento: ela só "vence" de fato quando o mês vira e ela some
+        // pra trás sem ser paga — aí sim vira `carried`. Contar o snapshot
+        // do mês corrente aqui faria a projeção cobrar a mesma fatura duas
+        // vezes: uma como "fatura deste mês", outra como carried assim que
+        // o próximo mês for aberto.
         setDefaultAccountProjection(
           projectBalance({
             reading: latest ? { label: defaultAccount.name, amount: latest.amount } : null,
             openBills: openBillsFromTransactions(transactionsMapped),
-            openInvoices: [
-              ...openInvoicesFromSnapshots(cardsDB, snapshotsData),
-              ...carried.map((c) => ({
-                label: `Fatura ${c.cardName} (${formatMonthLabel(c.competence.month, c.competence.year)})`,
-                amount: c.amount,
-              })),
-            ],
+            openInvoices: carried.map((c) => ({
+              label: `Fatura ${c.cardName} (${formatMonthLabel(c.competence.month, c.competence.year)})`,
+              amount: c.amount,
+            })),
             pendingReturns: returnsForDefault,
           }),
         );
@@ -377,16 +380,31 @@ export default function Dashboard() {
       // Intervalo real do ciclo vigente (não os blocos de 7 dias, que podem
       // ultrapassar o fechamento real) — exibido no card de Orçamento
       // Semanal pra deixar claro qual ciclo está sendo usado no cálculo.
-      setCycleRange(
-        primary?.closing_day != null ? getCycleRange(primary.closing_day) : null,
-      );
+      const cycleRangeForPrimary =
+        primary?.closing_day != null ? getCycleRange(primary.closing_day) : null;
+      setCycleRange(cycleRangeForPrimary);
 
-      // leituras do cartão principal no mês corrente — única fonte do
-      // acompanhamento semanal exibido (nunca soma faturas de dois cartões).
+      // leituras do cartão principal DENTRO DO CICLO da fatura — não da
+      // competência exibida. O ciclo quase sempre atravessa a virada do mês
+      // (fecha dia 4 → 04/07–03/08), então leituras de julho continuam
+      // valendo pro acompanhamento semanal mostrado em agosto; filtrar só
+      // por month_id (getReadings) as esconderia assim que o mês virasse.
       let weeklySpendData: WeeklySpend[] = [];
       if (primary) {
-        const readingsData = await getReadings(month.id, primary.id);
-        setReadings(readingsData);
+        const readingsData = cycleRangeForPrimary
+          ? await getReadingsInRange(
+              primary.id,
+              cycleRangeForPrimary.start,
+              cycleRangeForPrimary.end,
+            )
+          : await getReadings(month.id, primary.id);
+
+        // Histórico exibido na UI: só as leituras DESTA competência — o
+        // usuário espera ver aqui só o que lançou no mês que está vendo, não
+        // o ciclo inteiro da fatura (que usa `readingsData`, acima, só para o
+        // cálculo de gasto semana a semana).
+        setMonthReadings(await getReadings(month.id, primary.id));
+
         weeklySpendData = weeklySpendFromReadings(
           readingsData,
           primary.closing_day ?? undefined,
@@ -451,7 +469,7 @@ export default function Dashboard() {
         setWeeklyKnownCharges(knownCharges);
         setWeeklySpend(weeklySpendData);
       } else {
-        setReadings([]);
+        setMonthReadings([]);
         setWeeklySpend([]);
         setWeeklyKnownCharges(new Map());
       }
@@ -950,7 +968,7 @@ export default function Dashboard() {
               })}
             </div>
 
-            {readings.length > 0 && (
+            {monthReadings.length > 0 && (
               <div className="grid gap-1.5">
                 <button
                   type="button"
@@ -958,8 +976,10 @@ export default function Dashboard() {
                   className="flex items-center justify-between gap-2 rounded-lg px-1 py-1 text-left transition hover:bg-white/5"
                 >
                   <span className="text-zinc-400 text-xs">
-                    Histórico de leituras ({readings.length}) · última:{' '}
-                    {formatCurrency(Number(readings[readings.length - 1].amount))}
+                    Leituras deste mês ({monthReadings.length}) · última:{' '}
+                    {formatCurrency(
+                      Number(monthReadings[monthReadings.length - 1].amount),
+                    )}
                   </span>
                   <span
                     className={`text-zinc-500 text-xs shrink-0 transition-transform ${readingsOpen ? 'rotate-180' : ''}`}
@@ -969,7 +989,7 @@ export default function Dashboard() {
                 </button>
 
                 {readingsOpen &&
-                  readings.map((r) => (
+                  monthReadings.map((r) => (
                     <div
                       key={r.id}
                       className="surface-row flex flex-col gap-1.5 p-3 sm:flex-row sm:items-center sm:justify-between"

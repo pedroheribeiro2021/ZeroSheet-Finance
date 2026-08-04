@@ -31,6 +31,56 @@ export async function getReadings(
 }
 
 /**
+ * Leituras de um cartão num intervalo de datas (`read_at`), ignorando
+ * `month_id` — o ciclo de fatura quase sempre atravessa a virada de
+ * competência (ex.: fecha dia 4, ciclo 04/07–03/08), então uma leitura de
+ * julho pode pertencer ao mesmo ciclo que está sendo exibido em agosto.
+ * Filtrar só por `month_id` (como `getReadings`) esconde essas leituras
+ * antigas do acompanhamento semanal assim que a competência vira. Use isso
+ * pra qualquer visão baseada no CICLO da fatura; `getReadings` continua
+ * certo pra listagens por competência (ex.: limpeza de leituras do mês).
+ *
+ * `start`/`end` são tratados como dias inteiros (00:00–23:59:59.999): uma
+ * leitura lançada à noite do último dia do ciclo não pode cair fora por
+ * `end` ser meia-noite.
+ */
+export async function getReadingsInRange(
+  cardId: string,
+  start: Date,
+  end: Date,
+): Promise<DBCardReading[]> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error('Usuário não autenticado');
+
+  const startOfDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const endOfDay = new Date(
+    end.getFullYear(),
+    end.getMonth(),
+    end.getDate(),
+    23,
+    59,
+    59,
+    999,
+  );
+
+  const { data, error } = await supabase
+    .from('card_readings')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('card_id', cardId)
+    .gte('read_at', startOfDay.toISOString())
+    .lte('read_at', endOfDay.toISOString())
+    .order('read_at');
+
+  if (error) {
+    if (error.code === '42P01') return [];
+    throw error;
+  }
+
+  return (data ?? []) as DBCardReading[];
+}
+
+/**
  * Leituras de fatura de TODOS os cartões no mês — usado pela cobertura até o
  * salário, que precisa do valor do ciclo em aberto de cada cartão, não só do
  * principal. Mesma tolerância à tabela inexistente de `getReadings`.

@@ -11,7 +11,7 @@ import PageLoading from '@/components/ui/PageLoading';
 import { getMonths, createMonth } from '@/core/services/month.service';
 import { getTransactions } from '@/core/services/transaction.service';
 import { getCards } from '@/core/services/card.service';
-import { getCardSnapshots } from '@/core/services/cardSnapshot.service';
+import { getOpenCardSnapshots } from '@/core/services/cardSnapshot.service';
 import { getAccounts, getAccountReadings } from '@/core/services/account.service';
 import { getTransfers } from '@/core/services/transfer.service';
 
@@ -19,11 +19,20 @@ import { mapTransaction, mapAccountReading, mapTransfer } from '@/core/models/ma
 import {
   latestReadingByAccount,
   openBillsFromTransactions,
-  openInvoicesFromSnapshots,
   pendingReturns,
   projectBalance,
 } from '@/core/engine/accounts';
+import { carriedOverInvoices } from '@/core/engine/month';
 import { DBAccount, DBAccountReading, DBTransfer } from '@/core/types/database';
+
+function formatMonthLabel(month: number, year: number): string {
+  const raw = new Intl.DateTimeFormat('pt-BR', {
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(year, month - 1));
+
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
 
 export default function AccountsPage() {
   const [monthId, setMonthId] = useState<string | null>(null);
@@ -45,13 +54,13 @@ export default function AccountsPage() {
       const latestMonth = monthsData[monthsData.length - 1];
       setMonthId(latestMonth.id);
 
-      const [accountsData, readingsData, transfersData, cardsData, snapshotsData, transactionsData] =
+      const [accountsData, readingsData, transfersData, cardsData, openSnapshots, transactionsData] =
         await Promise.all([
           getAccounts(),
           getAccountReadings(),
           getTransfers(),
           getCards(),
-          getCardSnapshots(latestMonth.id),
+          getOpenCardSnapshots(),
           getTransactions(latestMonth.id),
         ]);
 
@@ -66,7 +75,22 @@ export default function AccountsPage() {
       const latestByAccount = latestReadingByAccount(readingsMapped);
       const pending = pendingReturns(transfersMapped);
       const openBills = openBillsFromTransactions(transactionsMapped);
-      const openInvoices = openInvoicesFromSnapshots(cardsData, snapshotsData);
+
+      // Só a fatura CARREGADA de uma competência anterior é uma obrigação de
+      // pagamento de fato — a fatura da própria competência exibida ainda
+      // não "venceu" (só vence quando o mês vira e ela continua em aberto).
+      // Contar o snapshot do mês corrente aqui cobraria a mesma fatura duas
+      // vezes assim que o próximo mês fosse aberto.
+      const carried = carriedOverInvoices({
+        months: monthsData,
+        snapshots: openSnapshots,
+        cards: cardsData,
+        current: { month: latestMonth.month, year: latestMonth.year },
+      });
+      const openInvoices = carried.map((c) => ({
+        label: `Fatura ${c.cardName} (${formatMonthLabel(c.competence.month, c.competence.year)})`,
+        amount: c.amount,
+      }));
 
       const nameById = new Map(accountsData.map((a) => [a.id, a.name]));
 
