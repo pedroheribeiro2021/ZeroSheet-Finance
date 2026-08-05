@@ -10,8 +10,14 @@ import {
   DueItem,
   DueStatus,
 } from '@/core/engine/dueDates';
-import { markTransactionPaid, unmarkTransactionPaid } from '@/core/services/transaction.service';
-import { markCardSnapshotPaid, unmarkCardSnapshotPaid } from '@/core/services/cardSnapshot.service';
+import {
+  markTransactionPaid,
+  unmarkTransactionPaid,
+} from '@/core/services/transaction.service';
+import {
+  markCardSnapshotPaid,
+  unmarkCardSnapshotPaid,
+} from '@/core/services/cardSnapshot.service';
 import type { ActiveInstallment } from '@/core/services/installment.service';
 import {
   getPushSubscriptionState,
@@ -20,13 +26,18 @@ import {
 } from '@/core/services/push.service';
 import { useToast } from '@/components/ui/ToastProvider';
 import { Transaction } from '@/core/types/finance';
-import { DBCard, DBCardSnapshot } from '@/core/types/database';
+import { DBCard } from '@/core/types/database';
 
 type DueDatesPanelProps = {
   transactions: Transaction[];
   installments: ActiveInstallment[];
   cards: DBCard[];
-  snapshots: DBCardSnapshot[];
+  /**
+   * Faturas que vencem NESTE mês, já resolvidas por `engine/invoices` — em
+   * agosto isso é a fatura da competência julho (vence 10/08), não a de
+   * agosto (que vence 10/09). O painel não deriva mais data de vencimento.
+   */
+  invoiceCharges: CardInvoiceCharge[];
   month: number;
   year: number;
   onChanged: () => void;
@@ -54,7 +65,7 @@ export default function DueDatesPanel({
   transactions,
   installments,
   cards,
-  snapshots,
+  invoiceCharges,
   month,
   year,
   onChanged,
@@ -84,11 +95,15 @@ export default function DueDatesPanel({
     } catch (err) {
       console.error(err);
       showToast(
-        err instanceof Error ? err.message : 'Não foi possível atualizar as notificações',
+        err instanceof Error
+          ? err.message
+          : 'Não foi possível atualizar as notificações',
         'error',
       );
     } finally {
-      const state = await getPushSubscriptionState().catch(() => 'unsupported' as const);
+      const state = await getPushSubscriptionState().catch(
+        () => 'unsupported' as const,
+      );
       setPushState(state);
     }
   };
@@ -119,25 +134,10 @@ export default function DueDatesPanel({
     [installments, year, month],
   );
 
-  const cardInvoiceItems = useMemo(() => {
-    const charges: CardInvoiceCharge[] = cards
-      .filter((c) => c.due_day != null)
-      .map((c) => {
-        const snapshot = snapshots.find((s) => s.card_id === c.id);
-        return {
-          cardId: c.id,
-          cardName: c.name,
-          dueDay: c.due_day as number,
-          snapshotId: snapshot?.id ?? '',
-          amount: Number(snapshot?.amount ?? 0),
-          paidAt: snapshot?.paid_at,
-        };
-      });
-
-    return getCardInvoiceDueItems(charges, year, month, today, {
-      horizonDays: 7,
-    });
-  }, [cards, snapshots, year, month, today]);
+  const cardInvoiceItems = useMemo(
+    () => getCardInvoiceDueItems(invoiceCharges, today, { horizonDays: 7 }),
+    [invoiceCharges, today],
+  );
 
   const dueItems = useMemo(
     () => [
@@ -185,10 +185,18 @@ export default function DueDatesPanel({
       map.set(day, list);
     }
 
-    // Vencimento da fatura do cartão (dia cadastrado no cartão) — o
-    // pagamento que o usuário de fato faz, separado das cobranças que
-    // compõem a fatura.
+    // Vencimento da fatura do cartão — o pagamento que o usuário de fato faz,
+    // separado das cobranças que compõem a fatura. A data já vem resolvida
+    // pelo ciclo (competência M vence em M+1); o guard de mês/ano só evita
+    // plotar num dia deste calendário uma fatura que vence em outro mês.
     for (const item of cardInvoiceItems) {
+      if (
+        item.dueDate.getFullYear() !== year ||
+        item.dueDate.getMonth() + 1 !== month
+      ) {
+        continue;
+      }
+
       const day = item.dueDate.getDate();
       const list = map.get(day) ?? [];
       list.push(item);
@@ -240,7 +248,8 @@ export default function DueDatesPanel({
     ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
   ];
 
-  const selectedDayItems = selectedDay != null ? (dueByDay.get(selectedDay) ?? []) : [];
+  const selectedDayItems =
+    selectedDay != null ? (dueByDay.get(selectedDay) ?? []) : [];
 
   const renderDueItemRow = (item: DueItem) => {
     const cardName = cards.find((c) => c.id === item.transaction.card)?.name;
@@ -290,7 +299,11 @@ export default function DueDatesPanel({
             <button
               onClick={() => handleTogglePaid(item)}
               disabled={pendingId === item.transaction.id}
-              className={item.status === 'paid' ? 'btn-ghost text-xs' : 'btn-primary text-xs'}
+              className={
+                item.status === 'paid'
+                  ? 'btn-ghost text-xs'
+                  : 'btn-primary text-xs'
+              }
             >
               {item.status === 'paid' ? 'Desmarcar' : 'Marcar como pago'}
             </button>
@@ -303,7 +316,9 @@ export default function DueDatesPanel({
   return (
     <div className="surface p-4 sm:p-5">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold text-white">Vencimentos do mês</h2>
+        <h2 className="text-base font-semibold text-white">
+          Vencimentos do mês
+        </h2>
 
         {pushState !== 'unsupported' && (
           <button
@@ -325,13 +340,13 @@ export default function DueDatesPanel({
         )}
       </div>
       <p className="mb-4 text-xs text-zinc-500">
-        Despesas fixas/recorrentes com dia de vencimento cadastrado, parcelas
-        de cartão ativas no mês e a fatura de cada cartão (dia cadastrado em
-        Cartões). Despesas e parcelas vinculadas a um cartão são cobradas
-        automaticamente na fatura — só aparecem informativamente, sem exigir
-        marcar como pago; já a fatura em si é o pagamento que você faz de
-        fato, e pode ser marcada. Clique num dia do calendário para ver o que
-        vence nele.
+        Despesas fixas/recorrentes com dia de vencimento cadastrado, parcelas de
+        cartão ativas no mês e as faturas que vencem neste mês — que são as do
+        mês anterior, já que a fatura fechada numa competência só é paga na
+        seguinte. Despesas e parcelas vinculadas a um cartão são cobradas
+        automaticamente na fatura, então só aparecem informativamente; a fatura
+        em si é o pagamento que você faz de fato, e pode ser marcada como paga.
+        Clique num dia do calendário para ver o que vence nele.
       </p>
 
       <div className="mb-5 grid grid-cols-7 gap-1 text-center">
@@ -342,7 +357,8 @@ export default function DueDatesPanel({
         ))}
 
         {calendarCells.map((day, i) => {
-          if (day === null) return <div key={`empty-${i}`} className="h-9 sm:h-11" />;
+          if (day === null)
+            return <div key={`empty-${i}`} className="h-9 sm:h-11" />;
 
           const cellDate = new Date(year, month - 1, day).getTime();
           const isToday = cellDate === todayNum;
@@ -365,7 +381,9 @@ export default function DueDatesPanel({
             <button
               key={day}
               type="button"
-              onClick={() => setSelectedDay((prev) => (prev === day ? null : day))}
+              onClick={() =>
+                setSelectedDay((prev) => (prev === day ? null : day))
+              }
               className={`flex h-9 cursor-pointer flex-col items-center justify-center rounded-lg text-xs transition-colors sm:h-11 ${
                 isSelected
                   ? 'border border-sky-500/60 bg-sky-500/15 font-bold text-white'
@@ -373,11 +391,15 @@ export default function DueDatesPanel({
                     ? 'border border-white/20 bg-zinc-800 font-bold text-white'
                     : 'text-zinc-400 hover:bg-zinc-800/60'
               }`}
-              title={items.map((i) => i.transaction.description || i.transaction.category).join(', ')}
+              title={items
+                .map((i) => i.transaction.description || i.transaction.category)
+                .join(', ')}
             >
               <span>{day}</span>
               {items.length > 0 && worstStatus && (
-                <span className={`mt-0.5 h-1.5 w-1.5 rounded-full ${STATUS_DOT[worstStatus]}`} />
+                <span
+                  className={`mt-0.5 h-1.5 w-1.5 rounded-full ${STATUS_DOT[worstStatus]}`}
+                />
               )}
             </button>
           );
@@ -388,33 +410,49 @@ export default function DueDatesPanel({
         <div className="mb-5 grid gap-1.5 rounded-xl border border-white/[0.06] bg-black/20 p-3">
           <div className="flex items-center justify-between">
             <p className="text-xs font-medium text-zinc-400">
-              {String(selectedDay).padStart(2, '0')}/{String(month).padStart(2, '0')}
+              {String(selectedDay).padStart(2, '0')}/
+              {String(month).padStart(2, '0')}
             </p>
-            <button onClick={() => setSelectedDay(null)} className="btn-ghost text-xs">
+            <button
+              onClick={() => setSelectedDay(null)}
+              className="btn-ghost text-xs"
+            >
               Fechar
             </button>
           </div>
 
           {selectedDayItems.length === 0 ? (
-            <p className="text-sm text-zinc-500">Nenhum vencimento neste dia.</p>
+            <p className="text-sm text-zinc-500">
+              Nenhum vencimento neste dia.
+            </p>
           ) : (
-            <div className="grid gap-1.5">{selectedDayItems.map(renderDueItemRow)}</div>
+            <div className="grid gap-1.5">
+              {selectedDayItems.map(renderDueItemRow)}
+            </div>
           )}
         </div>
       )}
 
       {groups.length === 0 && (
-        <p className="text-sm text-zinc-500">Nenhum vencimento nos próximos dias.</p>
+        <p className="text-sm text-zinc-500">
+          Nenhum vencimento nos próximos dias.
+        </p>
       )}
 
       <div className="grid gap-4">
         {groups.map((group) => (
           <div key={group.status} className="grid gap-1.5">
             <p className="flex items-center gap-1.5 text-xs font-medium text-zinc-400">
-              <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[group.status]}`} />
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[group.status]}`}
+              />
               {group.label}
               <span className="text-zinc-500">
-                · {group.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                ·{' '}
+                {group.total.toLocaleString('pt-BR', {
+                  style: 'currency',
+                  currency: 'BRL',
+                })}
               </span>
             </p>
 

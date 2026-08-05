@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   calculateCoverage,
   coverageBillsFromTransactions,
-  coverageInvoices,
+  coverageInvoicesFromOpen,
   resolveNextPayday,
   resolveOccurrence,
   resolvePaydayDay,
@@ -12,7 +12,8 @@ import { getDueItems } from '@/core/engine/dueDates';
 import { Account, AccountReading, Transaction } from '@/core/types/finance';
 
 const tx = (
-  data: Partial<Transaction> & Pick<Transaction, 'id' | 'type' | 'category' | 'amount'>,
+  data: Partial<Transaction> &
+    Pick<Transaction, 'id' | 'type' | 'category' | 'amount'>,
 ): Transaction => ({
   monthId: 'm1',
   isFixed: false,
@@ -22,7 +23,11 @@ const tx = (
   ...data,
 });
 
-const account = (id: string, name: string, kind: 'corrente' | 'guardado'): Account => ({
+const account = (
+  id: string,
+  name: string,
+  kind: 'corrente' | 'guardado',
+): Account => ({
   id,
   userId: 'u1',
   name,
@@ -44,9 +49,27 @@ const reading = (accountId: string, amount: number): AccountReading => ({
 describe('resolvePaydayDay', () => {
   it('usa o dia da maior entrada com dia cadastrado', () => {
     const day = resolvePaydayDay([
-      tx({ id: '1', type: 'income', category: 'Salário', amount: 9000, dueDay: 15 }),
-      tx({ id: '2', type: 'income', category: 'Freela', amount: 800, dueDay: 5 }),
-      tx({ id: '3', type: 'expense', category: 'Aluguel', amount: 2000, dueDay: 10 }),
+      tx({
+        id: '1',
+        type: 'income',
+        category: 'Salário',
+        amount: 9000,
+        dueDay: 15,
+      }),
+      tx({
+        id: '2',
+        type: 'income',
+        category: 'Freela',
+        amount: 800,
+        dueDay: 5,
+      }),
+      tx({
+        id: '3',
+        type: 'expense',
+        category: 'Aluguel',
+        amount: 2000,
+        dueDay: 10,
+      }),
     ]);
 
     expect(day).toBe(15);
@@ -72,14 +95,22 @@ describe('resolvePaydayDay', () => {
           skipped: true,
         }),
         tx({ id: '3', type: 'income', category: 'Extra', amount: 12000 }),
-        tx({ id: '4', type: 'income', category: 'Salário', amount: 9000, dueDay: 15 }),
+        tx({
+          id: '4',
+          type: 'income',
+          category: 'Salário',
+          amount: 9000,
+          dueDay: 15,
+        }),
       ]),
     ).toBe(15);
   });
 
   it('retorna null quando nenhuma entrada tem dia', () => {
     expect(
-      resolvePaydayDay([tx({ id: '1', type: 'income', category: 'Salário', amount: 9000 })]),
+      resolvePaydayDay([
+        tx({ id: '1', type: 'income', category: 'Salário', amount: 9000 }),
+      ]),
     ).toBeNull();
   });
 
@@ -131,19 +162,27 @@ describe('resolveOccurrence', () => {
 
 describe('resolveNextPayday', () => {
   it('é este mês quando o dia ainda não passou', () => {
-    expect(resolveNextPayday(15, new Date(2026, 6, 8))).toEqual(new Date(2026, 6, 15));
+    expect(resolveNextPayday(15, new Date(2026, 6, 8))).toEqual(
+      new Date(2026, 6, 15),
+    );
   });
 
   it('inclui o próprio dia do salário', () => {
-    expect(resolveNextPayday(15, new Date(2026, 6, 15))).toEqual(new Date(2026, 6, 15));
+    expect(resolveNextPayday(15, new Date(2026, 6, 15))).toEqual(
+      new Date(2026, 6, 15),
+    );
   });
 
   it('vira para o mês seguinte quando o dia já passou', () => {
-    expect(resolveNextPayday(15, new Date(2026, 6, 20))).toEqual(new Date(2026, 7, 15));
+    expect(resolveNextPayday(15, new Date(2026, 6, 20))).toEqual(
+      new Date(2026, 7, 15),
+    );
   });
 
   it('clampa o dia 31 no último dia do mês curto', () => {
-    expect(resolveNextPayday(31, new Date(2026, 1, 20))).toEqual(new Date(2026, 1, 28));
+    expect(resolveNextPayday(31, new Date(2026, 1, 20))).toEqual(
+      new Date(2026, 1, 28),
+    );
   });
 });
 
@@ -259,7 +298,14 @@ describe('calculateCoverage', () => {
     const result = calculateCoverage({
       ...base,
       bills: [
-        { id: 'b1', label: 'Cartão', amount: 3000, dueDay: 15, paid: false, recurring: true },
+        {
+          id: 'b1',
+          label: 'Cartão',
+          amount: 3000,
+          dueDay: 15,
+          paid: false,
+          recurring: true,
+        },
       ],
       invoices: [],
     });
@@ -299,7 +345,11 @@ describe('calculateCoverage', () => {
   });
 
   it('depois do complemento entrar na leitura, a falta zera', () => {
-    const result = calculateCoverage({ ...base, balance: 4200, borrowed: 3000 });
+    const result = calculateCoverage({
+      ...base,
+      balance: 4200,
+      borrowed: 3000,
+    });
 
     expect(result.shortfall).toBe(0);
     expect(result.borrowed).toBe(3000);
@@ -310,79 +360,57 @@ describe('calculateCoverage', () => {
   });
 });
 
-describe('coverageInvoices', () => {
-  const cards = [
-    { id: 'c6', name: 'C6', due_day: 10, closing_day: 4 },
-    { id: 'nu', name: 'Nubank', due_day: 2, closing_day: 26 },
-  ];
+describe('coverageInvoicesFromOpen', () => {
+  const invoice = (
+    over: Partial<{
+      snapshotId: string;
+      cardId: string | null;
+      cardName: string;
+      amount: number;
+      dueDate: Date;
+      paid: boolean;
+      estimated: boolean;
+      closingDay: number | null;
+    }> = {},
+  ) => ({
+    snapshotId: 's1',
+    cardId: 'c6',
+    cardName: 'C6',
+    amount: 4733.03,
+    dueDate: new Date(2026, 7, 10),
+    paid: false,
+    ...over,
+  });
 
-  it('fatura em aberto vale o snapshot, na competência corrente', () => {
-    const invoices = coverageInvoices(
-      [cards[0]],
-      [{ id: 's1', card_id: 'c6', amount: 3866.98, paid_at: null }],
-      [{ card_id: 'c6', amount: 100, read_at: '2026-07-29T00:00:00Z' }],
-      new Date(2026, 6, 8),
-    );
-
-    expect(invoices).toEqual([
+  it('traduz a fatura em aberto sem recalcular ciclo nenhum', () => {
+    expect(coverageInvoicesFromOpen([invoice()])).toEqual([
       {
         id: 's1',
         label: 'Fatura C6',
-        amount: 3866.98,
-        dueDate: new Date(2026, 6, 10),
-        partial: false,
-      },
-    ]);
-  });
-
-  it('fatura já paga usa a última leitura do ciclo seguinte, como parcial', () => {
-    const invoices = coverageInvoices(
-      [cards[0]],
-      [{ id: 's1', card_id: 'c6', amount: 3866.98, paid_at: '2026-07-16' }],
-      [
-        { card_id: 'c6', amount: 2920.13, read_at: '2026-07-25T11:05:00Z' },
-        { card_id: 'c6', amount: 3866.98, read_at: '2026-07-29T17:32:00Z' },
-        { card_id: 'nu', amount: 999, read_at: '2026-07-29T17:32:00Z' },
-      ],
-      new Date(2026, 6, 30),
-    );
-
-    expect(invoices).toEqual([
-      {
-        id: 'card-c6',
-        label: 'Fatura C6',
-        amount: 3866.98,
+        amount: 4733.03,
         dueDate: new Date(2026, 7, 10),
-        partial: true,
-        closingDay: 4,
+        partial: false,
+        closingDay: null,
       },
     ]);
   });
 
-  it('ignora cartão sem due_day e sem leitura nem snapshot', () => {
-    expect(
-      coverageInvoices(
-        [
-          { id: 'x', name: 'Sem venc.', due_day: null, closing_day: 1 },
-          { id: 'y', name: 'Sem dado', due_day: 10, closing_day: 1 },
-        ],
-        [],
-        [],
-        new Date(2026, 6, 30),
-      ),
-    ).toEqual([]);
+  it('fatura paga sai da lista e nada toma o lugar dela', () => {
+    expect(coverageInvoicesFromOpen([invoice({ paid: true })])).toEqual([]);
   });
 
-  it('ignora snapshot zerado e cai na leitura', () => {
-    const invoices = coverageInvoices(
-      [cards[0]],
-      [{ id: 's1', card_id: 'c6', amount: 0, paid_at: null }],
-      [{ card_id: 'c6', amount: 500, read_at: '2026-07-29T00:00:00Z' }],
-      new Date(2026, 6, 30),
-    );
+  it('fatura estimada (sem snapshot) entra como parcial', () => {
+    const [item] = coverageInvoicesFromOpen([
+      invoice({ snapshotId: '', estimated: true, closingDay: 4 }),
+    ]);
 
-    expect(invoices[0].partial).toBe(true);
-    expect(invoices[0].amount).toBe(500);
+    expect(item.id).toBe('card-c6');
+    expect(item.partial).toBe(true);
+    expect(item.closingDay).toBe(4);
+  });
+
+  it('ignora valor zerado', () => {
+    expect(coverageInvoicesFromOpen([invoice({ amount: 0 })])).toEqual([]);
   });
 });
 
@@ -423,7 +451,13 @@ describe('coverageBillsFromTransactions', () => {
         card: 'c6',
       }),
       tx({ id: '5', type: 'expense', category: 'Avulso', amount: 50 }),
-      tx({ id: '6', type: 'income', category: 'Salário', amount: 9000, dueDay: 15 }),
+      tx({
+        id: '6',
+        type: 'income',
+        category: 'Salário',
+        amount: 9000,
+        dueDay: 15,
+      }),
     ]);
 
     expect(bills.map((b) => b.id)).toEqual(['1', '2']);
@@ -449,11 +483,18 @@ describe('suggestCoverageSource', () => {
       ]),
     );
 
-    expect(source).toEqual({ accountId: 'nu', accountName: 'Nubank', available: 28400 });
+    expect(source).toEqual({
+      accountId: 'nu',
+      accountName: 'Nubank',
+      available: 28400,
+    });
   });
 
   it('conta guardada sem leitura não é candidata', () => {
-    const source = suggestCoverageSource(accounts, new Map([['itau', reading('itau', 1200)]]));
+    const source = suggestCoverageSource(
+      accounts,
+      new Map([['itau', reading('itau', 1200)]]),
+    );
 
     expect(source?.accountId).toBe('itau');
   });
@@ -464,26 +505,32 @@ describe('suggestCoverageSource', () => {
 });
 
 /**
- * Contrato do cenário que expôs o bug: em 30/07/2026 as faturas de julho
- * estavam pagas e o card dizia "nada vence antes de 15/08", quando na
- * verdade R$ 4.455,90 de fatura vencem em agosto, antes do salário.
+ * Contrato do cenário real de 04/08/2026 — o que estava errado na tela:
+ * a cobertura mostrava a fatura C6 de AGOSTO (R$ 791,99) como se vencesse em
+ * 10/08 e dizia "Coberto". A fatura que de fato vence em 10/08 é a de JULHO
+ * (R$ 4.733,03), e com ela o saldo não cobre: falta tirar da conta guardada.
  */
-describe('contrato — 30/07/2026', () => {
-  const today = new Date(2026, 6, 30);
+describe('contrato — 04/08/2026', () => {
+  const today = new Date(2026, 7, 4);
 
-  const cards = [
-    { id: 'c6', name: 'C6', due_day: 10, closing_day: 4 },
-    { id: 'nu', name: 'Nubank', due_day: 2, closing_day: 26 },
-  ];
-
-  const snapshots = [
-    { id: 's-nu', card_id: 'nu', amount: 588.92, paid_at: '2026-07-16' },
-    { id: 's-c6', card_id: 'c6', amount: 3866.98, paid_at: '2026-07-16' },
-  ];
-
-  const cardReadings = [
-    { card_id: 'c6', amount: 3866.98, read_at: '2026-07-29T17:32:23Z' },
-    { card_id: 'nu', amount: 588.92, read_at: '2026-07-17T13:08:35Z' },
+  // faturas já resolvidas por engine/invoices: competência M vence em M+1
+  const openInvoices = [
+    {
+      snapshotId: 's-c6-jul',
+      cardId: 'c6',
+      cardName: 'C6',
+      amount: 4733.03,
+      dueDate: new Date(2026, 7, 10), // julho vence 10/08
+      paid: false,
+    },
+    {
+      snapshotId: 's-nu-jul',
+      cardId: 'nu',
+      cardName: 'Nubank',
+      amount: 588.92,
+      dueDate: new Date(2026, 7, 2), // julho vence 02/08
+      paid: true, // paga em 16/07
+    },
   ];
 
   const transactions = [
@@ -493,7 +540,6 @@ describe('contrato — 30/07/2026', () => {
       category: 'Internet',
       amount: 130,
       dueDay: 10,
-      paidAt: '2026-07-12',
       isRecurring: true,
     }),
     tx({
@@ -502,16 +548,6 @@ describe('contrato — 30/07/2026', () => {
       category: 'Telefone',
       amount: 74.99,
       dueDay: 15,
-      paidAt: '2026-07-15',
-      isRecurring: true,
-    }),
-    tx({
-      id: 't-mei',
-      type: 'expense',
-      category: 'Guia do MEI',
-      amount: 86.05,
-      dueDay: 20,
-      skipped: true,
       isRecurring: true,
     }),
     tx({
@@ -527,7 +563,7 @@ describe('contrato — 30/07/2026', () => {
       id: 't-salario',
       type: 'income',
       category: 'Salário',
-      amount: 5000,
+      amount: 5703.2,
       dueDay: 15,
       isRecurring: true,
     }),
@@ -538,21 +574,23 @@ describe('contrato — 30/07/2026', () => {
     paydayDay: resolvePaydayDay(transactions),
     balance: 3763.71,
     bills: coverageBillsFromTransactions(transactions),
-    invoices: coverageInvoices(cards, snapshots, cardReadings, today),
+    invoices: coverageInvoicesFromOpen(openInvoices),
   });
 
   it('a janela vai até 15/08', () => {
     expect(coverage.payday).toEqual(new Date(2026, 7, 15));
   });
 
-  it('as duas faturas de agosto entram, somando 4.455,90', () => {
+  it('a fatura que entra é a de julho, vencendo 10/08 — não a de agosto', () => {
     const invoices = coverage.items.filter((i) => i.kind === 'invoice');
 
-    expect(invoices.map((i) => i.dueDate)).toEqual([
-      new Date(2026, 7, 2), // Nubank
-      new Date(2026, 7, 10), // C6
-    ]);
-    expect(invoices.reduce((acc, i) => acc + i.amount, 0)).toBe(4455.9);
+    expect(invoices).toHaveLength(1);
+    expect(invoices[0].amount).toBe(4733.03);
+    expect(invoices[0].dueDate).toEqual(new Date(2026, 7, 10));
+  });
+
+  it('a fatura marcada como paga não reaparece pelo ciclo seguinte', () => {
+    expect(coverage.items.some((i) => i.label === 'Fatura Nubank')).toBe(false);
   });
 
   it('a internet de 10/08 entra e o telefone de 15/08 fica fora', () => {
@@ -561,10 +599,10 @@ describe('contrato — 30/07/2026', () => {
     expect(bills.map((b) => b.id)).toEqual(['t-internet']);
   });
 
-  it('total, falta cobrir e piso', () => {
-    expect(coverage.dueBeforePayday).toBe(4585.9);
-    expect(coverage.shortfall).toBe(822.19);
-    expect(coverage.hasPartial).toBe(true);
+  it('o saldo NÃO cobre: falta tirar da conta guardada', () => {
+    expect(coverage.dueBeforePayday).toBe(4863.03);
+    expect(coverage.shortfall).toBe(1099.32);
+    expect(coverage.leftover).toBe(0);
   });
 
   it('despesa lançada no cartão não é contada à parte', () => {

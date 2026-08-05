@@ -31,7 +31,11 @@ function startOfDay(date: Date): Date {
  * cadastrado (`dueDay`). Clampa para o último dia do mês quando `dueDay`
  * excede os dias do mês (ex.: dia 31 em fevereiro → 28/29).
  */
-export function resolveDueDate(dueDay: number, year: number, month: number): Date {
+export function resolveDueDate(
+  dueDay: number,
+  year: number,
+  month: number,
+): Date {
   const daysInMonth = new Date(year, month, 0).getDate();
   return new Date(year, month - 1, Math.min(dueDay, daysInMonth));
 }
@@ -157,30 +161,38 @@ export function getInstallmentDueItems(
 }
 
 export type CardInvoiceCharge = {
-  cardId: string;
+  cardId: string | null;
   cardName: string;
   dueDay: number;
-  /** id do card_snapshot do mês — necessário pra marcar/desmarcar como paga. */
+  /**
+   * Quando a fatura é efetivamente paga — já resolvido por
+   * `engine/invoices.invoiceDueDate` (competência M → dia do cartão em M+1).
+   * Esta função NÃO deriva mais a data do mês exibido: era isso que fazia o
+   * calendário de agosto mostrar em 10/08 a fatura que só vence em 10/09.
+   */
+  dueDate: Date;
+  /** id do card_snapshot — necessário pra marcar/desmarcar como paga. */
   snapshotId: string;
   amount: number;
   paidAt?: string | null;
+  /** Competência de origem da fatura, ex.: "Julho de 2026". */
+  competenceLabel?: string;
+  /** Valor veio de leitura, não do snapshot: é piso, e não dá pra pagar. */
+  estimated?: boolean;
 };
 
 /**
  * Vencimento da FATURA do cartão em si (o pagamento que o usuário faz de
- * fato pro banco), a partir do `due_day` cadastrado no cartão — diferente
- * das despesas/parcelas lançadas NA fatura, que já são `automatic` porque
- * pagar a fatura cobre todas elas de uma vez. O dia é fixo por cartão, então
- * o item entra sempre que o cartão tem `dueDay` — mesmo antes do valor do
- * mês ser lançado em Cartões (`amountKnown` fica `false` e não há
- * `cardInvoiceSnapshotId` pra marcar como paga ainda). `paidAt` (do
- * snapshot, quando existe) sobrepõe o status por data, como em
- * `getDueItems`.
+ * fato pro banco), diferente das despesas/parcelas lançadas NA fatura, que já
+ * são `automatic` porque pagar a fatura cobre todas elas de uma vez.
+ *
+ * A data vem pronta em `charge.dueDate`; aqui só se classifica em relação a
+ * hoje. `paidAt` (do snapshot, quando existe) sobrepõe o status por data, como
+ * em `getDueItems`. Fatura estimada (sem snapshot) entra com
+ * `amountKnown: false` e sem ação de marcar como paga.
  */
 export function getCardInvoiceDueItems(
   charges: CardInvoiceCharge[],
-  year: number,
-  month: number,
   today: Date,
   { horizonDays = 7 }: { horizonDays?: number } = {},
 ): DueItem[] {
@@ -189,12 +201,12 @@ export function getCardInvoiceDueItems(
   const items: DueItem[] = [];
 
   for (const charge of charges) {
-    const dueDate = resolveDueDate(charge.dueDay, year, month);
+    const dueDate = charge.dueDate;
     const daysUntil = Math.round(
       (startOfDay(dueDate).getTime() - now.getTime()) / 86_400_000,
     );
 
-    const amountKnown = Boolean(charge.snapshotId);
+    const amountKnown = Boolean(charge.snapshotId) && !charge.estimated;
 
     const status: DueStatus = charge.paidAt
       ? 'paid'
@@ -204,10 +216,12 @@ export function getCardInvoiceDueItems(
 
     items.push({
       transaction: {
-        id: `card-invoice-${charge.cardId}`,
+        id: `card-invoice-${charge.cardId}-${charge.dueDate.getTime()}`,
         monthId: '',
         type: 'expense',
-        category: 'Fatura do cartão',
+        category: charge.competenceLabel
+          ? `Fatura ${charge.competenceLabel}`
+          : 'Fatura do cartão',
         description: charge.cardName,
         amount: charge.amount,
         isFixed: false,

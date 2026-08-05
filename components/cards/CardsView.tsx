@@ -56,7 +56,11 @@ export default function CardsView() {
     <div className="grid gap-4 p-4 sm:gap-5 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold text-white sm:text-2xl">Cartões</h1>
-        <MonthSelect months={months} activeMonth={activeMonth} onChange={goToMonth} />
+        <MonthSelect
+          months={months}
+          activeMonth={activeMonth}
+          onChange={goToMonth}
+        />
       </div>
 
       <CardForm
@@ -66,7 +70,11 @@ export default function CardsView() {
         }}
       />
 
-      <CardSnapshotForm monthId={activeMonth.id} cards={cards} onUpdated={handleReload} />
+      <CardSnapshotForm
+        monthId={activeMonth.id}
+        cards={cards}
+        onUpdated={handleReload}
+      />
 
       <CardReadingsList
         key={`${activeMonth.id}-${refreshToken}`}
@@ -74,7 +82,12 @@ export default function CardsView() {
         cards={cards}
       />
 
-      <CardList cards={cards} snapshots={snapshots} onUpdated={handleReload} />
+      <CardList
+        cards={cards}
+        snapshots={snapshots}
+        competence={{ month: activeMonth.month, year: activeMonth.year }}
+        onUpdated={handleReload}
+      />
     </div>
   );
 }

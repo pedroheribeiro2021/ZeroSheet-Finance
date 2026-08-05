@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { usePathname, useSearchParams } from 'next/navigation';
 
 import Card from '@/components/ui/Card';
 import Modal from '@/components/ui/Modal';
@@ -26,13 +26,18 @@ import {
 import { normalizeCategory } from '@/core/utils/normalize';
 import {
   getCardSnapshots,
-  getOpenCardSnapshots,
+  getAllCardSnapshots,
 } from '@/core/services/cardSnapshot.service';
+import { findPreviousMonth, nextMonthToOpen } from '@/core/engine/month';
 import {
-  carriedOverInvoices,
-  nextMonthToOpen,
-  CarriedInvoice,
-} from '@/core/engine/month';
+  buildInvoices,
+  estimateMissingInvoices,
+  invoiceDueDate,
+  invoicesDueInCompetence,
+  openInvoicesUpTo,
+  overdueInvoices,
+  Invoice,
+} from '@/core/engine/invoices';
 import { groupTransactionsByCategory } from '@/core/utils/groupTransactions';
 
 import { getInstallments } from '@/core/services/installment.service';
@@ -44,7 +49,10 @@ import {
   getAllReadings,
   deleteReading,
 } from '@/core/services/cardReading.service';
-import { getAccounts, getAccountReadings } from '@/core/services/account.service';
+import {
+  getAccounts,
+  getAccountReadings,
+} from '@/core/services/account.service';
 import { getTransfers } from '@/core/services/transfer.service';
 import {
   DBCard,
@@ -55,7 +63,7 @@ import {
   DBAccountReading,
 } from '@/core/types/database';
 import { Transaction, Week } from '@/core/types/finance';
-import { getDueItems } from '@/core/engine/dueDates';
+import { getDueItems, CardInvoiceCharge } from '@/core/engine/dueDates';
 import {
   latestReadingByAccount,
   openBillsFromTransactions,
@@ -67,12 +75,16 @@ import {
 import {
   calculateCoverage,
   coverageBillsFromTransactions,
-  coverageInvoices,
+  coverageInvoicesFromOpen,
   resolvePaydayDay,
   suggestCoverageSource,
   Coverage,
 } from '@/core/engine/coverage';
-import { mapAccount, mapAccountReading, mapTransfer } from '@/core/models/mappers';
+import {
+  mapAccount,
+  mapAccountReading,
+  mapTransfer,
+} from '@/core/models/mappers';
 import WeeklyBarChart from './WeeklyBarChart';
 import CategoryBarChart from './CategoryBarChart';
 import DueDatesPanel from './DueDatesPanel';
@@ -128,16 +140,27 @@ const MODAL_TITLES: Record<string, string> = {
   reserve: 'Reserva / Investimentos',
   balance: 'Saldo do Mês',
   'weekly-budget': 'Orçamento Semanal',
-  accounts: 'Contas',
-  coverage: 'Cobertura até o salário',
+  cash: 'Caixa — até o salário e até o fim do mês',
 };
 
 export default function Dashboard() {
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const [months, setMonths] = useState<DBMonth[]>([]);
+  /**
+   * Competência escolhida ('YYYY-MM'). É ESTADO, não a URL: antes o mês ativo
+   * era derivado de `useSearchParams()` e trocado com `router.push`, com um
+   * efeito de canonização chamando `router.replace` em paralelo. As duas
+   * navegações do App Router disputavam entre si e uma engolia a outra — daí
+   * o "clico em julho e às vezes vai, às vezes não". Agora o clique muda o
+   * estado na hora (render síncrono, sem transição) e a URL é só um espelho,
+   * atualizada com `history.replaceState` para continuar compartilhável sem
+   * disparar navegação nenhuma.
+   */
+  const [activeKey, setActiveKey] = useState<string | null>(null);
+  /** Descarta resposta de um mês que não é mais o exibido (clique rápido). */
+  const loadToken = useRef(0);
   const [summary, setSummary] = useState<ReturnType<
     typeof calculateSummary
   > | null>(null);
@@ -156,20 +179,28 @@ export default function Dashboard() {
   >(new Map());
   const [cycleWeeks, setCycleWeeks] = useState(0);
   const [weeksRemaining, setWeeksRemaining] = useState(0);
-  const [cycleRange, setCycleRange] = useState<{ start: Date; end: Date } | null>(null);
+  const [cycleRange, setCycleRange] = useState<{
+    start: Date;
+    end: Date;
+  } | null>(null);
   const [currentMonthId, setCurrentMonthId] = useState<string | null>(null);
   const [primaryCard, setPrimaryCardState] = useState<DBCard | null>(null);
   const [readingsOpen, setReadingsOpen] = useState(false);
   const [installments, setInstallments] = useState<ActiveInstallment[]>([]);
   const [accounts, setAccounts] = useState<DBAccount[]>([]);
-  const [accountReadings, setAccountReadings] = useState<DBAccountReading[]>([]);
+  const [accountReadings, setAccountReadings] = useState<DBAccountReading[]>(
+    [],
+  );
   const [openComplements, setOpenComplements] = useState<PendingReturn[]>([]);
   const [defaultAccountProjection, setDefaultAccountProjection] = useState<{
     lines: ProjectionLine[];
     projected: number;
   } | null>(null);
   const [coverage, setCoverage] = useState<Coverage | null>(null);
-  const [carriedInvoices, setCarriedInvoices] = useState<CarriedInvoice[]>([]);
+  /** Faturas em aberto cujo vencimento JÁ passou — só essas são atraso. */
+  const [lateInvoices, setLateInvoices] = useState<Invoice[]>([]);
+  /** Faturas que vencem neste mês, para o calendário de vencimentos. */
+  const [invoiceCharges, setInvoiceCharges] = useState<CardInvoiceCharge[]>([]);
   const [openingMonth, setOpeningMonth] = useState(false);
 
   const handleCardClick = (type: string) => {
@@ -246,7 +277,7 @@ export default function Dashboard() {
     try {
       const created = await createMonth(target.month, target.year);
       await loadMonthsList();
-      router.push(`${pathname}?month=${monthKey(created)}`);
+      setActiveKey(monthKey(created));
     } catch (err) {
       console.error(err);
     } finally {
@@ -254,47 +285,100 @@ export default function Dashboard() {
     }
   };
 
-  const loadMonthData = async (month: DBMonth) => {
-    try {
-      const snapshotsData = await getCardSnapshots(month.id);
-      setSnapshots(snapshotsData);
-      const cardsDB = await getCards();
+  const loadMonthData = async (month: DBMonth, monthsList: DBMonth[]) => {
+    const token = ++loadToken.current;
+    const isStale = () => token !== loadToken.current;
 
-      setCards(cardsDB);
-      const transactionsDB = await getTransactions(month.id);
+    try {
+      // Tudo que não depende de nada vem junto: eram 8 idas ao banco em série,
+      // e nesse intervalo a tela seguia mostrando os números do mês anterior —
+      // parte da sensação de "cliquei e não mudou".
+      const [
+        snapshotsData,
+        cardsDB,
+        transactionsDB,
+        installmentsDB,
+        accountsData,
+        accountReadingsData,
+        transfersData,
+        allSnapshots,
+      ] = await Promise.all([
+        getCardSnapshots(month.id),
+        getCards(),
+        getTransactions(month.id),
+        getInstallments(month.id),
+        getAccounts(),
+        getAccountReadings(),
+        getTransfers(),
+        getAllCardSnapshots(),
+      ]);
+
+      if (isStale()) return;
+
       const transactionsMapped = transactionsDB.map(mapTransaction);
 
-      const installmentsDB = await getInstallments(month.id);
+      setSnapshots(snapshotsData);
+      setCards(cardsDB);
       setInstallments(installmentsDB);
-
       setTransactions(transactionsMapped);
 
       const primary = cardsDB.find((c) => c.is_primary === true) ?? null;
       setPrimaryCardState(primary);
       setCurrentMonthId(month.id);
 
-      // Contas & Complementos: saldo projetado da conta de pagamento default
-      // (leitura − contas a pagar em aberto − faturas em aberto − devoluções
-      // pendentes). Transferências nunca entram em calculateSummary — só
-      // afetam esta visão.
-      const [accountsData, accountReadingsData, transfersData, openSnapshots] =
-        await Promise.all([
-          getAccounts(),
-          getAccountReadings(),
-          getTransfers(),
-          getOpenCardSnapshots(),
-        ]);
+      const competence = { month: month.month, year: month.year };
 
-      // Faturas de meses anteriores que continuam em aberto. Não viram
-      // transação neste mês (dupla contagem em calculateSummary) — entram só
-      // aqui e na projeção de saldo, que é onde a obrigação de caixa pesa.
-      const carried = carriedOverInvoices({
-        months,
-        snapshots: openSnapshots,
+      // Ciclo de fatura, regra única (engine/invoices): a fatura lançada numa
+      // competência vence no mês SEGUINTE. Logo, a fatura que vence no mês
+      // exibido é a da competência anterior — por isso não dá pra olhar só os
+      // snapshots deste mês.
+      let allInvoices = buildInvoices({
+        months: monthsList,
+        snapshots: allSnapshots,
         cards: cardsDB,
-        current: { month: month.month, year: month.year },
       });
-      setCarriedInvoices(carried);
+
+      // Fatura da competência anterior ainda não lançada em Cartões: usa a
+      // última leitura daquele mês como piso, senão a obrigação que vence
+      // agora simplesmente sumiria da tela.
+      const previousMonth = findPreviousMonth(monthsList, competence);
+      if (previousMonth) {
+        const previousReadings = await getAllReadings(previousMonth.id);
+        if (isStale()) return;
+
+        allInvoices = [
+          ...allInvoices,
+          ...estimateMissingInvoices({
+            invoices: allInvoices,
+            cards: cardsDB,
+            month: previousMonth,
+            readings: previousReadings,
+          }),
+        ];
+      }
+
+      // Em aberto e já vencendo até o fim do mês exibido. A fatura da PRÓPRIA
+      // competência exibida fica de fora: ela só vence mês que vem, então não
+      // é obrigação de caixa daqui — é isso que evita contá-la duas vezes.
+      const open = openInvoicesUpTo(allInvoices, competence);
+      setLateInvoices(overdueInvoices(open, new Date()));
+
+      setInvoiceCharges(
+        invoicesDueInCompetence(allInvoices, competence).map((invoice) => ({
+          cardId: invoice.cardId,
+          cardName: invoice.cardName,
+          dueDay: invoice.dueDay,
+          dueDate: invoice.dueDate,
+          snapshotId: invoice.snapshotId,
+          amount: invoice.amount,
+          paidAt: invoice.paidAt,
+          competenceLabel: formatMonthLabel(
+            invoice.competence.month,
+            invoice.competence.year,
+          ),
+          estimated: invoice.estimated,
+        })),
+      );
 
       setAccounts(accountsData);
       setAccountReadings(accountReadingsData);
@@ -306,7 +390,8 @@ export default function Dashboard() {
 
       const latestByAccount = latestReadingByAccount(accountReadingsMapped);
 
-      const defaultAccount = accountsData.find((a) => a.is_payment_default) ?? null;
+      const defaultAccount =
+        accountsData.find((a) => a.is_payment_default) ?? null;
       if (defaultAccount) {
         const latest = latestByAccount.get(defaultAccount.id) ?? null;
         const nameById = new Map(accountsData.map((a) => [a.id, a.name]));
@@ -318,19 +403,18 @@ export default function Dashboard() {
             amount: p.amount,
           }));
 
-        // A fatura da PRÓPRIA competência exibida ainda não é uma obrigação
-        // de pagamento: ela só "vence" de fato quando o mês vira e ela some
-        // pra trás sem ser paga — aí sim vira `carried`. Contar o snapshot
-        // do mês corrente aqui faria a projeção cobrar a mesma fatura duas
-        // vezes: uma como "fatura deste mês", outra como carried assim que
-        // o próximo mês for aberto.
+        // A fatura da PRÓPRIA competência exibida não entra: ela só vence no
+        // mês seguinte, então não é obrigação de caixa deste mês. `open` já
+        // contém exatamente o que vence até o fim do mês exibido.
         setDefaultAccountProjection(
           projectBalance({
-            reading: latest ? { label: defaultAccount.name, amount: latest.amount } : null,
+            reading: latest
+              ? { label: defaultAccount.name, amount: latest.amount }
+              : null,
             openBills: openBillsFromTransactions(transactionsMapped),
-            openInvoices: carried.map((c) => ({
-              label: `Fatura ${c.cardName} (${formatMonthLabel(c.competence.month, c.competence.year)})`,
-              amount: c.amount,
+            openInvoices: open.map((invoice) => ({
+              label: `Fatura ${invoice.cardName} (${formatMonthLabel(invoice.competence.month, invoice.competence.year)} · vence ${invoice.dueDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })})`,
+              amount: invoice.amount,
             })),
             pendingReturns: returnsForDefault,
           }),
@@ -351,19 +435,21 @@ export default function Dashboard() {
           ? (latestByAccount.get(defaultAccount.id)?.amount ?? null)
           : null;
 
-        // Leituras de todos os cartões: a fatura que vence depois da virada
-        // do mês ainda não tem snapshot, e é a leitura do ciclo que dá o valor.
-        const allCardReadings = await getAllReadings(month.id);
-
+        // As faturas da janela são as MESMAS `open` da projeção — nada de
+        // recalcular ciclo aqui. Marcar uma como paga só a remove da lista;
+        // a do ciclo seguinte não toma o lugar dela, porque vence depois.
         setCoverage(
           calculateCoverage({
             today: now,
             paydayDay: resolvePaydayDay(transactionsMapped),
             balance: paymentReading,
             bills: coverageBillsFromTransactions(transactionsMapped),
-            invoices: coverageInvoices(cardsDB, snapshotsData, allCardReadings, now),
+            invoices: coverageInvoicesFromOpen(open),
             borrowed: pending
-              .filter((p) => !defaultAccount || p.holdingAccountId === defaultAccount.id)
+              .filter(
+                (p) =>
+                  !defaultAccount || p.holdingAccountId === defaultAccount.id,
+              )
               .reduce((acc, p) => acc + p.amount, 0),
             source: suggestCoverageSource(
               accountsData.map(mapAccount),
@@ -457,7 +543,9 @@ export default function Dashboard() {
           // (a leitura mais recente ainda nem inclui essa cobrança futura).
           const latestReadingDate = readingsData.length
             ? new Date(
-                Math.max(...readingsData.map((r) => new Date(r.read_at).getTime())),
+                Math.max(
+                  ...readingsData.map((r) => new Date(r.read_at).getTime()),
+                ),
               )
             : undefined;
 
@@ -466,7 +554,9 @@ export default function Dashboard() {
           // descontar de novo apagaria gasto livre real da semana.
           const baselineReadingDate = readingsData.length
             ? new Date(
-                Math.min(...readingsData.map((r) => new Date(r.read_at).getTime())),
+                Math.min(
+                  ...readingsData.map((r) => new Date(r.read_at).getTime()),
+                ),
               )
             : undefined;
 
@@ -530,7 +620,7 @@ export default function Dashboard() {
     if (!primaryCard || !currentMonthId || !activeMonth) return;
     try {
       await deleteReading(id);
-      await loadMonthData(activeMonth);
+      await loadMonthData(activeMonth, months);
     } catch (err) {
       console.error(err);
     }
@@ -543,42 +633,45 @@ export default function Dashboard() {
     loadMonthsList();
   }, []);
 
-  // mês ativo: vem da URL (?month=YYYY-MM); sem parâmetro, usa o mais recente
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization
-  const activeMonth = useMemo(() => {
-    if (!months.length) return null;
-
-    const param = searchParams.get('month');
-
-    if (param) {
-      const found = months.find((m) => monthKey(m) === param);
-      if (found) return found;
-    }
-
-    return months[months.length - 1];
-  }, [months, searchParams]);
-
-  // mantém a URL sincronizada com o mês ativo (ex.: sem ?month, canoniza pro mais recente)
+  // Semente do estado: a URL só é lida uma vez, na montagem. Depois disso quem
+  // manda é `activeKey` — ler `searchParams` a cada render era o que deixava a
+  // navegação à mercê do timing do router.
   useEffect(() => {
-    if (!activeMonth) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setActiveKey((current) => current ?? searchParams.get('month'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    const key = monthKey(activeMonth);
-    if (searchParams.get('month') !== key) {
-      router.replace(`${pathname}?month=${key}`);
-    }
-  }, [activeMonth, pathname, router, searchParams]);
+  // Mês ativo: a competência escolhida, ou a mais recente quando a chave não
+  // existe (URL apontando pra um mês ainda não aberto, por exemplo).
+  const activeMonth = months.length
+    ? (activeKey ? months.find((m) => monthKey(m) === activeKey) : undefined) ??
+      months[months.length - 1]
+    : null;
 
   // recarrega tudo (transações, snapshots, leituras, parcelas, summary) ao trocar de mês
   useEffect(() => {
     if (!activeMonth) return;
 
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadMonthData(activeMonth);
+    loadMonthData(activeMonth, months);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeMonth?.id]);
+  }, [activeMonth?.id, months]);
+
+  // A URL vira espelho do estado: `history.replaceState` mantém o link
+  // compartilhável sem acionar o router (sem transição, sem corrida, sem
+  // re-render em cascata).
+  useEffect(() => {
+    if (!activeMonth) return;
+
+    const key = monthKey(activeMonth);
+    if (new URLSearchParams(window.location.search).get('month') !== key) {
+      window.history.replaceState(null, '', `${pathname}?month=${key}`);
+    }
+  }, [activeMonth, pathname]);
 
   const goToMonth = (month: DBMonth) => {
-    router.push(`${pathname}?month=${monthKey(month)}`);
+    setActiveKey(monthKey(month));
   };
 
   // competência seguinte à mais recente cadastrada — alvo do botão de virada
@@ -629,49 +722,61 @@ export default function Dashboard() {
     .join(', ');
   const subscriptionExtra = subscriptionTransactions.length - 3;
 
-  // Card "Contas": composição resumida das últimas leituras + pendências,
-  // truncada para caber no subtítulo do card.
+  // Card "Caixa": Contas e Cobertura eram dois cards contando quase a mesma
+  // história com números diferentes. Agora é um só, com dois horizontes
+  // explícitos — até o salário (a pergunta urgente) e até o fim do mês
+  // (a projeção) — detalhados lado a lado no modal.
   const defaultAccount = accounts.find((a) => a.is_payment_default) ?? null;
   const latestAccountReadings = latestReadingByAccount(
     accountReadings.map(mapAccountReading),
   );
-  const accountSummaryParts = accounts
-    .map((a) => {
-      const latest = latestAccountReadings.get(a.id);
-      return latest ? `${a.name} ${formatCurrency(latest.amount)}` : null;
-    })
-    .filter((s): s is string => !!s);
-  const totalPendingReturns = openComplements.reduce((acc, p) => acc + p.amount, 0);
-  const accountsSubtitle =
-    accountSummaryParts.length === 0
-      ? 'Cadastre uma conta e lance a leitura de saldo'
-      : [
-          ...accountSummaryParts.slice(0, 2),
-          totalPendingReturns > 0 ? `devolver ${formatCurrency(totalPendingReturns)}` : null,
+  const totalPendingReturns = openComplements.reduce(
+    (acc, p) => acc + p.amount,
+    0,
+  );
+  const projected = defaultAccountProjection?.projected ?? null;
+  const paydayLabel = coverage?.payday ? formatDateShort(coverage.payday) : '';
+
+  const cashValue = !defaultAccount
+    ? 'Sem conta de pagamento'
+    : coverage?.hasPayday
+      ? coverage.shortfall > 0
+        ? `Tirar ${formatCurrency(coverage.shortfall)}`
+        : `Sobra ${formatCurrency(coverage.leftover)}`
+      : projected != null
+        ? formatCurrency(projected)
+        : '—';
+
+  const pendingReturnsFragment =
+    totalPendingReturns > 0 ? `devolver ${formatCurrency(totalPendingReturns)}` : null;
+
+  const cashSubtitle = !defaultAccount
+    ? 'Marque uma conta como ★ de pagamento em Contas'
+    : !coverage
+      ? [
+          `Saldo ${formatCurrency(latestAccountReadings.get(defaultAccount.id)?.amount ?? 0)}`,
+          `projeção até o fim do mês${projected != null ? ` ${formatCurrency(projected)}` : ''} — a janela até o salário só é calculada no mês corrente`,
+          pendingReturnsFragment,
         ]
           .filter((s): s is string => !!s)
-          .join(' · ');
-
-  // Card "Cobertura até o salário": quanto falta pra atravessar o gap entre
-  // hoje e o dia em que a entrada cai (as faturas vencem antes).
-  const coverageSourceName = coverage?.source?.accountName;
-  const coverageValue = !coverage
-    ? '—'
-    : !coverage.hasPayday
-      ? '—'
-      : coverage.shortfall > 0
-        ? formatCurrency(coverage.shortfall)
-        : 'Coberto';
-
-  const coverageSubtitle = !coverage
-    ? 'Só calculado no mês corrente'
-    : !coverage.hasPayday
-      ? 'Marque o dia do recebimento na sua entrada recorrente para calcular'
-      : coverage.items.length === 0
-        ? `Nada vence antes de ${coverage.payday ? formatDateShort(coverage.payday) : ''}`
-        : coverage.shortfall > 0
-          ? `${coverage.items.length} conta(s) de ${formatCurrency(coverage.dueBeforePayday)}${coverage.hasPartial ? '+' : ''} até ${coverage.payday ? formatDateShort(coverage.payday) : ''} · saldo ${formatCurrency(coverage.balance)}${coverageSourceName ? ` · tirar de ${coverageSourceName}` : ''}`
-          : `${formatCurrency(coverage.dueBeforePayday)}${coverage.hasPartial ? '+' : ''} até ${coverage.payday ? formatDateShort(coverage.payday) : ''} · sobra ${formatCurrency(coverage.leftover)}`;
+          .join(' · ')
+      : !coverage.hasPayday
+        ? 'Preencha o dia de recebimento na sua entrada recorrente para calcular a janela até o salário'
+        : [
+            `Saldo ${formatCurrency(coverage.balance)}`,
+            coverage.items.length === 0
+              ? `nada vence até ${paydayLabel}`
+              : `${formatCurrency(coverage.dueBeforePayday)}${coverage.hasPartial ? '+' : ''} vence até ${paydayLabel}`,
+            coverage.shortfall > 0 && coverage.source
+              ? `tirar de ${coverage.source.accountName}`
+              : null,
+            projected != null
+              ? `fim do mês ${formatCurrency(projected)}`
+              : null,
+            pendingReturnsFragment,
+          ]
+            .filter((s): s is string => !!s)
+            .join(' · ');
 
   // Semanas do ciclo, na mesma forma usada pelo gráfico e pela lista —
   // única fonte: leituras da fatura do cartão principal.
@@ -699,6 +804,163 @@ export default function Dashboard() {
   const dueTodayItems = isCurrentMonth
     ? getDueItems(transactions, now).filter((i) => i.status === 'today')
     : [];
+
+  /**
+   * Bloco "até o salário" do modal de Caixa. Era um modal separado (card
+   * Cobertura); virou seção porque as duas telas respondiam à mesma pergunta
+   * com números diferentes e horizontes diferentes, sem dizer qual era qual.
+   */
+  const renderCoverageSection = () => {
+    if (!coverage) {
+      return (
+        <p className="text-zinc-400">
+          A janela até o salário só é calculada no mês corrente — troque a
+          competência para o mês atual.
+        </p>
+      );
+    }
+
+    return (
+      <div className="grid gap-4">
+        {coverage && !coverage.hasPayday && (
+          <p className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-400">
+            Nenhuma entrada com dia de recebimento cadastrado. Edite seu salário
+            em Transações e preencha o dia — é ele que define até quando a
+            cobertura precisa durar.
+          </p>
+        )}
+
+        {coverage?.hasPayday && (
+          <>
+            <div className="surface-row p-3">
+              <p className="text-white font-bold">
+                {coverage.shortfall > 0
+                  ? `Faltam ${formatCurrency(coverage.shortfall)} para chegar no salário`
+                  : 'O saldo cobre tudo até o salário'}
+              </p>
+              <p className="text-zinc-400 text-sm mt-1">
+                Salário em{' '}
+                {coverage.payday ? formatDateShort(coverage.payday) : ''}
+                {coverage.daysUntilPayday > 0
+                  ? ` (${coverage.daysUntilPayday} dia(s))`
+                  : ' (hoje)'}
+                {coverage.source
+                  ? ` · sugestão: tirar de ${coverage.source.accountName} (${formatCurrency(coverage.source.available)} disponível)`
+                  : ''}
+              </p>
+              {coverage.source?.insufficient && (
+                <p className="text-amber-400 text-sm mt-1">
+                  ⚠️ {coverage.source.accountName} não cobre esse valor sozinho.
+                </p>
+              )}
+            </div>
+
+            <div className="grid gap-1">
+              <h3 className="text-white font-bold text-sm mb-1">
+                Vence antes do salário
+              </h3>
+
+              {coverage.items.length === 0 && (
+                <p className="text-zinc-400">
+                  Nada em aberto vence antes do salário.
+                </p>
+              )}
+
+              {coverage.items.map((item) => (
+                <div
+                  key={item.id}
+                  className="surface-row p-3 flex justify-between items-center gap-3"
+                >
+                  <div className="min-w-0">
+                    <p className="text-white font-medium truncate">
+                      {item.label}
+                    </p>
+                    <p className="text-zinc-400 text-sm">
+                      {item.kind === 'invoice' ? '💳 fatura' : 'conta'} · vence{' '}
+                      {formatDateShort(item.dueDate)}
+                      {item.overdue ? ' · atrasada' : ''}
+                      {item.partial
+                        ? item.kind === 'invoice'
+                          ? ` · parcial${item.closingDay ? `, fecha dia ${item.closingDay}` : ''}`
+                          : ' · valor do mês anterior'
+                        : ''}
+                    </p>
+                  </div>
+                  <span
+                    className={`font-bold shrink-0 ${item.overdue ? 'text-red-400' : 'text-white'}`}
+                  >
+                    {formatCurrency(item.amount)}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid gap-1">
+              <div className="surface-row p-3 flex justify-between">
+                <span className="text-white">
+                  Total a pagar até o salário
+                  {coverage.hasPartial ? ' (piso)' : ''}
+                </span>
+                <span className="text-red-400">
+                  {formatCurrency(coverage.dueBeforePayday)}
+                  {coverage.hasPartial ? '+' : ''}
+                </span>
+              </div>
+              <div className="surface-row p-3 flex justify-between">
+                <span className="text-white">
+                  Saldo na conta de pagamento
+                  {defaultAccount ? ` (${defaultAccount.name})` : ''}
+                </span>
+                <span className="text-green-400">
+                  {formatCurrency(coverage.balance)}
+                </span>
+              </div>
+              {coverage.borrowed > 0 && (
+                <div className="surface-row p-3 flex justify-between">
+                  <span className="text-zinc-400">
+                    Do saldo, já é complemento a devolver
+                  </span>
+                  <span className="text-amber-400">
+                    {formatCurrency(coverage.borrowed)}
+                  </span>
+                </div>
+              )}
+              <div className="surface-row p-3 flex justify-between border-white/10">
+                <span className="text-white font-bold">
+                  {coverage.shortfall > 0
+                    ? 'Falta cobrir'
+                    : 'Sobra até o salário'}
+                </span>
+                <span
+                  className={`font-bold ${coverage.shortfall > 0 ? 'text-amber-400' : 'text-green-400'}`}
+                >
+                  {formatCurrency(
+                    coverage.shortfall > 0
+                      ? coverage.shortfall
+                      : coverage.leftover,
+                  )}
+                </span>
+              </div>
+            </div>
+
+            {coverage.hasPartial && (
+              <p className="text-zinc-500 text-xs leading-relaxed">
+                Itens marcados como parciais são de ciclo ainda aberto — o valor
+                é o acumulado até a última leitura e ainda pode subir até o
+                fechamento. Trate o total como piso.
+              </p>
+            )}
+
+            <p className="text-zinc-500 text-xs leading-relaxed">
+              Depois de puxar o valor, registre em Contas como{' '}
+              <strong className="text-zinc-400">complemento</strong> — assim a
+              devolução fica pendente e some quando o salário cair.
+            </p>
+          </>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="grid gap-4 p-4 sm:gap-5 sm:p-6">
@@ -760,21 +1022,25 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Faturas que ficaram para trás: aparecem no mês novo para não sumirem
-          junto com a competência, mas não entram em calculateSummary — só na
-          projeção de saldo da conta de pagamento. */}
-      {carriedInvoices.length > 0 && (
+      {/* Só ATRASO aparece aqui. A fatura de julho que vence dia 10/08 não é
+          atraso no dia 4 — ela é uma conta normal do mês, e aparece no
+          calendário de vencimentos e no card de Caixa como qualquer outra. */}
+      {lateInvoices.length > 0 && (
         <div className="rounded-xl border border-orange-500/20 bg-orange-500/10 p-3 text-sm text-orange-300">
-          <p className="font-semibold">Faturas de meses anteriores em aberto</p>
+          <p className="font-semibold">Faturas vencidas e ainda em aberto</p>
           <ul className="mt-1 grid gap-0.5">
-            {carriedInvoices.map((invoice) => (
-              <li key={invoice.snapshotId} className="flex justify-between gap-3">
+            {lateInvoices.map((invoice) => (
+              <li
+                key={`${invoice.snapshotId}-${invoice.cardId}`}
+                className="flex justify-between gap-3"
+              >
                 <span>
                   {invoice.cardName} ·{' '}
                   {formatMonthLabel(
                     invoice.competence.month,
                     invoice.competence.year,
-                  )}
+                  )}{' '}
+                  · venceu {formatDateShort(invoice.dueDate)}
                 </span>
                 <span className="font-semibold">
                   {formatCurrency(invoice.amount)}
@@ -819,7 +1085,7 @@ export default function Dashboard() {
         <Card
           title="Cartões"
           value={formatCurrency(summary.cardSpending)}
-          subtitle="Soma das faturas do mês"
+          subtitle="Faturas fechando nesta competência — pagas no mês que vem"
           onClick={() => handleCardClick('cards')}
         />
 
@@ -878,22 +1144,10 @@ export default function Dashboard() {
         />
 
         <Card
-          title="Contas"
-          value={
-            defaultAccount && defaultAccountProjection
-              ? formatCurrency(defaultAccountProjection.projected)
-              : 'Sem conta de pagamento'
-          }
-          subtitle={accountsSubtitle}
-          onClick={() => setSelectedCard('accounts')}
-          className="max-sm:col-span-2"
-        />
-
-        <Card
-          title="Cobertura até o salário"
-          value={coverageValue}
-          subtitle={coverageSubtitle}
-          onClick={() => setSelectedCard('coverage')}
+          title="Caixa"
+          value={cashValue}
+          subtitle={cashSubtitle}
+          onClick={() => setSelectedCard('cash')}
           className={`max-sm:col-span-2 ${
             coverage?.hasPayday && coverage.shortfall > 0
               ? 'border-l-2 border-l-amber-500'
@@ -909,9 +1163,9 @@ export default function Dashboard() {
 
         {!primaryCard && (
           <p className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-400">
-            Marque um cartão como principal (★ na tela de Cartões) para
-            ativar o acompanhamento semanal — ele é calculado só a partir das
-            leituras da fatura do cartão principal.
+            Marque um cartão como principal (★ na tela de Cartões) para ativar o
+            acompanhamento semanal — ele é calculado só a partir das leituras da
+            fatura do cartão principal.
           </p>
         )}
 
@@ -1101,10 +1355,10 @@ export default function Dashboard() {
           transactions={transactions}
           installments={installments}
           cards={cards}
-          snapshots={snapshots}
+          invoiceCharges={invoiceCharges}
           month={activeMonth.month}
           year={activeMonth.year}
-          onChanged={() => loadMonthData(activeMonth)}
+          onChanged={() => loadMonthData(activeMonth, months)}
         />
       )}
 
@@ -1130,7 +1384,11 @@ export default function Dashboard() {
       <Modal
         open={!!selectedCard}
         onClose={() => setSelectedCard(null)}
-        title={selectedCard ? (MODAL_TITLES[selectedCard] ?? 'Detalhamento') : 'Detalhamento'}
+        title={
+          selectedCard
+            ? (MODAL_TITLES[selectedCard] ?? 'Detalhamento')
+            : 'Detalhamento'
+        }
       >
         {selectedCard === 'income' && (
           <div className="grid gap-2">
@@ -1176,7 +1434,18 @@ export default function Dashboard() {
                 <div key={card.id} className="surface-row p-3 grid gap-1">
                   <p className="text-white font-bold">💳 {card.name}</p>
                   <p className="text-zinc-400 text-sm">
-                    Fatura atual: {formatCurrency(fatura)}
+                    Fatura desta competência: {formatCurrency(fatura)}
+                    {activeMonth && card.due_day != null
+                      ? ` · vence ${formatDateShort(
+                          invoiceDueDate(
+                            {
+                              month: activeMonth.month,
+                              year: activeMonth.year,
+                            },
+                            card.due_day,
+                          ),
+                        )}`
+                      : ''}
                   </p>
                   <p className="text-zinc-400 text-sm">
                     Parcelas no mês: {formatCurrency(parcelas)}
@@ -1196,11 +1465,16 @@ export default function Dashboard() {
         {selectedCard === 'installments' && (
           <div className="grid gap-2">
             {installments.length === 0 && (
-              <p className="text-zinc-400">Nenhum parcelamento ativo neste mês</p>
+              <p className="text-zinc-400">
+                Nenhum parcelamento ativo neste mês
+              </p>
             )}
             {installments.map((i) => {
               const start = installmentMonthLabel(i.startMonth);
-              const end = installmentEndLabel(i.startMonth, i.total_installments);
+              const end = installmentEndLabel(
+                i.startMonth,
+                i.total_installments,
+              );
 
               return (
                 <div key={i.id} className="surface-row p-3 grid gap-1">
@@ -1234,13 +1508,23 @@ export default function Dashboard() {
                     ? `${formatCurrency(summary.installmentsInCardBills)} em parcelas já estão dentro das faturas acima — não abatem duas vezes`
                     : undefined,
               },
-              { label: 'Provisões (envelopes)', value: -summary.envelopeSpending },
-              { label: 'Reserva / Investimentos', value: -summary.reserveSpending },
+              {
+                label: 'Provisões (envelopes)',
+                value: -summary.envelopeSpending,
+              },
+              {
+                label: 'Reserva / Investimentos',
+                value: -summary.reserveSpending,
+              },
             ].map((row) => (
               <div key={row.label} className="surface-row p-3 grid gap-1">
                 <div className="flex justify-between">
                   <span className="text-white">{row.label}</span>
-                  <span className={row.value < 0 ? 'text-red-400' : 'text-green-400'}>
+                  <span
+                    className={
+                      row.value < 0 ? 'text-red-400' : 'text-green-400'
+                    }
+                  >
                     {formatCurrency(row.value)}
                   </span>
                 </div>
@@ -1266,13 +1550,16 @@ export default function Dashboard() {
               <div className="surface-row p-3 flex justify-between">
                 <span className="text-white">Ciclo vigente</span>
                 <span className="text-white font-bold">
-                  {formatDateShort(cycleRange.start)}–{formatDateShort(cycleRange.end)}
+                  {formatDateShort(cycleRange.start)}–
+                  {formatDateShort(cycleRange.end)}
                 </span>
               </div>
             )}
             <div className="surface-row p-3 flex justify-between">
               <span className="text-white">Saldo do mês</span>
-              <span className="text-white font-bold">{formatCurrency(summary.total)}</span>
+              <span className="text-white font-bold">
+                {formatCurrency(summary.total)}
+              </span>
             </div>
             <div className="surface-row p-3 flex justify-between">
               <span className="text-white">÷ semanas restantes do ciclo</span>
@@ -1287,224 +1574,121 @@ export default function Dashboard() {
           </div>
         )}
 
-        {selectedCard === 'accounts' && (
-          <div className="grid gap-4">
-            <div className="grid gap-2">
-              {accounts.length === 0 && (
-                <p className="text-zinc-400">Nenhuma conta cadastrada</p>
-              )}
-              {accounts.map((account) => {
-                const latest = latestAccountReadings.get(account.id);
-                return (
-                  <div
-                    key={account.id}
-                    className="surface-row p-3 flex items-center justify-between gap-3"
-                  >
-                    <p className="text-white font-medium flex items-center gap-1.5">
-                      {account.name}
-                      {account.is_payment_default && (
-                        <span className="badge bg-yellow-500/15 text-yellow-400">
-                          ★ Pagamento
-                        </span>
-                      )}
-                    </p>
-                    <p className="text-zinc-400 text-sm">
-                      {latest
-                        ? `${formatCurrency(latest.amount)} · lida em ${new Date(latest.readAt).toLocaleDateString('pt-BR')}`
-                        : 'Sem leitura'}
-                    </p>
-                  </div>
-                );
-              })}
+        {selectedCard === 'cash' && (
+          <div className="grid gap-6">
+            {/* ------- Horizonte 1: até o salário ------- */}
+            <div className="grid gap-4">
+              <div>
+                <h3 className="text-white font-bold text-sm">
+                  Até o salário
+                  {coverage?.payday
+                    ? ` — ${formatDateShort(coverage.payday)}`
+                    : ''}
+                </h3>
+                <p className="text-zinc-500 text-xs mt-0.5">
+                  O que sai da conta de pagamento antes da próxima entrada cair.
+                </p>
+              </div>
+              {renderCoverageSection()}
             </div>
 
-            {defaultAccount && defaultAccountProjection && (
-              <div className="grid gap-1">
-                <h3 className="text-white font-bold text-sm mb-1">
-                  Projeção — {defaultAccount.name}
+            {/* ------- Horizonte 2: até o fim do mês ------- */}
+            <div className="grid gap-4">
+              <div>
+                <h3 className="text-white font-bold text-sm">
+                  Até o fim do mês
                 </h3>
-                {defaultAccountProjection.lines.map((line, i) => (
-                  <div key={i} className="surface-row p-3 flex justify-between">
-                    <span className="text-white">{line.label}</span>
-                    <span className={line.amount < 0 ? 'text-red-400' : 'text-green-400'}>
-                      {formatCurrency(line.amount)}
-                    </span>
-                  </div>
-                ))}
-                <div className="surface-row p-3 flex justify-between border-white/10">
-                  <span className="text-white font-bold">Sobra projetada</span>
-                  <span
-                    className={`font-bold ${defaultAccountProjection.projected < 0 ? 'text-red-400' : 'text-green-400'}`}
-                  >
-                    {formatCurrency(defaultAccountProjection.projected)}
-                  </span>
-                </div>
+                <p className="text-zinc-500 text-xs mt-0.5">
+                  Saldo de cada conta e a projeção do mês inteiro — inclui o que
+                  vence depois do salário.
+                </p>
               </div>
-            )}
 
-            {openComplements.length > 0 && (
-              <div className="grid gap-1">
-                <h3 className="text-white font-bold text-sm mb-1">Complementos em aberto</h3>
-                {openComplements.map((p) => (
-                  <div
-                    key={p.complementId}
-                    className="surface-row p-3 flex justify-between"
-                  >
-                    <span className="text-white">
-                      Devolver p/{' '}
-                      {accounts.find((a) => a.id === p.toAccountId)?.name ?? '?'}
-                    </span>
-                    <span className="text-amber-400 font-bold">
-                      {formatCurrency(p.amount)}
-                    </span>
-                  </div>
-                ))}
+              <div className="grid gap-2">
+                {accounts.length === 0 && (
+                  <p className="text-zinc-400">Nenhuma conta cadastrada</p>
+                )}
+                {accounts.map((account) => {
+                  const latest = latestAccountReadings.get(account.id);
+                  return (
+                    <div
+                      key={account.id}
+                      className="surface-row p-3 flex items-center justify-between gap-3"
+                    >
+                      <p className="text-white font-medium flex items-center gap-1.5">
+                        {account.name}
+                        {account.is_payment_default && (
+                          <span className="badge bg-yellow-500/15 text-yellow-400">
+                            ★ Pagamento
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-zinc-400 text-sm">
+                        {latest
+                          ? `${formatCurrency(latest.amount)} · lida em ${new Date(latest.readAt).toLocaleDateString('pt-BR')}`
+                          : 'Sem leitura'}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
-            )}
-          </div>
-        )}
 
-        {selectedCard === 'coverage' && (
-          <div className="grid gap-4">
-            {!coverage && (
-              <p className="text-zinc-400">
-                A cobertura só é calculada no mês corrente — troque a competência
-                para o mês atual.
-              </p>
-            )}
-
-            {coverage && !coverage.hasPayday && (
-              <p className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-400">
-                Nenhuma entrada com dia de recebimento cadastrado. Edite seu
-                salário em Transações e preencha o dia — é ele que define até
-                quando a cobertura precisa durar.
-              </p>
-            )}
-
-            {coverage?.hasPayday && (
-              <>
-                <div className="surface-row p-3">
-                  <p className="text-white font-bold">
-                    {coverage.shortfall > 0
-                      ? `Faltam ${formatCurrency(coverage.shortfall)} para chegar no salário`
-                      : 'O saldo cobre tudo até o salário'}
-                  </p>
-                  <p className="text-zinc-400 text-sm mt-1">
-                    Salário em{' '}
-                    {coverage.payday ? formatDateShort(coverage.payday) : ''}
-                    {coverage.daysUntilPayday > 0
-                      ? ` (${coverage.daysUntilPayday} dia(s))`
-                      : ' (hoje)'}
-                    {coverage.source
-                      ? ` · sugestão: tirar de ${coverage.source.accountName} (${formatCurrency(coverage.source.available)} disponível)`
-                      : ''}
-                  </p>
-                  {coverage.source?.insufficient && (
-                    <p className="text-amber-400 text-sm mt-1">
-                      ⚠️ {coverage.source.accountName} não cobre esse valor sozinho.
-                    </p>
-                  )}
-                </div>
-
+              {defaultAccount && defaultAccountProjection && (
                 <div className="grid gap-1">
                   <h3 className="text-white font-bold text-sm mb-1">
-                    Vence antes do salário
+                    Projeção — {defaultAccount.name}
                   </h3>
-
-                  {coverage.items.length === 0 && (
-                    <p className="text-zinc-400">
-                      Nada em aberto vence antes do salário.
-                    </p>
-                  )}
-
-                  {coverage.items.map((item) => (
+                  {defaultAccountProjection.lines.map((line, i) => (
                     <div
-                      key={item.id}
-                      className="surface-row p-3 flex justify-between items-center gap-3"
+                      key={i}
+                      className="surface-row p-3 flex justify-between"
                     >
-                      <div className="min-w-0">
-                        <p className="text-white font-medium truncate">
-                          {item.label}
-                        </p>
-                        <p className="text-zinc-400 text-sm">
-                          {item.kind === 'invoice' ? '💳 fatura' : 'conta'} · vence{' '}
-                          {formatDateShort(item.dueDate)}
-                          {item.overdue ? ' · atrasada' : ''}
-                          {item.partial
-                            ? item.kind === 'invoice'
-                              ? ` · parcial${item.closingDay ? `, fecha dia ${item.closingDay}` : ''}`
-                              : ' · valor do mês anterior'
-                            : ''}
-                        </p>
-                      </div>
+                      <span className="text-white">{line.label}</span>
                       <span
-                        className={`font-bold shrink-0 ${item.overdue ? 'text-red-400' : 'text-white'}`}
+                        className={
+                          line.amount < 0 ? 'text-red-400' : 'text-green-400'
+                        }
                       >
-                        {formatCurrency(item.amount)}
+                        {formatCurrency(line.amount)}
+                      </span>
+                    </div>
+                  ))}
+                  <div className="surface-row p-3 flex justify-between border-white/10">
+                    <span className="text-white font-bold">
+                      Sobra projetada
+                    </span>
+                    <span
+                      className={`font-bold ${defaultAccountProjection.projected < 0 ? 'text-red-400' : 'text-green-400'}`}
+                    >
+                      {formatCurrency(defaultAccountProjection.projected)}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {openComplements.length > 0 && (
+                <div className="grid gap-1">
+                  <h3 className="text-white font-bold text-sm mb-1">
+                    Complementos em aberto
+                  </h3>
+                  {openComplements.map((p) => (
+                    <div
+                      key={p.complementId}
+                      className="surface-row p-3 flex justify-between"
+                    >
+                      <span className="text-white">
+                        Devolver p/{' '}
+                        {accounts.find((a) => a.id === p.toAccountId)?.name ??
+                          '?'}
+                      </span>
+                      <span className="text-amber-400 font-bold">
+                        {formatCurrency(p.amount)}
                       </span>
                     </div>
                   ))}
                 </div>
-
-                <div className="grid gap-1">
-                  <div className="surface-row p-3 flex justify-between">
-                    <span className="text-white">
-                      Total a pagar até o salário
-                      {coverage.hasPartial ? ' (piso)' : ''}
-                    </span>
-                    <span className="text-red-400">
-                      {formatCurrency(coverage.dueBeforePayday)}
-                      {coverage.hasPartial ? '+' : ''}
-                    </span>
-                  </div>
-                  <div className="surface-row p-3 flex justify-between">
-                    <span className="text-white">
-                      Saldo na conta de pagamento
-                      {defaultAccount ? ` (${defaultAccount.name})` : ''}
-                    </span>
-                    <span className="text-green-400">
-                      {formatCurrency(coverage.balance)}
-                    </span>
-                  </div>
-                  {coverage.borrowed > 0 && (
-                    <div className="surface-row p-3 flex justify-between">
-                      <span className="text-zinc-400">
-                        Do saldo, já é complemento a devolver
-                      </span>
-                      <span className="text-amber-400">
-                        {formatCurrency(coverage.borrowed)}
-                      </span>
-                    </div>
-                  )}
-                  <div className="surface-row p-3 flex justify-between border-white/10">
-                    <span className="text-white font-bold">
-                      {coverage.shortfall > 0 ? 'Falta cobrir' : 'Sobra até o salário'}
-                    </span>
-                    <span
-                      className={`font-bold ${coverage.shortfall > 0 ? 'text-amber-400' : 'text-green-400'}`}
-                    >
-                      {formatCurrency(
-                        coverage.shortfall > 0 ? coverage.shortfall : coverage.leftover,
-                      )}
-                    </span>
-                  </div>
-                </div>
-
-                {coverage.hasPartial && (
-                  <p className="text-zinc-500 text-xs leading-relaxed">
-                    Itens marcados como parciais são de ciclo ainda aberto — o
-                    valor é o acumulado até a última leitura e ainda pode subir
-                    até o fechamento. Trate o total como piso.
-                  </p>
-                )}
-
-                <p className="text-zinc-500 text-xs leading-relaxed">
-                  Depois de puxar o valor, registre em Contas como{' '}
-                  <strong className="text-zinc-400">complemento</strong> — assim a
-                  devolução fica pendente e some quando o salário cair.
-                </p>
-              </>
-            )}
+              )}
+            </div>
           </div>
         )}
 
