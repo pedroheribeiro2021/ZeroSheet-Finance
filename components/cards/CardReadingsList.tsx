@@ -23,6 +23,7 @@ export default function CardReadingsList({
   const [readings, setReadings] = useState<DBCardReading[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -68,50 +69,75 @@ export default function CardReadingsList({
     (a, b) => new Date(b.read_at).getTime() - new Date(a.read_at).getTime(),
   );
 
+  const lastAmount = Number(sorted[0].amount).toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  });
+
   return (
     <div className="surface p-4 sm:p-5">
-      <h2 className="text-white font-bold mb-1">Leituras deste mês</h2>
-      <p className="text-zinc-500 text-xs mb-4">
-        Histórico usado no acompanhamento semanal. Lançou na competência
-        errada? Apague aqui e relance em Atualizar Faturas.
-      </p>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="-m-1 flex w-full items-center justify-between gap-2 rounded-lg p-1 text-left transition hover:bg-white/5"
+      >
+        <div>
+          <h2 className="text-white font-bold">Leituras deste mês</h2>
+          <p className="text-zinc-500 text-xs">
+            {sorted.length} leitura{sorted.length !== 1 ? 's' : ''} · última:{' '}
+            {lastAmount}
+          </p>
+        </div>
+        <span
+          className={`text-zinc-500 text-xs shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+        >
+          ▾
+        </span>
+      </button>
 
-      <div className="grid gap-1.5">
-        {sorted.map((reading) => (
-          <div
-            key={reading.id}
-            className="surface-row flex items-center justify-between gap-3 p-3"
-          >
-            <div className="min-w-0">
-              <p className="font-medium text-white">{cardName(reading.card_id)}</p>
-              <p className="text-xs text-zinc-400">
-                {new Date(reading.read_at).toLocaleString('pt-BR', {
-                  day: '2-digit',
-                  month: '2-digit',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-              </p>
-            </div>
+      {open && (
+        <div className="grid gap-1.5 mt-4">
+          <p className="text-zinc-500 text-xs -mt-1 mb-1">
+            Histórico usado no acompanhamento semanal. Lançou na competência
+            errada? Apague aqui e relance em Atualizar Faturas.
+          </p>
 
-            <div className="flex shrink-0 items-center gap-3">
-              <span className="font-bold text-white">
-                {Number(reading.amount).toLocaleString('pt-BR', {
-                  style: 'currency',
-                  currency: 'BRL',
-                })}
-              </span>
-              <button
-                onClick={() => handleDelete(reading.id)}
-                disabled={pendingId === reading.id}
-                className="btn-ghost text-xs text-red-400 hover:bg-red-500/10 hover:text-red-300"
-              >
-                Remover
-              </button>
+          {sorted.map((reading) => (
+            <div
+              key={reading.id}
+              className="surface-row flex items-center justify-between gap-3 p-3"
+            >
+              <div className="min-w-0">
+                <p className="font-medium text-white">{cardName(reading.card_id)}</p>
+                <p className="text-xs text-zinc-400">
+                  {new Date(reading.read_at).toLocaleString('pt-BR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </p>
+              </div>
+
+              <div className="flex shrink-0 items-center gap-3">
+                <span className="font-bold text-white">
+                  {Number(reading.amount).toLocaleString('pt-BR', {
+                    style: 'currency',
+                    currency: 'BRL',
+                  })}
+                </span>
+                <button
+                  onClick={() => handleDelete(reading.id)}
+                  disabled={pendingId === reading.id}
+                  className="btn-ghost text-xs text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                >
+                  Remover
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
