@@ -76,6 +76,29 @@ export async function getOpenCardSnapshots(): Promise<DBCardSnapshot[]> {
   return (data ?? []) as DBCardSnapshot[];
 }
 
+/**
+ * Todas as faturas lançadas do usuário, de qualquer competência e pagas ou
+ * não. É a entrada de `engine/invoices.buildInvoices`: a fatura que vence no
+ * mês exibido nasceu na competência anterior, então nenhuma tela pode se
+ * limitar aos snapshots do próprio mês.
+ */
+export async function getAllCardSnapshots(): Promise<DBCardSnapshot[]> {
+  const user = await getCurrentUser();
+
+  if (!user) {
+    throw new Error('Usuário não autenticado');
+  }
+
+  const { data, error } = await supabase
+    .from('card_snapshots')
+    .select('*')
+    .eq('user_id', user.id);
+
+  if (error) throw error;
+
+  return (data ?? []) as DBCardSnapshot[];
+}
+
 export async function markCardSnapshotPaid(
   id: string,
   paidAt: string = new Date().toISOString(),

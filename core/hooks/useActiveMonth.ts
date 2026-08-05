@@ -1,24 +1,30 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 
 import { getMonths, createMonth } from '@/core/services/month.service';
 import { competenceKey } from '@/core/engine/month';
 import { DBMonth } from '@/core/types/database';
 
 /**
- * Competência ativa da página, sincronizada pela URL (?month=YYYY-MM) — a
- * mesma convenção do dashboard. Sem parâmetro (ou sem match), usa a mais
- * recente cadastrada. Páginas que não usam isso ficam presas no mês mais
- * novo pra sempre, ignorando qual competência o usuário está navegando.
+ * Competência ativa da página. A escolha é ESTADO local; a URL (?month=YYYY-MM)
+ * é lida uma única vez na montagem, só pra semear, e depois apenas espelhada
+ * com `history.replaceState` — o link continua compartilhável e não há
+ * navegação do router envolvida.
+ *
+ * A versão anterior derivava o mês de `useSearchParams()` a cada render e
+ * trocava de mês com `router.push`, enquanto um efeito de canonização chamava
+ * `router.replace` quando as duas coisas discordavam. Com duas navegações do
+ * App Router disputando, o clique às vezes era engolido: "seleciono julho e
+ * não vai, vai quando quer".
  */
 export function useActiveMonth() {
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const [months, setMonths] = useState<DBMonth[]>([]);
+  const [activeKey, setActiveKey] = useState<string | null>(null);
 
   const reloadMonths = async (): Promise<DBMonth[] | null> => {
     try {
@@ -26,7 +32,10 @@ export function useActiveMonth() {
 
       if (!monthsData.length) {
         const now = new Date();
-        const newMonth = await createMonth(now.getMonth() + 1, now.getFullYear());
+        const newMonth = await createMonth(
+          now.getMonth() + 1,
+          now.getFullYear(),
+        );
         monthsData = [newMonth];
       }
 
@@ -43,30 +52,35 @@ export function useActiveMonth() {
     reloadMonths();
   }, []);
 
+  // semeia a competência a partir da URL — uma vez só
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setActiveKey((current) => current ?? searchParams.get('month'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const activeMonth = useMemo(() => {
     if (!months.length) return null;
 
-    const param = searchParams.get('month');
-    if (param) {
-      const found = months.find((m) => competenceKey(m) === param);
-      if (found) return found;
-    }
+    const found = activeKey
+      ? months.find((m) => competenceKey(m) === activeKey)
+      : undefined;
 
-    return months[months.length - 1];
-  }, [months, searchParams]);
+    return found ?? months[months.length - 1];
+  }, [months, activeKey]);
 
-  // mantém a URL sincronizada com o mês ativo (ex.: sem ?month, canoniza pro mais recente)
+  // URL como espelho do estado, sem acionar o router
   useEffect(() => {
     if (!activeMonth) return;
 
     const key = competenceKey(activeMonth);
-    if (searchParams.get('month') !== key) {
-      router.replace(`${pathname}?month=${key}`);
+    if (new URLSearchParams(window.location.search).get('month') !== key) {
+      window.history.replaceState(null, '', `${pathname}?month=${key}`);
     }
-  }, [activeMonth, pathname, router, searchParams]);
+  }, [activeMonth, pathname]);
 
   const goToMonth = (month: DBMonth) => {
-    router.push(`${pathname}?month=${competenceKey(month)}`);
+    setActiveKey(competenceKey(month));
   };
 
   return { months, activeMonth, goToMonth, reloadMonths };

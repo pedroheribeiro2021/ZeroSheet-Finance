@@ -6,14 +6,23 @@ import { deleteCard, setPrimaryCard } from '@/core/services/card.service';
 import EditCardModal from '../modals/EditCardModal';
 import { useToast } from '@/components/ui/ToastProvider';
 import { DBCard, DBCardSnapshot } from '@/core/types/database';
+import { invoiceDueDate } from '@/core/engine/invoices';
+import { Competence } from '@/core/engine/month';
 
 type Props = {
   cards: DBCard[];
   snapshots?: DBCardSnapshot[];
+  /** Competência exibida — usada só pra mostrar quando essa fatura vence. */
+  competence?: Competence | null;
   onUpdated: () => void;
 };
 
-export default function CardList({ cards, snapshots = [], onUpdated }: Props) {
+export default function CardList({
+  cards,
+  snapshots = [],
+  competence = null,
+  onUpdated,
+}: Props) {
   const { showToast } = useToast();
   const [selected, setSelected] = useState<DBCard | null>(null);
 
@@ -69,13 +78,14 @@ export default function CardList({ cards, snapshots = [], onUpdated }: Props) {
                 <p className="text-white font-medium flex items-center gap-1.5">
                   {card.name}
                   {card.is_primary && (
-                    <span className="badge bg-yellow-500/15 text-yellow-400">★ Principal</span>
+                    <span className="badge bg-yellow-500/15 text-yellow-400">
+                      ★ Principal
+                    </span>
                   )}
                 </p>
 
                 <p className="text-zinc-400 text-sm">
-                  Fecha dia {card.closing_day} • vence dia{' '}
-                  {card.due_day ?? '-'}
+                  Fecha dia {card.closing_day} • vence dia {card.due_day ?? '-'}
                   {card.limit_amount != null &&
                     ` • limite ${new Intl.NumberFormat('pt-BR', {
                       style: 'currency',
@@ -87,7 +97,18 @@ export default function CardList({ cards, snapshots = [], onUpdated }: Props) {
 
             <div className="flex items-center justify-between gap-3 sm:justify-end">
               <div className="sm:text-right">
-                <p className="text-zinc-500 text-xs">Fatura atual</p>
+                <p className="text-zinc-500 text-xs">
+                  Fatura desta competência
+                  {competence && card.due_day != null
+                    ? ` · vence ${invoiceDueDate(
+                        competence,
+                        card.due_day,
+                      ).toLocaleDateString('pt-BR', {
+                        day: '2-digit',
+                        month: '2-digit',
+                      })}`
+                    : ''}
+                </p>
 
                 <p className="text-white font-bold">
                   {new Intl.NumberFormat('pt-BR', {
@@ -100,7 +121,11 @@ export default function CardList({ cards, snapshots = [], onUpdated }: Props) {
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => handleSetPrimary(card.id)}
-                  title={card.is_primary ? 'Cartão principal' : 'Definir como principal'}
+                  title={
+                    card.is_primary
+                      ? 'Cartão principal'
+                      : 'Definir como principal'
+                  }
                   className={`btn-icon h-10 w-10 text-lg leading-none ${card.is_primary ? 'text-yellow-400' : 'text-zinc-500 hover:text-yellow-400'}`}
                 >
                   ★

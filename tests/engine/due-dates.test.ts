@@ -139,7 +139,11 @@ describe('getDueItems', () => {
 
   it('paidAt sobrepõe o status calculado por data, mesmo atrasada', () => {
     const transactions: Transaction[] = [
-      makeTransaction({ id: 'paid-overdue', dueDay: 5, paidAt: '2026-07-06T10:00:00Z' }),
+      makeTransaction({
+        id: 'paid-overdue',
+        dueDay: 5,
+        paidAt: '2026-07-06T10:00:00Z',
+      }),
     ];
 
     const items = getDueItems(transactions, today);
@@ -175,7 +179,15 @@ describe('getDueItems', () => {
 describe('getInstallmentDueItems', () => {
   it('resolve a data a partir do billingDay e marca status automatic', () => {
     const items = getInstallmentDueItems(
-      [{ id: 'i1', description: 'Celular', amount: 200, cardId: 'card-1', billingDay: 10 }],
+      [
+        {
+          id: 'i1',
+          description: 'Celular',
+          amount: 200,
+          cardId: 'card-1',
+          billingDay: 10,
+        },
+      ],
       2026,
       7,
     );
@@ -190,7 +202,15 @@ describe('getInstallmentDueItems', () => {
 
   it('sem billingDay ainda entra na lista, mas com dayKnown false', () => {
     const items = getInstallmentDueItems(
-      [{ id: 'i2', description: 'Notebook', amount: 300, cardId: 'card-1', billingDay: null }],
+      [
+        {
+          id: 'i2',
+          description: 'Notebook',
+          amount: 300,
+          cardId: 'card-1',
+          billingDay: null,
+        },
+      ],
       2026,
       7,
     );
@@ -202,7 +222,15 @@ describe('getInstallmentDueItems', () => {
 
   it('ignora parcelamento sem cartão vinculado', () => {
     const items = getInstallmentDueItems(
-      [{ id: 'i3', description: 'Sem cartão', amount: 100, cardId: null, billingDay: 10 }],
+      [
+        {
+          id: 'i3',
+          description: 'Sem cartão',
+          amount: 100,
+          cardId: null,
+          billingDay: 10,
+        },
+      ],
       2026,
       7,
     );
@@ -214,11 +242,16 @@ describe('getInstallmentDueItems', () => {
 describe('getCardInvoiceDueItems', () => {
   const today = new Date(2026, 6, 10); // 10/07/2026
 
-  function makeCharge(overrides: Partial<CardInvoiceCharge> = {}): CardInvoiceCharge {
+  function makeCharge(
+    overrides: Partial<CardInvoiceCharge> = {},
+  ): CardInvoiceCharge {
     return {
       cardId: 'card-1',
       cardName: 'C6',
       dueDay: 10,
+      // vencimento já resolvido pelo ciclo (engine/invoices) — o painel não
+      // deriva mais data a partir da competência exibida
+      dueDate: new Date(2026, 6, 10),
       snapshotId: 'snap-1',
       amount: 1000,
       paidAt: null,
@@ -229,24 +262,43 @@ describe('getCardInvoiceDueItems', () => {
   it('classifica atrasada, hoje e próxima por data, igual às outras contas', () => {
     const items = getCardInvoiceDueItems(
       [
-        makeCharge({ cardId: 'c-overdue', snapshotId: 's-overdue', dueDay: 5 }),
-        makeCharge({ cardId: 'c-today', snapshotId: 's-today', dueDay: 10 }),
-        makeCharge({ cardId: 'c-upcoming', snapshotId: 's-upcoming', dueDay: 15 }),
+        makeCharge({
+          cardId: 'c-overdue',
+          snapshotId: 's-overdue',
+          dueDate: new Date(2026, 6, 5),
+        }),
+        makeCharge({
+          cardId: 'c-today',
+          snapshotId: 's-today',
+          dueDate: new Date(2026, 6, 10),
+        }),
+        makeCharge({
+          cardId: 'c-upcoming',
+          snapshotId: 's-upcoming',
+          dueDate: new Date(2026, 6, 15),
+        }),
       ],
-      2026,
-      7,
       today,
     );
 
-    expect(items.map((i) => i.status)).toEqual(['overdue', 'today', 'upcoming']);
-    expect(items.every((i) => i.transaction.category === 'Fatura do cartão')).toBe(true);
+    expect(items.map((i) => i.status)).toEqual([
+      'overdue',
+      'today',
+      'upcoming',
+    ]);
+    expect(
+      items.every((i) => i.transaction.category.startsWith('Fatura')),
+    ).toBe(true);
   });
 
   it('paidAt do snapshot sobrepõe o status por data, mesmo atrasada', () => {
     const items = getCardInvoiceDueItems(
-      [makeCharge({ dueDay: 5, paidAt: '2026-07-06T10:00:00Z' })],
-      2026,
-      7,
+      [
+        makeCharge({
+          dueDate: new Date(2026, 6, 5),
+          paidAt: '2026-07-06T10:00:00Z',
+        }),
+      ],
       today,
     );
 
@@ -257,8 +309,6 @@ describe('getCardInvoiceDueItems', () => {
   it('entra mesmo sem fatura lançada no mês (sem snapshotId), com amountKnown false', () => {
     const items = getCardInvoiceDueItems(
       [makeCharge({ snapshotId: '', amount: 0 })],
-      2026,
-      7,
       today,
     );
 
@@ -268,12 +318,7 @@ describe('getCardInvoiceDueItems', () => {
   });
 
   it('entra com valor zero quando a fatura já foi lançada (amountKnown true)', () => {
-    const items = getCardInvoiceDueItems(
-      [makeCharge({ amount: 0 })],
-      2026,
-      7,
-      today,
-    );
+    const items = getCardInvoiceDueItems([makeCharge({ amount: 0 })], today);
 
     expect(items).toHaveLength(1);
     expect(items[0].amountKnown).toBe(true);
@@ -282,16 +327,18 @@ describe('getCardInvoiceDueItems', () => {
   it('exclui upcoming além do horizonte, mas mantém pagas mesmo distantes', () => {
     const items = getCardInvoiceDueItems(
       [
-        makeCharge({ cardId: 'far', snapshotId: 's-far', dueDay: 30 }), // 20 dias à frente
+        makeCharge({
+          cardId: 'far',
+          snapshotId: 's-far',
+          dueDate: new Date(2026, 6, 30),
+        }), // 20 dias à frente
         makeCharge({
           cardId: 'far-paid',
           snapshotId: 's-far-paid',
-          dueDay: 30,
+          dueDate: new Date(2026, 6, 30),
           paidAt: '2026-07-01T00:00:00Z',
         }),
       ],
-      2026,
-      7,
       today,
       { horizonDays: 7 },
     );
@@ -303,8 +350,6 @@ describe('getCardInvoiceDueItems', () => {
   it('expõe cardInvoiceSnapshotId pra quem for marcar/desmarcar como paga', () => {
     const items = getCardInvoiceDueItems(
       [makeCharge({ snapshotId: 'snap-abc' })],
-      2026,
-      7,
       today,
     );
 

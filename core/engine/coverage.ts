@@ -27,7 +27,11 @@ function startOfDay(date: Date): Date {
 }
 
 /** Ocorrência do `day` na competência de `today` deslocada de `monthOffset`. */
-function occurrenceInMonth(day: number, today: Date, monthOffset: number): Date {
+function occurrenceInMonth(
+  day: number,
+  today: Date,
+  monthOffset: number,
+): Date {
   const ref = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
 
   return resolveDueDate(day, ref.getFullYear(), ref.getMonth() + 1);
@@ -43,7 +47,11 @@ function occurrenceInMonth(day: number, today: Date, monthOffset: number): Date 
  *
  * Sem isso, tudo que já foi pago no mês some da janela e a cobertura dá zero.
  */
-export function resolveOccurrence(day: number, today: Date, paid: boolean): Date {
+export function resolveOccurrence(
+  day: number,
+  today: Date,
+  paid: boolean,
+): Date {
   return occurrenceInMonth(day, today, paid ? 1 : 0);
 }
 
@@ -59,12 +67,17 @@ export function resolveOccurrence(day: number, today: Date, paid: boolean): Date
 export function resolvePaydayDay(transactions: Transaction[]): number | null {
   const incomes = transactions.filter(
     (t) =>
-      t.type === 'income' && !t.skipped && !t.isReimbursement && t.dueDay != null,
+      t.type === 'income' &&
+      !t.skipped &&
+      !t.isReimbursement &&
+      t.dueDay != null,
   );
 
   if (incomes.length === 0) return null;
 
-  const main = incomes.reduce((biggest, t) => (t.amount > biggest.amount ? t : biggest));
+  const main = incomes.reduce((biggest, t) =>
+    t.amount > biggest.amount ? t : biggest,
+  );
 
   return main.dueDay ?? null;
 }
@@ -229,11 +242,14 @@ export function calculateCoverage(input: CoverageInput): Coverage {
     // Vence antes do salário — o que cai no dia do salário ou depois já é
     // pago com o dinheiro que entrou, não precisa de cobertura.
     .filter(
-      (item) => startOfDay(item.dueDate).getTime() < startOfDay(payday).getTime(),
+      (item) =>
+        startOfDay(item.dueDate).getTime() < startOfDay(payday).getTime(),
     )
     .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
 
-  const dueBeforePayday = toCurrency(items.reduce((acc, i) => acc + i.amount, 0));
+  const dueBeforePayday = toCurrency(
+    items.reduce((acc, i) => acc + i.amount, 0),
+  );
   const shortfall = toCurrency(Math.max(0, dueBeforePayday - balance));
   const leftover = toCurrency(Math.max(0, balance - dueBeforePayday));
 
@@ -273,7 +289,9 @@ export function suggestCoverageSource(
   const candidates = accounts
     .filter((a) => a.kind === 'guardado')
     .map((a) => ({ account: a, reading: latestByAccount.get(a.id) }))
-    .filter((c): c is { account: Account; reading: AccountReading } => !!c.reading);
+    .filter(
+      (c): c is { account: Account; reading: AccountReading } => !!c.reading,
+    );
 
   if (candidates.length === 0) return null;
 
@@ -312,85 +330,36 @@ export function coverageBillsFromTransactions(
     }));
 }
 
-type CoverageCard = {
-  id: string;
-  name: string;
-  due_day?: number | null;
-  closing_day?: number | null;
-};
-
-type CoverageSnapshot = {
-  id: string;
-  card_id: string | null;
-  amount: number;
-  paid_at?: string | null;
-};
-
-type CoverageReading = {
-  card_id: string | null;
-  amount: number;
-  read_at: string;
-};
-
 /**
- * Próximo vencimento de fatura de cada cartão, com o melhor valor disponível:
+ * Faturas em aberto viram itens de cobertura direto: o vencimento já veio
+ * resolvido por `engine/invoices` (competência M → vence no dia do cartão em
+ * M+1), então aqui não há nenhuma regra de ciclo — só tradução de formato.
  *
- * - **fatura da competência ainda em aberto** → vence na competência
- *   corrente e vale o valor lançado (`card_snapshots`), que é fechado;
- * - **fatura da competência já paga (ou não lançada)** → o próximo
- *   vencimento é o do ciclo seguinte, cujo valor ainda não virou snapshot.
- *   Aí vale a última leitura da fatura (`card_readings`), marcada como
- *   `partial`: é o acumulado até hoje e ainda sobe até o fechamento.
- *
- * Cartão sem `due_day`, ou sem snapshot e sem leitura, fica de fora — não há
- * o que projetar.
+ * Antes esta função reinventava o ciclo a partir do `due_day` e do estado de
+ * "paga", e por isso mostrava em agosto, como se vencesse 10/08, a fatura de
+ * agosto que só vence 10/09. Marcar a fatura como paga também fazia a do ciclo
+ * SEGUINTE tomar o lugar dela na lista, em vez de simplesmente sair.
  */
-export function coverageInvoices(
-  cards: CoverageCard[],
-  snapshots: CoverageSnapshot[],
-  readings: CoverageReading[],
-  today: Date,
+export function coverageInvoicesFromOpen(
+  invoices: {
+    snapshotId: string;
+    cardId: string | null;
+    cardName: string;
+    amount: number;
+    dueDate: Date;
+    paid: boolean;
+    estimated?: boolean;
+    closingDay?: number | null;
+  }[],
 ): CoverageInvoice[] {
-  const invoices: CoverageInvoice[] = [];
-
-  for (const card of cards) {
-    if (!card.due_day) continue;
-
-    const openSnapshot = snapshots.find(
-      (s) => s.card_id === card.id && !s.paid_at && Number(s.amount) > 0,
-    );
-
-    if (openSnapshot) {
-      invoices.push({
-        id: openSnapshot.id,
-        label: `Fatura ${card.name}`,
-        amount: Number(openSnapshot.amount),
-        dueDate: resolveOccurrence(card.due_day, today, false),
-        partial: false,
-      });
-
-      continue;
-    }
-
-    const latestReading = readings
-      .filter((r) => r.card_id === card.id)
-      .reduce<CoverageReading | null>(
-        (latest, r) =>
-          !latest || new Date(r.read_at) > new Date(latest.read_at) ? r : latest,
-        null,
-      );
-
-    if (!latestReading || Number(latestReading.amount) <= 0) continue;
-
-    invoices.push({
-      id: `card-${card.id}`,
-      label: `Fatura ${card.name}`,
-      amount: Number(latestReading.amount),
-      dueDate: resolveOccurrence(card.due_day, today, true),
-      partial: true,
-      closingDay: card.closing_day ?? null,
-    });
-  }
-
-  return invoices;
+  return invoices
+    .filter((invoice) => !invoice.paid && invoice.amount > 0)
+    .map((invoice) => ({
+      id: invoice.snapshotId || `card-${invoice.cardId}`,
+      label: `Fatura ${invoice.cardName}`,
+      amount: invoice.amount,
+      dueDate: invoice.dueDate,
+      partial: !!invoice.estimated,
+      closingDay: invoice.closingDay ?? null,
+    }));
 }
