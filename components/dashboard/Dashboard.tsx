@@ -14,6 +14,7 @@ import { mapTransaction } from '@/core/models/mappers';
 import { calculateSummary } from '@/core/engine/calculations';
 import {
   adjustWeeklySpendForKnownCharges,
+  cycleLengthInWeeks,
   getCycleRange,
   getWeeksInMonth,
   getWeeksRemainingInCycle,
@@ -100,13 +101,6 @@ function formatMonthLabel(month: number, year: number): string {
 
 function monthKey(m: { month: number; year: number }): string {
   return `${m.year}-${String(m.month).padStart(2, '0')}`;
-}
-
-/** Semanas do intervalo (inclusive nas duas pontas) — mesmo critério de bucket (ceil/7) do resto do engine. */
-function cycleLengthInWeeks(range: { start: Date; end: Date }): number {
-  const days =
-    Math.round((range.end.getTime() - range.start.getTime()) / 86_400_000) + 1;
-  return Math.max(1, Math.ceil(days / 7));
 }
 
 function installmentMonthLabel(
@@ -583,22 +577,35 @@ export default function Dashboard() {
       }
 
       // Orçamento semanal decrescente: passou uma semana, divide pelas que
-      // restam. Com leituras lançadas, usa o maior índice de semana já
-      // registrado (mínimo 1 restante); sem leituras E no mês corrente, cai
-      // no cálculo por data ("hoje" só é válido pro ciclo em andamento —
-      // num mês passado/futuro sem leitura nenhuma, o ciclo inteiro é a
-      // melhor estimativa, não "quanto falta a partir de hoje").
-      let weeksForBudget = weeksInCycle;
-      if (primary?.closing_day != null) {
-        if (weeklySpendData.length > 0) {
-          const maxWeekIndex = Math.max(
-            ...weeklySpendData.map((w) => w.weekIndex),
-          );
-          weeksForBudget = Math.max(1, weeksInCycle - maxWeekIndex);
-        } else if (isCurrentMonth) {
-          weeksForBudget = getWeeksRemainingInCycle(primary.closing_day);
-        }
-      }
+      // restam. Quantas restam depende SÓ da data — leitura de fatura diz
+      // quanto já foi gasto, não em que ponto do ciclo estamos. Antes havia um
+      // segundo caminho que deduzia a semana atual do maior índice já lido
+      // (`weeksInCycle - maxWeekIndex`), e ele descontava a semana em curso
+      // como se ela tivesse acabado: lançar uma leitura na semana 1 derrubava
+      // o divisor de 5 pra 4 na hora, inflando o orçamento em 25%.
+      //
+      // Fora do ciclo vigente (mês passado ou futuro) "quanto falta a partir
+      // de hoje" não quer dizer nada — aí o divisor é o ciclo inteiro, que é o
+      // mesmo número de barras desenhado no gráfico.
+      const todayInCycle =
+        !!cycleRangeForPrimary &&
+        now.getTime() >= cycleRangeForPrimary.start.getTime() &&
+        now.getTime() <=
+          new Date(
+            cycleRangeForPrimary.end.getFullYear(),
+            cycleRangeForPrimary.end.getMonth(),
+            cycleRangeForPrimary.end.getDate(),
+            23,
+            59,
+            59,
+            999,
+          ).getTime();
+
+      const weeksForBudget =
+        primary?.closing_day != null && todayInCycle
+          ? getWeeksRemainingInCycle(primary.closing_day, now)
+          : weeksInCycle;
+
       setWeeksRemaining(weeksForBudget);
 
       const result = calculateSummary(
@@ -645,8 +652,9 @@ export default function Dashboard() {
   // Mês ativo: a competência escolhida, ou a mais recente quando a chave não
   // existe (URL apontando pra um mês ainda não aberto, por exemplo).
   const activeMonth = months.length
-    ? (activeKey ? months.find((m) => monthKey(m) === activeKey) : undefined) ??
-      months[months.length - 1]
+    ? ((activeKey
+        ? months.find((m) => monthKey(m) === activeKey)
+        : undefined) ?? months[months.length - 1])
     : null;
 
   // recarrega tudo (transações, snapshots, leituras, parcelas, summary) ao trocar de mês
@@ -748,7 +756,9 @@ export default function Dashboard() {
         : '—';
 
   const pendingReturnsFragment =
-    totalPendingReturns > 0 ? `devolver ${formatCurrency(totalPendingReturns)}` : null;
+    totalPendingReturns > 0
+      ? `devolver ${formatCurrency(totalPendingReturns)}`
+      : null;
 
   const cashSubtitle = !defaultAccount
     ? 'Marque uma conta como ★ de pagamento em Contas'
