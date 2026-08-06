@@ -192,23 +192,31 @@ export function weeklySpendFromReadings(
 }
 
 /**
- * Número de blocos de 7 dias do início do ciclo do cartão até o closing_day.
- * O ciclo começa no dia seguinte ao fechamento anterior; o comprimento
- * varia com o mês (28–31 dias), então usamos closing_day diretamente:
- * se fecha no dia 28, o ciclo tem 28 dias → 4 semanas.
- * Mínimo retornado é 1.
+ * ⚠️ NÃO use para nada novo — o app não usa mais. Prefira
+ * `cycleLengthInWeeks(getCycleRange(closingDay, data))`, que mede o ciclo real
+ * (28–31 dias, variando com o mês) em vez de aproximar por `closing_day`.
+ *
+ * Esta aproximação diverge do ciclo real sempre que eles não coincidem: com
+ * `closing_day` 28 ela diz 4 semanas, mas o ciclo 28/01–27/02 tem 31 dias, ou
+ * seja 5 — e são 5 barras que a tela desenha. Manter duas noções de "semanas
+ * do ciclo" no mesmo módulo foi o que permitiu o divisor do orçamento semanal
+ * discordar das semanas exibidas. Mantida só por compatibilidade com testes.
+ *
+ * Número de blocos de 7 dias a partir do `closing_day`. Mínimo 1.
  */
 export function getWeeksInCycle(closingDay: number): number {
   return Math.max(1, Math.ceil(closingDay / 7));
 }
 
 /**
- * Semanas do ciclo vigente da fatura do cartão principal, visto de `from`:
- * conta os dias entre a PRÓXIMA virada da fatura e a virada seguinte e
- * divide por 7 (arredondando pra cima).
+ * ⚠️ NÃO use para nada novo — o app não usa mais. Prefira
+ * `cycleLengthInWeeks(getCycleRange(closingDay, data))`.
+ *
+ * Mede o ciclo SEGUINTE ao de `from` (do próximo fechamento até o outro),
+ * não o ciclo em que `from` está — o que a torna sutilmente diferente de
+ * `getCycleRange`. Mantida só por compatibilidade com testes.
  *
  * Ex.: hoje 03/07, fechamento dia 4 → ciclo 04/07→04/08 = 31 dias = 5 semanas.
- * É por esse número que o saldo do mês é dividido no orçamento semanal.
  */
 export function getWeeksInCurrentCycle(
   closingDay: number,
@@ -226,7 +234,11 @@ export function getWeeksInCurrentCycle(
   const followingClosing = new Date(
     nextClosing.getFullYear(),
     nextClosing.getMonth() + 1,
-    clampClosingDay(nextClosing.getFullYear(), nextClosing.getMonth() + 1, closingDay),
+    clampClosingDay(
+      nextClosing.getFullYear(),
+      nextClosing.getMonth() + 1,
+      closingDay,
+    ),
   );
 
   const days = Math.round(
@@ -237,38 +249,48 @@ export function getWeeksInCurrentCycle(
 }
 
 /**
- * Semanas que FALTAM até o próximo fechamento da fatura, vistas de `from`
- * (padrão hoje) — divisor decrescente do orçamento semanal: passou uma
- * semana, divide o saldo pelas que restam.
+ * Semanas do intervalo, inclusive nas duas pontas — mesmo critério de bucket
+ * (blocos de 7 dias) do resto do engine. Ex.: ciclo 04/08–03/09 = 31 dias =
+ * 5 semanas.
+ */
+export function cycleLengthInWeeks(range: { start: Date; end: Date }): number {
+  const days =
+    Math.round((range.end.getTime() - range.start.getTime()) / 86_400_000) + 1;
+
+  return Math.max(1, Math.ceil(days / 7));
+}
+
+/**
+ * Semanas que ainda FALTAM no ciclo, vistas de `from` (padrão hoje) — divisor
+ * decrescente do orçamento semanal.
+ *
+ * A conta é derivada de `weekIndexInCycle`, a MESMA função que numera as
+ * semanas na tela ("Semana 1 (04/08–10/08)") e que agrupa o gasto de cada
+ * leitura:
+ *
+ *     restantes = total do ciclo − semana atual + 1
+ *
+ * O `+ 1` é o ponto: estar NA semana 1 significa que restam todas as 5, porque
+ * a semana em que você está ainda não acabou. A versão anterior contava dias
+ * corridos até o próximo fechamento e dividia por 7, o que fazia o número cair
+ * no meio da semana — em 07/08 já dizia 4 embora a tela ainda mostrasse
+ * "Semana 1". Como o orçamento é `saldo ÷ restantes`, cair cedo demais inflava
+ * o valor semanal e dava mais folga do que existia.
  *
  * O próprio dia do fechamento já conta como início do ciclo NOVO (ver
- * `cycleStartFor`) — nele, restam as semanas inteiras do próximo ciclo, não
- * "1 semana" do ciclo que está terminando.
+ * `cycleStartFor`) — nele restam todas as semanas do ciclo que começa.
  *
- * Ex.: ciclo 04/07→04/08 (5 semanas); em 04/07 (dia do fechamento, já é o
- * novo ciclo) restam 5; em 12/07 (1 semana depois) restam 4; em 03/08
- * (véspera do próximo fechamento) resta 1.
+ * Ex.: ciclo 04/08–03/09 (5 semanas); de 04/08 a 10/08 (semana 1) restam 5;
+ * em 11/08 (começa a semana 2) restam 4; em 03/09 (último dia) resta 1.
  */
 export function getWeeksRemainingInCycle(
   closingDay: number,
   from: Date = new Date(),
 ): number {
-  const today = startOfDay(from);
+  const total = cycleLengthInWeeks(getCycleRange(closingDay, from));
+  const current = weekIndexInCycle(from, closingDay);
 
-  const y = today.getFullYear();
-  let m = today.getMonth();
-
-  let nextClosing = new Date(y, m, clampClosingDay(y, m, closingDay));
-  if (nextClosing.getTime() <= today.getTime()) {
-    m += 1;
-    nextClosing = new Date(y, m, clampClosingDay(y, m, closingDay));
-  }
-
-  const daysUntilClosing = Math.round(
-    (nextClosing.getTime() - today.getTime()) / 86_400_000,
-  );
-
-  return Math.max(1, Math.ceil(daysUntilClosing / 7));
+  return Math.max(1, Math.min(total, total - current + 1));
 }
 
 export type KnownCharge = {
@@ -345,7 +367,9 @@ export function adjustWeeklySpendForKnownCharges(
 ): WeeklySpend[] {
   return weeklySpend.map((w) => ({
     ...w,
-    spent: toCurrency(Math.max(0, w.spent - (knownCharges.get(w.weekIndex) ?? 0))),
+    spent: toCurrency(
+      Math.max(0, w.spent - (knownCharges.get(w.weekIndex) ?? 0)),
+    ),
   }));
 }
 
