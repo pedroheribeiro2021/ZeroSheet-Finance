@@ -118,7 +118,12 @@ describe('calculateSummary', () => {
   it('subtracts installment payments from the monthly total', () => {
     const installments = [{ installment_amount: 150 }];
 
-    const result = calculateSummary(transactions, weeks, undefined, installments);
+    const result = calculateSummary(
+      transactions,
+      weeks,
+      undefined,
+      installments,
+    );
 
     expect(result.total).toBe(3300 - 150);
   });
@@ -255,7 +260,7 @@ describe('calculateSummary', () => {
     expect(result.total).toBe(1000 - 500);
   });
 
-  it('keeps a reimbursement income out of totalIncome and the final total', () => {
+  it('counts a reimbursement in totalIncome and in the final total', () => {
     const tx: Transaction[] = [
       {
         id: '1',
@@ -290,9 +295,12 @@ describe('calculateSummary', () => {
     );
     const withReimbursement = calculateSummary(tx, []);
 
-    expect(withReimbursement.totalIncome).toBe(1000);
+    // Reembolso e dinheiro que entra para cobrir uma despesa ja contada: se
+    // nao somar, a despesa pesa duas vezes. `reimbursementIncome` segue como
+    // recorte informativo de quanto do total e reembolso.
+    expect(withReimbursement.totalIncome).toBe(1465.92);
     expect(withReimbursement.reimbursementIncome).toBe(465.92);
-    expect(withReimbursement.total).toBe(withoutReimbursement.total);
+    expect(withReimbursement.total).toBe(withoutReimbursement.total + 465.92);
   });
 
   it('deducts a reserve from the total but keeps it out of fixedCosts', () => {

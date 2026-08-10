@@ -148,6 +148,12 @@ export function getCycleRange(
  * Se `closingDay` for informado, a semana da leitura é calculada pelo ciclo
  * da fatura (`weekIndexInCycle`); sem ele, cai no bucket por dia do mês
  * (Math.ceil(dia / 7)), mantido por compatibilidade.
+ *
+ * ⚠️ SUPERSEDIDA por `engine/cycleSpend.calculateCycleSpend`, que o app usa.
+ * Esta versão trata a primeira leitura como linha de base sempre — inclusive
+ * num ciclo que nasceu zerado, onde essa leitura é gasto de verdade. Era o que
+ * fazia a semana 1 exibir R$ 0,00 tendo havido gasto. Mantida por
+ * compatibilidade com os testes existentes.
  */
 export function weeklySpendFromReadings(
   readings: CardReading[],
@@ -323,6 +329,13 @@ export type KnownCharge = {
  * Ex.: baseline de 716,70 em 06/07 já contém a parcela do dia 4; sem esse
  * corte, a parcela seria descontada do delta da semana 1, zerando gasto
  * que de fato aconteceu depois da leitura inicial.
+ */
+/**
+ * ⚠️ SUPERSEDIDA por `engine/cycleSpend.calculateCycleSpend`, que o app usa.
+ * Posiciona toda cobrança pelo dia cadastrado, inclusive parcelamento — que na
+ * prática entra na virada do ciclo, sem dia próprio. E resolve o dia dentro da
+ * competência, não do ciclo, então uma assinatura de dia 2 caía no ciclo
+ * errado. Mantida por compatibilidade com os testes existentes.
  */
 export function knownChargesByWeek(
   charges: KnownCharge[],

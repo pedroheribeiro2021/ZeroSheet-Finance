@@ -13,17 +13,17 @@ import { getTransactions } from '@/core/services/transaction.service';
 import { mapTransaction } from '@/core/models/mappers';
 import { calculateSummary } from '@/core/engine/calculations';
 import {
-  adjustWeeklySpendForKnownCharges,
   cycleLengthInWeeks,
   getCycleRange,
   getWeeksInMonth,
   getWeeksRemainingInCycle,
-  knownChargesByWeek,
-  KnownCharge,
   weekDateRangeInCycle,
-  weeklySpendFromReadings,
-  WeeklySpend,
 } from '@/core/engine/weekly';
+import {
+  calculateCycleSpend,
+  CycleCharge,
+  CycleSpend,
+} from '@/core/engine/cycleSpend';
 import { normalizeCategory } from '@/core/utils/normalize';
 import {
   getCardSnapshots,
@@ -167,10 +167,8 @@ export default function Dashboard() {
   const [cards, setCards] = useState<DBCard[]>([]);
   const [snapshots, setSnapshots] = useState<DBCardSnapshot[]>([]);
   const [monthReadings, setMonthReadings] = useState<DBCardReading[]>([]);
-  const [weeklySpend, setWeeklySpend] = useState<WeeklySpend[]>([]);
-  const [weeklyKnownCharges, setWeeklyKnownCharges] = useState<
-    Map<number, number>
-  >(new Map());
+  /** Gasto livre por semana do ciclo, já com parcelas/assinaturas descontadas. */
+  const [cycleSpend, setCycleSpend] = useState<CycleSpend | null>(null);
   const [cycleWeeks, setCycleWeeks] = useState(0);
   const [weeksRemaining, setWeeksRemaining] = useState(0);
   const [cycleRange, setCycleRange] = useState<{
@@ -336,8 +334,13 @@ export default function Dashboard() {
       // última leitura daquele mês como piso, senão a obrigação que vence
       // agora simplesmente sumiria da tela.
       const previousMonth = findPreviousMonth(monthsList, competence);
+
+      // Também dizem se o cartão já era acompanhado antes da virada — é o que
+      // permite afirmar que o ciclo atual nasceu zerado (ver `startsAtZero`).
+      let previousReadings: DBCardReading[] = [];
+
       if (previousMonth) {
-        const previousReadings = await getAllReadings(previousMonth.id);
+        previousReadings = await getAllReadings(previousMonth.id);
         if (isStale()) return;
 
         allInvoices = [
@@ -487,34 +490,44 @@ export default function Dashboard() {
       // (fecha dia 4 → 04/07–03/08), então leituras de julho continuam
       // valendo pro acompanhamento semanal mostrado em agosto; filtrar só
       // por month_id (getReadings) as esconderia assim que o mês virasse.
-      let weeklySpendData: WeeklySpend[] = [];
-      if (primary) {
-        const readingsData = cycleRangeForPrimary
-          ? await getReadingsInRange(
-              primary.id,
-              cycleRangeForPrimary.start,
-              cycleRangeForPrimary.end,
-            )
-          : await getReadings(month.id, primary.id);
+      if (primary && cycleRangeForPrimary) {
+        // Leituras do ciclo por DUAS vias, unidas: por data (pega o rabo do
+        // ciclo que cai no mês seguinte) e por competência (pega a leitura
+        // lançada na véspera da virada, quando a fatura nova já nasce com as
+        // parcelas do mês). Só por data, aquela véspera sumia do cálculo — e
+        // com uma leitura só sobrando, ela virava linha de base e o gasto da
+        // semana dava R$ 0,00.
+        const [inRange, byCompetence] = await Promise.all([
+          getReadingsInRange(
+            primary.id,
+            cycleRangeForPrimary.start,
+            cycleRangeForPrimary.end,
+          ),
+          getReadings(month.id, primary.id),
+        ]);
 
-        // Histórico exibido na UI: só as leituras DESTA competência — o
-        // usuário espera ver aqui só o que lançou no mês que está vendo, não
-        // o ciclo inteiro da fatura (que usa `readingsData`, acima, só para o
-        // cálculo de gasto semana a semana).
-        setMonthReadings(await getReadings(month.id, primary.id));
+        if (isStale()) return;
 
-        weeklySpendData = weeklySpendFromReadings(
-          readingsData,
-          primary.closing_day ?? undefined,
+        const cycleReadings = [
+          ...new Map(
+            [...inRange, ...byCompetence].map((r) => [r.id, r]),
+          ).values(),
+        ];
+
+        // Histórico exibido na UI: só as leituras DESTA competência — aqui o
+        // usuário espera ver o que lançou no mês que está vendo.
+        setMonthReadings(byCompetence);
+
+        // O ciclo nasce zerado quando já havia acompanhamento antes da virada:
+        // aí a primeira leitura é gasto, não linha de base.
+        const startsAtZero = previousReadings.some(
+          (r) => r.card_id === primary.id,
         );
 
-        // Assinaturas e parcelas com dia de lançamento conhecido, lançadas no
-        // cartão principal: já são compromisso fixo (descontado do saldo do
-        // mês em calculateSummary) — não devem contar de novo como "gasto
-        // livre" só porque a fatura subiu naquela semana.
-        let knownCharges = new Map<number, number>();
-        if (primary.closing_day != null) {
-          const subscriptionCharges: KnownCharge[] = transactionsMapped
+        // Parcela entra na virada do ciclo (não tem dia próprio — nasce com a
+        // fatura); assinatura entra no dia da renovação.
+        const charges: CycleCharge[] = [
+          ...transactionsMapped
             .filter(
               (t) =>
                 !t.skipped &&
@@ -522,58 +535,33 @@ export default function Dashboard() {
                 t.card === primary.id &&
                 (t.isFixed || t.isRecurring),
             )
-            .map((t) => ({ amount: t.amount, day: t.dueDay }));
-
-          const installmentCharges: KnownCharge[] = installmentsDB
+            .map((t) => ({
+              label: t.description || t.category,
+              amount: t.amount,
+              kind: 'subscription' as const,
+              day: t.dueDay,
+            })),
+          ...installmentsDB
             .filter((i) => i.card_id === primary.id)
             .map((i) => ({
+              label: i.description,
               amount: Number(i.installment_amount),
-              day: i.billing_day,
-            }));
+              kind: 'installment' as const,
+            })),
+        ];
 
-          // Só desconta cobrança cujo dia já chegou pela leitura mais
-          // recente da fatura — sem isso, uma assinatura/parcela que só cai
-          // dali a alguns dias já zera gasto que já aconteceu de verdade
-          // (a leitura mais recente ainda nem inclui essa cobrança futura).
-          const latestReadingDate = readingsData.length
-            ? new Date(
-                Math.max(
-                  ...readingsData.map((r) => new Date(r.read_at).getTime()),
-                ),
-              )
-            : undefined;
-
-          // E só desconta cobrança que caiu DEPOIS da leitura inicial (base):
-          // o que já estava dentro da base nunca aparece nos deltas, então
-          // descontar de novo apagaria gasto livre real da semana.
-          const baselineReadingDate = readingsData.length
-            ? new Date(
-                Math.min(
-                  ...readingsData.map((r) => new Date(r.read_at).getTime()),
-                ),
-              )
-            : undefined;
-
-          knownCharges = knownChargesByWeek(
-            [...subscriptionCharges, ...installmentCharges],
-            month.year,
-            month.month,
-            primary.closing_day,
-            latestReadingDate,
-            baselineReadingDate,
-          );
-
-          weeklySpendData = adjustWeeklySpendForKnownCharges(
-            weeklySpendData,
-            knownCharges,
-          );
-        }
-        setWeeklyKnownCharges(knownCharges);
-        setWeeklySpend(weeklySpendData);
+        setCycleSpend(
+          calculateCycleSpend({
+            cycle: cycleRangeForPrimary,
+            totalWeeks: weeksInCycle,
+            readings: cycleReadings,
+            charges,
+            startsAtZero,
+          }),
+        );
       } else {
         setMonthReadings([]);
-        setWeeklySpend([]);
-        setWeeklyKnownCharges(new Map());
+        setCycleSpend(null);
       }
 
       // Orçamento semanal decrescente: passou uma semana, divide pelas que
@@ -792,7 +780,7 @@ export default function Dashboard() {
   // única fonte: leituras da fatura do cartão principal.
   const chartWeeks: Week[] = Array.from({ length: cycleWeeks }, (_, i) => {
     const index = i + 1;
-    const entry = weeklySpend.find((w) => w.weekIndex === index);
+    const entry = cycleSpend?.weeks.find((w) => w.weekIndex === index);
     const spent = entry?.spent ?? 0;
 
     return {
@@ -1183,7 +1171,7 @@ export default function Dashboard() {
           <>
             <div className="grid gap-2 mb-4">
               {chartWeeks.map((week) => {
-                const entry = weeklySpend.find(
+                const entry = cycleSpend?.weeks.find(
                   (w) => w.weekIndex === week.index,
                 );
                 const diff = summary.weeklyBudget - week.spent;
@@ -1219,7 +1207,7 @@ export default function Dashboard() {
                       <span className="text-zinc-400 text-sm">
                         Orçamento: {formatCurrency(summary.weeklyBudget)}
                       </span>
-                      {entry ? (
+                      {entry?.hasReading ? (
                         <>
                           {entry.isBaseline && (
                             <span className="badge bg-zinc-700/50 text-zinc-300">
@@ -1239,13 +1227,19 @@ export default function Dashboard() {
                               </span>
                             </>
                           )}
-                          {(weeklyKnownCharges.get(week.index) ?? 0) > 0 && (
+                          {entry.appliedCharges > 0 && (
                             <span className="text-zinc-500 text-xs italic">
-                              (não conta{' '}
-                              {formatCurrency(
-                                weeklyKnownCharges.get(week.index) ?? 0,
-                              )}{' '}
-                              de assinaturas/parcelas lançadas na fatura)
+                              (a fatura subiu{' '}
+                              {formatCurrency(entry.invoiceDelta)}, sendo{' '}
+                              {formatCurrency(entry.appliedCharges)} de
+                              assinaturas/parcelas já lançadas)
+                            </span>
+                          )}
+                          {entry.unappliedCharges > 0 && (
+                            <span className="text-amber-400 text-xs">
+                              ⚠️ {formatCurrency(entry.unappliedCharges)} de
+                              cobranças conhecidas não couberam no que a fatura
+                              subiu — confira o dia cadastrado
                             </span>
                           )}
                         </>

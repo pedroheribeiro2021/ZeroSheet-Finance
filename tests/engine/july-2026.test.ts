@@ -7,6 +7,12 @@
  *
  * NÃO altere os valores assertados sem decisão explícita — eles são o
  * "orçamento acordado" de julho.
+ *
+ * Revisão (decisão explícita): reembolso passou a somar no total. A planilha
+ * de referência sempre contou esses valores dentro do "Rendimento total"; a
+ * linha "Extras/Reembolsos" que não somava é outra coisa (receita que não é do
+ * usuário para gastar) e nunca foi usada. Por isso receita total e total do mês
+ * subiram os 120 do reembolso — ver PARIDADE-PLANILHA.md item 2.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -130,7 +136,7 @@ const fixos: Transaction[] = [
     monthId: 'julho-2026',
     type: 'expense',
     category: 'TotalPass',
-    amount: 119.90,
+    amount: 119.9,
     isFixed: true,
     isProvision: false,
     isRecurring: true,
@@ -209,7 +215,7 @@ const snapshots = [
 // ---------------------------------------------------------------------------
 // Parcelamento: Samsung
 // ---------------------------------------------------------------------------
-const installments = [{ installment_amount: 703.20 }];
+const installments = [{ installment_amount: 703.2 }];
 
 // ---------------------------------------------------------------------------
 // Semanas: cartão principal fecha dia 28 → 4 semanas no ciclo
@@ -237,18 +243,24 @@ const allTransactions: Transaction[] = [
 // Contrato de julho/2026
 // ---------------------------------------------------------------------------
 describe('julho/2026 — contrato financeiro', () => {
-  const result = calculateSummary(allTransactions, weeks, snapshots, installments);
+  const result = calculateSummary(
+    allTransactions,
+    weeks,
+    snapshots,
+    installments,
+  );
 
-  it('total do mês = −53,76', () => {
-    expect(result.total).toBe(-53.76);
+  it('total do mês = 66,24 (−53,76 + 120 de reembolso)', () => {
+    expect(result.total).toBe(66.24);
   });
 
-  it('receita total = 5 220 (sem contar o reembolso)', () => {
-    expect(result.totalIncome).toBe(5220);
+  it('receita total = 5 340 (5 220 + 120 de reembolso)', () => {
+    expect(result.totalIncome).toBe(5340);
   });
 
-  it('reembolso = 120 (separado do totalIncome)', () => {
+  it('reembolso = 120, agora dentro do totalIncome', () => {
     expect(result.reimbursementIncome).toBe(120);
+    expect(result.totalIncome).toBe(5220 + result.reimbursementIncome);
   });
 
   it('custos fixos = 784,75', () => {
@@ -276,15 +288,16 @@ describe('julho/2026 — contrato financeiro', () => {
     expect(result.provisionUsed).toBe(629.88);
   });
 
-  it('orçamento semanal = −13,44 com fechamento dia 28 (4 semanas)', () => {
+  it('orçamento semanal = 16,56 com fechamento dia 28 (4 semanas)', () => {
+    // era −13,44 quando o reembolso nao somava: 66,24 / 4 = 16,56
     expect(weeksInCycle).toBe(4);
-    expect(result.weeklyBudget).toBe(-13.44);
+    expect(result.weeklyBudget).toBe(16.56);
   });
 
   it('não-interferência: fixedCosts não inclui despesas vinculadas a cartões com snapshot', () => {
     // Nenhuma das transações de fixos tem card=NUBANK_ID ou card=C6_ID,
     // então fixedCosts deve ser exatamente a soma dos seis itens fixos.
-    expect(result.fixedCosts).toBe(269.86 + 130 + 40 + 150 + 74.99 + 119.90);
+    expect(result.fixedCosts).toBe(269.86 + 130 + 40 + 150 + 74.99 + 119.9);
   });
 
   it('se a reserva fosse contada como fixo, o total seria diferente', () => {

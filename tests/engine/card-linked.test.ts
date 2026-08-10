@@ -25,7 +25,7 @@ const tx = (partial: Partial<Transaction>): Transaction => ({
 });
 
 describe('salário × outras entradas', () => {
-  it('separa salaryIncome de otherIncome; reembolso fica fora dos dois', () => {
+  it('separa salaryIncome de otherIncome; reembolso entra em otherIncome', () => {
     const result = calculateSummary(
       [
         tx({ type: 'income', category: 'Salário', amount: 5000 }),
@@ -41,8 +41,9 @@ describe('salário × outras entradas', () => {
     );
 
     expect(result.salaryIncome).toBe(5000);
-    expect(result.otherIncome).toBe(700);
-    expect(result.totalIncome).toBe(5700);
+    // reembolso soma no total e, nao sendo salario, cai em otherIncome
+    expect(result.otherIncome).toBe(820);
+    expect(result.totalIncome).toBe(5820);
     expect(result.reimbursementIncome).toBe(120);
   });
 });

@@ -52,12 +52,24 @@ export function calculateSummary(
     if (!categoryLabel[cat]) categoryLabel[cat] = t.category.trim();
 
     if (t.type === 'income') {
-      if (t.isReimbursement) {
-        reimbursementIncome += t.amount;
-      } else {
-        totalIncome += t.amount;
-        if (cat === 'salario') salaryIncome += t.amount;
-      }
+      // Reembolso SOMA no total, como qualquer entrada. Ele existe justamente
+      // para compensar uma despesa que já foi contada — a passagem comprada no
+      // cartão entra em `cardSpending`, e o dinheiro tirado da reserva para
+      // cobri-la precisa entrar do outro lado. Sem isso a mesma despesa pesa
+      // duas vezes: some do saldo e nunca volta.
+      //
+      // Antes o valor ia para um balde à parte e nunca era somado em `total`
+      // (ver PARIDADE-PLANILHA.md item 2). A planilha de referência, na
+      // verdade, sempre contou esses valores dentro do "Rendimento total" — a
+      // linha "Extras/Reembolsos" que não somava era outra coisa, receita que
+      // não é do usuário para gastar, e nunca chegou a ser usada.
+      //
+      // `reimbursementIncome` continua existindo como recorte informativo:
+      // quanto do que entrou é reembolso.
+      totalIncome += t.amount;
+      if (t.isReimbursement) reimbursementIncome += t.amount;
+      if (cat === 'salario') salaryIncome += t.amount;
+
       continue;
     }
 
