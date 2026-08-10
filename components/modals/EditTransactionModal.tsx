@@ -196,7 +196,8 @@ export default function EditTransactionModal({
                 checked={isReimbursement}
                 onChange={(e) => setIsReimbursement(e.target.checked)}
               />
-              Reembolso (não soma nas entradas)
+              Reembolso (soma nas entradas — só não é usado para descobrir o dia
+              do salário)
             </label>
           )}
 

@@ -58,13 +58,34 @@ function calculateSummary(transactions, weeks, snapshots?, installments=[]):
 // componentes e testes; só MUDA o total (passa a descontar gasto realizado via envelope).
 // Aceite: junho importado deve fechar em -39,17 depois dos itens 1+2.
 
-## 2. Receita não-disponível (Extras/Reembolsos)
+## 2. Receita não-disponível (Extras/Reembolsos) — ~~implementado~~ REVERTIDO
 - **Onde:** `core/types/finance.ts` + `core/types/database.ts` + `calculateSummary`
-- **Problema:** toda `income` soma no total; na planilha "Extras/Reembolsos"
-  aparece mas NÃO entra no Total.
-- **Mudança:** adicionar flag (ex.: `countsInTotal: boolean` / `is_reimbursement`)
-  para receitas que aparecem no resumo mas não somam em `totalIncome` do cálculo.
+- **Problema (como foi lido na época):** toda `income` soma no total; na planilha
+  "Extras/Reembolsos" aparece mas NÃO entra no Total.
+- **Mudança:** flag `is_reimbursement` para receitas que aparecem no resumo mas
+  não somam em `totalIncome`.
 - **Aceite:** lançar reembolso de 465,92 não altera o total final.
+
+### Revertido em agosto/2026 — a leitura da planilha estava errada
+
+A planilha SEMPRE contou os reembolsos: eles estão dentro do "Rendimento total"
+(ex.: 6.130,69 = 5.000 de salário + 703,20 de reembolso Samsung + 427,49 de
+reembolso Smiles). As linhas `(+) reembolso ...` listadas abaixo são o
+detalhamento desse mesmo valor, não somas adicionais. A linha
+`(+) Extras/Reembolsos`, essa sim fora do Total, é outra coisa — receita que
+não é do usuário para gastar — e está zerada desde sempre.
+
+O flag acabou rotulado "Reembolso" na UI, que é exatamente o que o usuário
+lança todo mês, então marcá-lo fazia o dinheiro sumir do saldo. Pior: reembolso
+existe para compensar uma despesa JÁ contada (a passagem comprada no cartão
+entra em `cardSpending`, e o dinheiro tirado da reserva para cobri-la precisa
+entrar do outro lado). Sem somar, a mesma despesa pesa duas vezes.
+
+**Hoje:** reembolso soma em `totalIncome` como qualquer entrada.
+`reimbursementIncome` continua exposto, só como recorte informativo. O flag
+segue servindo para `resolvePaydayDay` ignorar reembolso ao descobrir o dia do
+salário — ali ele está certo: reembolso não é a entrada recorrente que define
+a janela até o pagamento.
 
 ## 3. Reserva como poupança (não despesa comum)
 - **Onde:** tipos + `calculateSummary` (e idealmente novo conceito de saldo)

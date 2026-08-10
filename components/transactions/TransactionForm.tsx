@@ -311,7 +311,8 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
               checked={isReimbursement}
               onChange={(e) => setIsReimbursement(e.target.checked)}
             />
-            Reembolso (aparece no resumo, mas não soma nas entradas)
+            Reembolso (soma nas entradas — só não é usado para descobrir o dia
+            do salário)
           </label>
         )}
 
