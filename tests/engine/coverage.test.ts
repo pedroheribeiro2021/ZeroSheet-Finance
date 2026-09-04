@@ -189,7 +189,7 @@ describe('resolveNextPayday', () => {
 describe('calculateCoverage', () => {
   const base = {
     today: new Date(2026, 6, 8), // 08/07/2026
-    paydayDay: 15,
+    payday: resolveNextPayday(15, new Date(2026, 6, 8)),
     balance: 1200,
     bills: [
       {
@@ -255,6 +255,7 @@ describe('calculateCoverage', () => {
     const result = calculateCoverage({
       ...base,
       today: new Date(2026, 6, 30),
+      payday: resolveNextPayday(15, new Date(2026, 6, 30)),
       bills: [
         {
           id: 'b1',
@@ -278,6 +279,7 @@ describe('calculateCoverage', () => {
     const result = calculateCoverage({
       ...base,
       today: new Date(2026, 6, 30),
+      payday: resolveNextPayday(15, new Date(2026, 6, 30)),
       bills: [
         {
           id: 'b1',
@@ -315,7 +317,7 @@ describe('calculateCoverage', () => {
   });
 
   it('sem dia de salário não calcula janela', () => {
-    const result = calculateCoverage({ ...base, paydayDay: null });
+    const result = calculateCoverage({ ...base, payday: null });
 
     expect(result.hasPayday).toBe(false);
     expect(result.payday).toBeNull();
@@ -571,7 +573,7 @@ describe('contrato — 04/08/2026', () => {
 
   const coverage = calculateCoverage({
     today,
-    paydayDay: resolvePaydayDay(transactions),
+    payday: resolveNextPayday(resolvePaydayDay(transactions) as number, today),
     balance: 3763.71,
     bills: coverageBillsFromTransactions(transactions),
     invoices: coverageInvoicesFromOpen(openInvoices),

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 type ModalProps = {
   open: boolean;
@@ -10,6 +11,16 @@ type ModalProps = {
 };
 
 export default function Modal({ open, onClose, title, children }: ModalProps) {
+  /**
+   * O modal é renderizado por portal em `document.body`, e isso é obrigatório,
+   * não estilo: os painéis do app usam `.surface`, que inclui
+   * `backdrop-blur-sm`. Um ancestral com `backdrop-filter` (assim como
+   * `filter`, `transform` ou `perspective`) vira bloco de contenção para
+   * descendentes `position: fixed` — o `fixed inset-0` daqui passava a se
+   * medir pelo CARD, não pela viewport. Numa lista longa de lançamentos no
+   * celular, o resultado era o modal aparecendo lá embaixo, no fim do card,
+   * fora da tela. Fora do body, não há ancestral nenhum para atrapalhar.
+   */
   useEffect(() => {
     if (!open) return;
 
@@ -21,9 +32,25 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [open, onClose]);
 
-  if (!open) return null;
+  // Trava o scroll do fundo enquanto o modal está aberto — no celular, sem
+  // isso, arrastar dentro do modal rolava a página atrás dele.
+  useEffect(() => {
+    if (!open) return;
 
-  return (
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [open]);
+
+  // `document` não existe na renderização do servidor. Não há risco de
+  // divergência de hidratação: `open` sempre nasce de estado do cliente, então
+  // no HTML do servidor este componente não renderiza nada de qualquer forma.
+  if (!open || typeof document === 'undefined') return null;
+
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center sm:p-4"
       style={{ animation: 'fade-in 150ms ease-out' }}
@@ -52,6 +79,7 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
 
         <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

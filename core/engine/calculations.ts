@@ -18,10 +18,21 @@ export function calculateSummary(
   let cardSpending = 0;
   let reimbursementIncome = 0;
   let reserveSpending = 0;
+  /**
+   * Gasto lançado num cartão que ainda NÃO tem fatura registrada nesta
+   * competência. Não está dentro de nenhum snapshot, então precisa ser somado
+   * ao `cardSpending` por fora — senão o dinheiro simplesmente sumia do mês.
+   */
+  let pendingCardSpending = 0;
 
   const provisionPlanned: Record<string, number> = {};
   const realizedSpend: Record<string, number> = {};
-  /** Gastos reais que JÁ estão dentro de uma fatura de cartão (snapshot). */
+  /**
+   * Gastos reais feitos em CARTÃO — com fatura lançada ou não. Abatem o
+   * envelope da categoria, mas não podem ser somados de novo ao total: já
+   * estão contados dentro de `cardSpending` (via snapshot ou via
+   * `pendingCardSpending`).
+   */
   const realizedOnCard: Record<string, number> = {};
   const categoryLabel: Record<string, string> = {};
 
@@ -36,11 +47,25 @@ export function calculateSummary(
       .filter((id): id is string => typeof id === 'string' && id.length > 0),
   );
 
+  /**
+   * Só dá para afirmar que um cartão NÃO tem fatura no mês quando todo
+   * snapshot recebido diz a que cartão pertence. Snapshot em formato legado
+   * (sem `card_id`) torna a pergunta indecidível — aí o seguro é assumir que
+   * a despesa de cartão já está dentro de alguma fatura, senão ela seria
+   * contada duas vezes.
+   */
+  const canTellCardCoverage =
+    hasSnapshots &&
+    snapshots!.every(
+      (s) => typeof s.card_id === 'string' && s.card_id.length > 0,
+    );
+
   // Se o campo card de Transaction for o id do cartão, usa direto;
   // se for slug/nome legado, não haverá match com snapshotCardIds — e isso
   // é o comportamento seguro (não exclui o que não consegue identificar).
   const cardCoveredBySnapshot = (card: string | null | undefined): boolean => {
     if (!card) return false;
+    if (hasSnapshots && !canTellCardCoverage) return true;
     return snapshotCardIds.has(card);
   };
 
@@ -73,13 +98,30 @@ export function calculateSummary(
       continue;
     }
 
-    // Transação vinculada a cartão com snapshot — já está na fatura, não
-    // conta de novo no total; mas o gasto real ABATE o envelope da categoria
-    // (ex.: gasolina paga no cartão consome a provisão de gasolina).
-    if (cardCoveredBySnapshot(t.card)) {
+    // Despesa lançada em cartão. O gasto real SEMPRE abate o envelope da
+    // categoria — comprar mercado no cartão consome a provisão de mercado no
+    // instante do lançamento, com ou sem fatura registrada. O que muda é só de
+    // onde o valor sai no total do mês:
+    //
+    //  - cartão JÁ com fatura (snapshot) nesta competência → o valor está
+    //    dentro do snapshot, não pode somar de novo;
+    //  - cartão ainda SEM fatura → nada o contém ainda, então vira
+    //    `pendingCardSpending` e entra no `cardSpending` por fora.
+    //
+    // Antes: sem snapshot nenhum no mês, a despesa ia para `cardSpending` mas
+    // não tocava o envelope (a compra de mercado de 01/09 não abatia a
+    // provisão); e — pior — com snapshot de OUTRO cartão, ela caía num
+    // `continue` mudo e desaparecia de todos os baldes.
+    if (t.card) {
+      if (!cardCoveredBySnapshot(t.card)) {
+        pendingCardSpending += t.amount;
+      }
+
+      // Provisão/reserva lançada em cartão é meta, não gasto realizado.
       if (!t.isProvision && !t.isReserve) {
         realizedOnCard[cat] = (realizedOnCard[cat] ?? 0) + t.amount;
       }
+
       continue;
     }
 
@@ -98,21 +140,17 @@ export function calculateSummary(
       continue;
     }
 
-    if (!hasSnapshots && t.card) {
-      cardSpending += t.amount;
-      continue;
-    }
-
-    if (hasSnapshots && t.card) {
-      continue;
-    }
-
     realizedSpend[cat] = (realizedSpend[cat] ?? 0) + t.amount;
   }
 
   if (hasSnapshots) {
     cardSpending = snapshots!.reduce((acc, s) => acc + Number(s.amount), 0);
   }
+
+  // Faturas lançadas + o que já foi gasto em cartão sem fatura ainda. Os dois
+  // nunca se sobrepõem: `pendingCardSpending` só acumula cartão FORA de
+  // `snapshotCardIds`.
+  cardSpending = toCurrency(cardSpending + pendingCardSpending);
 
   // ENVELOPE: por categoria, vale o MAIOR entre planejado e realizado
   let envelopeSpending = 0;
@@ -204,6 +242,8 @@ export function calculateSummary(
     fixedCosts,
 
     cardSpending,
+    /** Parte de `cardSpending` que ainda não tem fatura lançada no mês. */
+    pendingCardSpending: toCurrency(pendingCardSpending),
     reimbursementIncome,
     reserveSpending,
 

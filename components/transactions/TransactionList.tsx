@@ -29,6 +29,24 @@ const TYPE_FILTER_LABELS: Record<TypeFilter, string> = {
   reservas: 'Reservas',
 };
 
+/**
+ * Textos das tags de flag, normalizados. Servem para o chip de categoria não
+ * repetir uma tag que já vai aparecer ao lado: o caso real é a categoria
+ * "Reembolso" numa transação também marcada como reembolso, que rendia duas
+ * tags "Reembolso" idênticas na mesma linha. Quem cede a vez é o chip de
+ * categoria — a tag da flag carrega o significado (é ela que muda o cálculo).
+ */
+function flagLabelsFor(t: Transaction): string[] {
+  const labels: string[] = [];
+
+  if (t.isProvision) labels.push('provisao');
+  if (t.isReserve) labels.push('reserva');
+  if (t.isReimbursement) labels.push('reembolso');
+  if (t.isFixed) labels.push('fixo');
+
+  return labels;
+}
+
 const CARD_FILTER_ALL = 'todas';
 const CARD_FILTER_NONE = 'sem-cartao';
 
@@ -405,6 +423,11 @@ export default function TransactionList({
 
         const isPaidBill = isDueTrackedExpense(t) && !!t.paidAt;
 
+        // Chip de categoria só quando ele acrescenta algo — ver `flagLabelsFor`.
+        const showCategoryChip =
+          !!t.description &&
+          !flagLabelsFor(t).includes(normalizeCategory(t.category));
+
         return (
           <div
             key={t.id}
@@ -437,7 +460,7 @@ export default function TransactionList({
                       ⏸ Pausado — não conta neste mês
                     </span>
                   )}
-                  {t.description && (
+                  {showCategoryChip && (
                     <span className="badge bg-zinc-700/50 text-zinc-300">
                       {t.category}
                     </span>

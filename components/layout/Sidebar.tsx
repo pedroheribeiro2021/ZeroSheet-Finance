@@ -9,6 +9,7 @@ import {
   Layers,
   CreditCard,
   Wallet,
+  Settings,
   LogOut,
   ChevronLeft,
   ChevronRight,
@@ -25,6 +26,7 @@ const items: { label: string; href: string; icon: LucideIcon }[] = [
   { label: 'Parcelamentos', href: '/installments', icon: Layers },
   { label: 'Cartões', href: '/cards', icon: CreditCard },
   { label: 'Contas', href: '/accounts', icon: Wallet },
+  { label: 'Configurações', href: '/settings', icon: Settings },
 ];
 
 type SidebarProps = {

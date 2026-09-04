@@ -184,3 +184,19 @@ export type DBInstallment = {
   /** Relação trazida pelo select de installment.service.ts (`cards (id, name)`). */
   cards?: { id: string; name: string } | null;
 };
+
+/**
+ * Uma linha por usuário (`user_settings`). Hoje só a regra de recebimento —
+ * ver `core/engine/payday.ts` para como `payday_mode`/`payday_day` viram uma
+ * data.
+ */
+export type DBUserSettings = {
+  user_id: string;
+
+  /** 'fixed-day' = todo dia N; 'business-day' = N-ésimo dia útil. */
+  payday_mode: string;
+  payday_day: number;
+
+  created_at: string;
+  updated_at: string;
+};

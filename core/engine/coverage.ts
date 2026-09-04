@@ -56,9 +56,13 @@ export function resolveOccurrence(
 }
 
 /**
- * Dia do mês em que o salário cai, deduzido das RECEITAS do mês: a maior
- * entrada com `dueDay` preenchido. Reembolso não conta (não é dinheiro novo)
- * e pausada no mês também não.
+ * FALLBACK. Dia do mês em que o salário cai, deduzido das RECEITAS do mês: a
+ * maior entrada com `dueDay` preenchido. Usado só quando o usuário ainda não
+ * configurou o recebimento em Configurações — a configuração explícita
+ * (`user_settings.payday_*`, ver `engine/payday`) sempre tem precedência,
+ * porque ela sabe representar "5º dia útil", coisa que um dia do mês não sabe.
+ *
+ * Reembolso não conta (não é dinheiro novo) e pausada no mês também não.
  *
  * ⚠️ `dueDay` numa receita é dia de RECEBIMENTO, não de vencimento —
  * `getDueItems` já ignora tudo que não é `expense`, então uma entrada nunca
@@ -145,8 +149,13 @@ export type CoverageInvoice = {
 
 export type CoverageInput = {
   today: Date;
-  /** Dia do salário (1–31); null = não dá pra calcular a janela. */
-  paydayDay: number | null;
+  /**
+   * Data do próximo salário; null = sem configuração, não dá pra calcular a
+   * janela. É uma DATA e não um dia do mês de propósito: quem recebe no
+   * "5º dia útil" não tem dia fixo — quem resolve a regra é
+   * `engine/payday.resolveNextPaydayDate`.
+   */
+  payday: Date | null;
   /** Última leitura da conta de pagamento padrão; null = sem leitura. */
   balance: number | null;
   /** Despesas do mês sem cartão (o que tem cartão vem na fatura). */
@@ -188,7 +197,7 @@ export function calculateCoverage(input: CoverageInput): Coverage {
   const borrowed = toCurrency(input.borrowed ?? 0);
   const balance = toCurrency(input.balance ?? 0);
 
-  if (input.paydayDay == null) {
+  if (input.payday == null) {
     return {
       payday: null,
       daysUntilPayday: 0,
@@ -204,7 +213,7 @@ export function calculateCoverage(input: CoverageInput): Coverage {
     };
   }
 
-  const payday = resolveNextPayday(input.paydayDay, input.today);
+  const payday = input.payday;
   const daysUntilPayday = Math.round(
     (startOfDay(payday).getTime() - today.getTime()) / 86_400_000,
   );

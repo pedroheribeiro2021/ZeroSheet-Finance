@@ -11,7 +11,23 @@ import { getMonths, createMonth } from '@/core/services/month.service';
 import { getTransactions } from '@/core/services/transaction.service';
 
 import { mapTransaction } from '@/core/models/mappers';
+import Link from 'next/link';
 import { calculateSummary } from '@/core/engine/calculations';
+import {
+  Insight,
+  InsightEnvelope,
+  buildInsights,
+} from '@/core/engine/insights';
+import InsightsPanel from '@/components/dashboard/InsightsPanel';
+import {
+  PaydaySettings,
+  describePayday,
+  resolveNextPaydayDate,
+} from '@/core/engine/payday';
+import {
+  getUserSettings,
+  toPaydaySettings,
+} from '@/core/services/settings.service';
 import {
   cycleLengthInWeeks,
   getCycleRange,
@@ -62,6 +78,7 @@ import {
   DBMonth,
   DBAccount,
   DBAccountReading,
+  DBTransaction,
 } from '@/core/types/database';
 import { Transaction, Week } from '@/core/types/finance';
 import { getDueItems, CardInvoiceCharge } from '@/core/engine/dueDates';
@@ -189,6 +206,13 @@ export default function Dashboard() {
     projected: number;
   } | null>(null);
   const [coverage, setCoverage] = useState<Coverage | null>(null);
+  /** Regra de recebimento em vigor (configurada ou deduzida das entradas). */
+  const [paydayRule, setPaydayRule] = useState<PaydaySettings | null>(null);
+  const [previousEnvelopes, setPreviousEnvelopes] = useState<InsightEnvelope[]>(
+    [],
+  );
+  /** false = está só deduzindo do `dueDay`, o usuário nunca configurou. */
+  const [paydayIsConfigured, setPaydayIsConfigured] = useState(false);
   /** Faturas em aberto cujo vencimento JÁ passou — só essas são atraso. */
   const [lateInvoices, setLateInvoices] = useState<Invoice[]>([]);
   /** Faturas que vencem neste mês, para o calendário de vencimentos. */
@@ -282,6 +306,14 @@ export default function Dashboard() {
     const isStale = () => token !== loadToken.current;
 
     try {
+      const competence = { month: month.month, year: month.year };
+
+      // A competência anterior sai da lista de meses que já temos em mãos —
+      // não precisa de ida ao banco — então as leituras dela cabem na MESMA
+      // rodada. Antes elas eram um `await` solto no meio do fluxo, uma terceira
+      // viagem em série depois das outras duas.
+      const previousMonth = findPreviousMonth(monthsList, competence);
+
       // Tudo que não depende de nada vem junto: eram 8 idas ao banco em série,
       // e nesse intervalo a tela seguia mostrando os números do mês anterior —
       // parte da sensação de "cliquei e não mudou".
@@ -294,6 +326,9 @@ export default function Dashboard() {
         accountReadingsData,
         transfersData,
         allSnapshots,
+        previousReadings,
+        settingsRow,
+        previousTransactionsDB,
       ] = await Promise.all([
         getCardSnapshots(month.id),
         getCards(),
@@ -303,6 +338,16 @@ export default function Dashboard() {
         getAccountReadings(),
         getTransfers(),
         getAllCardSnapshots(),
+        previousMonth
+          ? getAllReadings(previousMonth.id)
+          : Promise.resolve([] as DBCardReading[]),
+        getUserSettings(),
+        // Envelopes da competência anterior alimentam a comparação dos
+        // insights ("mercado está acima do mês passado em X"). Vai na mesma
+        // rodada porque `previousMonth` já é conhecido aqui.
+        previousMonth
+          ? getTransactions(previousMonth.id)
+          : Promise.resolve([] as DBTransaction[]),
       ]);
 
       if (isStale()) return;
@@ -318,8 +363,6 @@ export default function Dashboard() {
       setPrimaryCardState(primary);
       setCurrentMonthId(month.id);
 
-      const competence = { month: month.month, year: month.year };
-
       // Ciclo de fatura, regra única (engine/invoices): a fatura lançada numa
       // competência vence no mês SEGUINTE. Logo, a fatura que vence no mês
       // exibido é a da competência anterior — por isso não dá pra olhar só os
@@ -333,16 +376,11 @@ export default function Dashboard() {
       // Fatura da competência anterior ainda não lançada em Cartões: usa a
       // última leitura daquele mês como piso, senão a obrigação que vence
       // agora simplesmente sumiria da tela.
-      const previousMonth = findPreviousMonth(monthsList, competence);
-
-      // Também dizem se o cartão já era acompanhado antes da virada — é o que
-      // permite afirmar que o ciclo atual nasceu zerado (ver `startsAtZero`).
-      let previousReadings: DBCardReading[] = [];
-
+      //
+      // `previousReadings` também diz se o cartão já era acompanhado antes da
+      // virada — é o que permite afirmar que o ciclo atual nasceu zerado
+      // (ver `startsAtZero` mais abaixo).
       if (previousMonth) {
-        previousReadings = await getAllReadings(previousMonth.id);
-        if (isStale()) return;
-
         allInvoices = [
           ...allInvoices,
           ...estimateMissingInvoices({
@@ -427,9 +465,27 @@ export default function Dashboard() {
       const isCurrentMonth =
         month.month === now.getMonth() + 1 && month.year === now.getFullYear();
 
+      // Regra de recebimento: o que o usuário configurou em Configurações
+      // manda. Sem configuração, cai no comportamento antigo — deduzir o dia
+      // do `dueDay` da maior entrada — para quem já usava o app não perder a
+      // janela de cobertura da noite para o dia.
+      const configured = toPaydaySettings(settingsRow);
+      const legacyDay = resolvePaydayDay(transactionsMapped);
+
+      const paydayRule: PaydaySettings | null =
+        configured ??
+        (legacyDay != null ? { mode: 'fixed-day', day: legacyDay } : null);
+
+      setPaydayRule(paydayRule);
+      setPaydayIsConfigured(!!configured);
+
       if (isCurrentMonth) {
         const paymentReading = defaultAccount
           ? (latestByAccount.get(defaultAccount.id)?.amount ?? null)
+          : null;
+
+        const nextPayday = paydayRule
+          ? resolveNextPaydayDate(paydayRule, now)
           : null;
 
         // As faturas da janela são as MESMAS `open` da projeção — nada de
@@ -438,7 +494,7 @@ export default function Dashboard() {
         setCoverage(
           calculateCoverage({
             today: now,
-            paydayDay: resolvePaydayDay(transactionsMapped),
+            payday: nextPayday,
             balance: paymentReading,
             bills: coverageBillsFromTransactions(transactionsMapped),
             invoices: coverageInvoicesFromOpen(open),
@@ -606,6 +662,18 @@ export default function Dashboard() {
       );
 
       setSummary(result);
+
+      // Só os envelopes interessam da competência anterior — parcelas e
+      // orçamento semanal de lá não entram em nenhum insight.
+      setPreviousEnvelopes(
+        previousMonth
+          ? calculateSummary(
+              previousTransactionsDB.map(mapTransaction),
+              [],
+              allSnapshots.filter((s) => s.month_id === previousMonth.id),
+            ).envelopes
+          : [],
+      );
     } catch (err) {
       console.error(err);
     }
@@ -803,6 +871,26 @@ export default function Dashboard() {
     ? getDueItems(transactions, now).filter((i) => i.status === 'today')
     : [];
 
+  // Leitura do mês: os mesmos números já calculados, transformados em
+  // veredito. Ver `core/engine/insights.ts` — a pergunta muda conforme a
+  // competência esteja em curso (ritmo) ou fechada (sobrou/estourou).
+  const insights: Insight[] = activeMonth
+    ? buildInsights({
+        today: now,
+        isCurrentMonth,
+        cycle: cycleRange,
+        competence: { month: activeMonth.month, year: activeMonth.year },
+        envelopes: summary.envelopes,
+        totalIncome: summary.totalIncome,
+        fixedCosts: summary.fixedCosts,
+        cardSpending: summary.cardSpending,
+        installmentSpending: summary.installmentSpending,
+        reserveSpending: summary.reserveSpending,
+        total: summary.total,
+        previousEnvelopes,
+      })
+    : [];
+
   /**
    * Bloco "até o salário" do modal de Caixa. Era um modal separado (card
    * Cobertura); virou seção porque as duas telas respondiam à mesma pergunta
@@ -822,9 +910,23 @@ export default function Dashboard() {
       <div className="grid gap-4">
         {coverage && !coverage.hasPayday && (
           <p className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-400">
-            Nenhuma entrada com dia de recebimento cadastrado. Edite seu salário
-            em Transações e preencha o dia — é ele que define até quando a
-            cobertura precisa durar.
+            Falta dizer quando você recebe.{' '}
+            <Link href="/settings" className="underline">
+              Configure em Configurações
+            </Link>{' '}
+            — dia fixo do mês ou N-ésimo dia útil. É essa data que define até
+            quando a cobertura precisa durar.
+          </p>
+        )}
+
+        {coverage?.hasPayday && paydayRule && !paydayIsConfigured && (
+          <p className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 text-xs text-zinc-400">
+            Recebimento deduzido do dia cadastrado na sua entrada recorrente
+            ({describePayday(paydayRule)}).{' '}
+            <Link href="/settings" className="underline">
+              Confirme em Configurações
+            </Link>{' '}
+            — quem recebe por dia útil não tem dia fixo.
           </p>
         )}
 
@@ -964,7 +1066,11 @@ export default function Dashboard() {
     <div className="grid gap-4 p-4 sm:gap-5 sm:p-6">
       {activeMonth && (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 sm:gap-3">
+          {/* flex-wrap + min-w-0: sem isso o botão "+ Abrir <mês>" é
+              `whitespace-nowrap` e força o min-content da linha inteira para
+              perto de 400px, o que alargava a coluna da página toda em
+              telas pequenas (ver comentário em globals.css). */}
+          <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
             <button
               onClick={() => prevMonth && goToMonth(prevMonth)}
               disabled={!prevMonth}
@@ -1083,7 +1189,11 @@ export default function Dashboard() {
         <Card
           title="Cartões"
           value={formatCurrency(summary.cardSpending)}
-          subtitle="Faturas fechando nesta competência — pagas no mês que vem"
+          subtitle={
+            summary.pendingCardSpending > 0
+              ? `Faturas desta competência + ${formatCurrency(summary.pendingCardSpending)} lançados em cartão sem fatura registrada ainda`
+              : 'Faturas fechando nesta competência — pagas no mês que vem'
+          }
           onClick={() => handleCardClick('cards')}
         />
 
@@ -1353,6 +1463,8 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      <InsightsPanel insights={insights} />
 
       {isCurrentMonth && activeMonth && (
         <DueDatesPanel

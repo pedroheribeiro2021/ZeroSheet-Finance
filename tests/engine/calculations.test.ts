@@ -444,15 +444,20 @@ describe('não-interferência — transação de cartão com snapshot não conta
     expect(semCartao.fixedCosts).toBe(150);
   });
 
-  it('despesa com cartão sem snapshot continua contando normalmente', () => {
+  it('despesa com cartão sem fatura no mês vira gasto de cartão pendente', () => {
     // snapshot é de outro cartão
     const otherSnapshot = [{ amount: 200, card_id: 'outro-cartao' }];
 
     const result = calculateSummary([income, fixedWithCard], [], otherSnapshot);
 
-    // fixedWithCard.card = 'card-c6-id' não está em snapshotCardIds
-    // então cai no fluxo normal: é isFixed → fixedCosts
-    expect(result.fixedCosts).toBe(150);
+    // Conta de luz debitada no cartão é parte da fatura daquele cartão, não
+    // uma conta de caixa à parte — vale com ou sem fatura lançada. Antes ela
+    // caía em `fixedCosts` só porque o snapshot ainda não existia, e o mesmo
+    // lançamento mudava de balde sozinho quando a fatura era registrada.
+    expect(result.fixedCosts).toBe(0);
+    expect(result.pendingCardSpending).toBe(150);
+    // 200 do snapshot do outro cartão + 150 ainda sem fatura
+    expect(result.cardSpending).toBe(350);
   });
 
   it('sem snapshots, transação com card entra em cardSpending (comportamento legado)', () => {
@@ -473,5 +478,90 @@ describe('não-interferência — transação de cartão com snapshot não conta
 
     expect(result.cardSpending).toBe(300);
     expect(result.fixedCosts).toBe(0);
+  });
+});
+
+/**
+ * Regressão do dia 01/09/2026: compra de mercado de R$ 44,25 lançada no C6
+ * caiu na competência certa mas não abateu a provisão de mercado. Duas causas
+ * distintas, dependendo de quais faturas já estavam lançadas no mês.
+ */
+describe('gasto em cartão abate o envelope da categoria', () => {
+  const salario: Transaction = {
+    id: 'i1',
+    monthId: 'm9',
+    type: 'income',
+    category: 'Salário',
+    amount: 5000,
+    isFixed: false,
+    isProvision: false,
+    isRecurring: false,
+    card: null,
+    createdAt: '2026-09-01',
+  };
+
+  const provisaoMercado: Transaction = {
+    id: 'p1',
+    monthId: 'm9',
+    type: 'expense',
+    category: 'Mercado',
+    amount: 600,
+    isFixed: false,
+    isProvision: true,
+    isRecurring: true,
+    card: null,
+    createdAt: '2026-08-31',
+  };
+
+  const mercadoNoCartao: Transaction = {
+    id: 'e1',
+    monthId: 'm9',
+    type: 'expense',
+    category: 'Mercado',
+    amount: 44.25,
+    isFixed: false,
+    isProvision: false,
+    isRecurring: false,
+    card: 'card-c6',
+    createdAt: '2026-09-01',
+  };
+
+  const txs = [salario, provisaoMercado, mercadoNoCartao];
+
+  it('abate mesmo quando nenhuma fatura foi lançada no mês', () => {
+    const result = calculateSummary(txs, []);
+
+    const mercado = result.envelopes.find((e) => e.category === 'Mercado');
+    expect(mercado?.used).toBe(44.25);
+    expect(mercado?.remaining).toBe(555.75);
+
+    // não some do caixa: continua contado como gasto de cartão em aberto
+    expect(result.cardSpending).toBe(44.25);
+    expect(result.pendingCardSpending).toBe(44.25);
+
+    // e não pesa duas vezes: o mês perde os 600 do envelope, não 644,25
+    expect(result.total).toBe(5000 - 600);
+  });
+
+  it('abate quando a fatura DAQUELE cartão já foi lançada', () => {
+    const result = calculateSummary(txs, [], [{ amount: 847.43, card_id: 'card-c6' }]);
+
+    const mercado = result.envelopes.find((e) => e.category === 'Mercado');
+    expect(mercado?.used).toBe(44.25);
+
+    expect(result.cardSpending).toBe(847.43);
+    expect(result.pendingCardSpending).toBe(0);
+  });
+
+  it('não desaparece quando só OUTRO cartão tem fatura lançada', () => {
+    // Bug pior que o do envelope: o lançamento caía num `continue` mudo e
+    // sumia de todos os baldes — o mês inteiro ficava R$ 44,25 mais rico.
+    const result = calculateSummary(txs, [], [{ amount: 21.26, card_id: 'card-nubank' }]);
+
+    const mercado = result.envelopes.find((e) => e.category === 'Mercado');
+    expect(mercado?.used).toBe(44.25);
+
+    expect(result.cardSpending).toBe(21.26 + 44.25);
+    expect(result.total).toBe(5000 - 21.26 - 600);
   });
 });

@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getCurrentUser } from '@/core/services/auth.service';
 
 export async function signIn(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({
@@ -17,18 +18,15 @@ export async function signOut() {
   if (error) throw error;
 }
 
+// Ambos passam pelo resolvedor memoizado de `auth.service` — ver o comentário
+// lá: `supabase.auth.getUser()` é uma ida à rede por chamada, e era a causa
+// da demora para os números aparecerem no dashboard.
 export async function getUser() {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  return user;
+  return getCurrentUser();
 }
 
 export async function getCurrentUserId() {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   if (!user?.id) {
     throw new Error('Usuário não autenticado');

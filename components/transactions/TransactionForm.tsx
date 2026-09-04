@@ -41,6 +41,12 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
   const [amount, setAmount] = useState('');
   const [cards, setCards] = useState<DBCard[]>([]);
   const [cardId, setCardId] = useState('');
+  /**
+   * Split (+/-): quando ligado, o campo de valor passa a aceitar sinal e é o
+   * sinal — não o seletor entrada/despesa — que decide o lado do lançamento.
+   * É estado só do formulário: não vai para o banco, é consumido no submit
+   * por `resolveSplitAmount`. Ver `core/engine/split.ts` para o porquê.
+   */
   const [isSplit, setIsSplit] = useState(false);
 
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -123,7 +129,11 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
         return;
       }
 
-      // Split: o sinal do valor decide o tipo (só p/ entrada/despesa).
+      // Split ligado: o sinal digitado decide o tipo (-63,56 vira despesa de
+      // 63,56; +51,00 vira entrada de 51,00). Desligado, o tipo vem do
+      // seletor e o sinal é ignorado — `Math.abs` evita que um "-" digitado
+      // por engano inverta o lançamento sem o usuário ter pedido.
+      // Reserva nunca entra no Split: é sempre saída.
       const resolved =
         isSplit && kind !== 'reserve'
           ? resolveSplitAmount(parsedAmount)
@@ -223,6 +233,11 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
         className="field"
       />
 
+      {/* Split: acerto de contas que ora fecha a favor, ora contra (rateio de
+          conta, viagem, presente dividido). Marcando aqui, o campo de valor
+          aceita sinal e é ele que decide o lado do lançamento. O sinal é
+          traduzido no submit e não fica salvo — a transação nasce como
+          entrada ou despesa comum. Reserva não tem Split: é sempre saída. */}
       {kind !== 'reserve' && (
         <label className="flex items-center gap-2 text-sm text-white">
           <input
