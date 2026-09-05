@@ -233,11 +233,10 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
         className="field"
       />
 
-      {/* Split: acerto de contas que ora fecha a favor, ora contra (rateio de
-          conta, viagem, presente dividido). Marcando aqui, o campo de valor
-          aceita sinal e é ele que decide o lado do lançamento. O sinal é
-          traduzido no submit e não fica salvo — a transação nasce como
-          entrada ou despesa comum. Reserva não tem Split: é sempre saída. */}
+      {/* Split desativado na UI a pedido do Pedro (2026-09-05) — confundia
+          mais do que ajudava. `isSplit` fica sempre `false`, então o resto
+          do arquivo (linhas 138, 227, 231) cai no comportamento normal de
+          entrada/despesa. Lógica intacta em core/engine/split.ts, caso volte.
       {kind !== 'reserve' && (
         <label className="flex items-center gap-2 text-sm text-white">
           <input
@@ -248,6 +247,7 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
           Split (+/-): o sinal do valor decide se soma ou subtrai
         </label>
       )}
+      */}
 
       {/* CATEGORIA */}
       <select
