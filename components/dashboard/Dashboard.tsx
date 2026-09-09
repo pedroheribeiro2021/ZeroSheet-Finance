@@ -34,7 +34,9 @@ import {
   getWeeksInMonth,
   getWeeksRemainingInCycle,
   weekDateRangeInCycle,
+  weekIndexInCycle,
 } from '@/core/engine/weekly';
+import { getWeekBudgets, freezeWeekBudget } from '@/core/services/week.service';
 import {
   calculateCycleSpend,
   CycleCharge,
@@ -188,6 +190,15 @@ export default function Dashboard() {
   const [cycleSpend, setCycleSpend] = useState<CycleSpend | null>(null);
   const [cycleWeeks, setCycleWeeks] = useState(0);
   const [weeksRemaining, setWeeksRemaining] = useState(0);
+  /**
+   * Orçamento semanal CONGELADO no momento em que cada semana virou a atual —
+   * ao contrário de `summary.weeklyBudget`, que é recalculado a cada leitura
+   * de fatura nova e por isso muda o número mostrado até pras semanas já
+   * passadas. Índice do ciclo → valor congelado.
+   */
+  const [frozenWeekBudgets, setFrozenWeekBudgets] = useState<Map<number, number>>(
+    new Map(),
+  );
   const [cycleRange, setCycleRange] = useState<{
     start: Date;
     end: Date;
@@ -662,6 +673,33 @@ export default function Dashboard() {
       );
 
       setSummary(result);
+
+      // Congela o orçamento da semana ATUAL na primeira vez que ela aparece
+      // (freezeWeekBudget é no-op se já existir) e carrega os valores já
+      // congelados de todas as semanas da competência exibida — é o que
+      // permite mostrar "orçamento inicial" ao lado do recalculado sem essa
+      // semana passada mudar de número a cada fatura nova.
+      try {
+        const weekBudgetsData = await getWeekBudgets(month.id);
+        const frozen = new Map(
+          weekBudgetsData
+            .filter((w) => w.budget != null)
+            .map((w) => [w.index, Number(w.budget)]),
+        );
+
+        if (todayInCycle && primary?.closing_day != null) {
+          const currentWeekIndex = weekIndexInCycle(now, primary.closing_day);
+          if (!frozen.has(currentWeekIndex)) {
+            await freezeWeekBudget(month.id, currentWeekIndex, result.weeklyBudget);
+            frozen.set(currentWeekIndex, result.weeklyBudget);
+          }
+        }
+
+        if (isStale()) return;
+        setFrozenWeekBudgets(frozen);
+      } catch (err) {
+        console.error(err);
+      }
 
       // Só os envelopes interessam da competência anterior — parcelas e
       // orçamento semanal de lá não entram em nenhum insight.
@@ -1284,7 +1322,15 @@ export default function Dashboard() {
                 const entry = cycleSpend?.weeks.find(
                   (w) => w.weekIndex === week.index,
                 );
-                const diff = summary.weeklyBudget - week.spent;
+
+                // Orçamento CONGELADO no início da semana, quando existir —
+                // é contra ele que a diferença faz sentido (senão o "sobrou/
+                // faltou" de uma semana já passada muda toda vez que uma
+                // fatura nova é lançada). Sem congelamento ainda (semana que
+                // nunca foi "a atual"), cai no recalculado como estimativa.
+                const frozenBudget = frozenWeekBudgets.get(week.index) ?? null;
+                const initialBudget = frozenBudget ?? summary.weeklyBudget;
+                const diff = initialBudget - week.spent;
 
                 // `cycleRange.start` (já resolvido pra competência exibida,
                 // não "hoje") garante que as datas de cada semana batem com
@@ -1315,8 +1361,14 @@ export default function Dashboard() {
 
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                       <span className="text-zinc-400 text-sm">
-                        Orçamento: {formatCurrency(summary.weeklyBudget)}
+                        Orçamento inicial: {formatCurrency(initialBudget)}
                       </span>
+                      {frozenBudget != null &&
+                        Math.abs(frozenBudget - summary.weeklyBudget) > 0.004 && (
+                          <span className="text-zinc-500 text-xs italic">
+                            (recalculado hoje: {formatCurrency(summary.weeklyBudget)})
+                          </span>
+                        )}
                       {entry?.hasReading ? (
                         <>
                           {entry.isBaseline && (

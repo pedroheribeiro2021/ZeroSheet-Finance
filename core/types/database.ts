@@ -97,6 +97,24 @@ export type DBCardReading = {
 };
 
 /**
+ * Orçamento semanal CONGELADO no momento em que a semana vira a atual — ao
+ * contrário de `summary.weeklyBudget` (recalculado a cada leitura de fatura),
+ * este valor nunca muda depois de escrito. `spent`/`remaining` não são
+ * usados (a tabela é antiga, de um cálculo semanal já superado) — só
+ * `budget` importa aqui.
+ */
+export type DBWeek = {
+  id: string;
+  user_id: string;
+  month_id: string | null;
+  index: number;
+  budget: number | null;
+  spent: number | null;
+  remaining: number | null;
+  created_at: string | null;
+};
+
+/**
  * Assinatura de Web Push do navegador/dispositivo do usuário.
  * Tabela ainda não existe (migration `20260710_02`).
  */

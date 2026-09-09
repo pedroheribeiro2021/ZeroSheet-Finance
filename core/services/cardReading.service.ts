@@ -132,19 +132,26 @@ export async function addReading(data: {
  * Registra uma leitura a partir da atualização da fatura no módulo Cartões
  * (`CardSnapshotForm`), sem duplicar: se já existe uma leitura com o mesmo
  * valor no mesmo dia para esse cartão/mês, não lança de novo.
+ *
+ * `read_at`, quando informado, é usado no lugar de "agora" — necessário ao
+ * confirmar a fatura de uma competência cujo ciclo já fechou (ver
+ * `PendingInvoiceForm`): sem isso, a leitura ficaria datada de hoje e
+ * vazaria pro ciclo da competência seguinte só por coincidência de data
+ * (`getReadingsInRange` filtra por `read_at`, não por `month_id`).
  */
 export async function recordSnapshotAsReading(data: {
   month_id: string;
   card_id: string;
   amount: number;
+  read_at?: string;
 }): Promise<DBCardReading | null> {
   const existing = await getReadings(data.month_id, data.card_id);
 
-  const today = new Date().toDateString();
+  const targetDay = new Date(data.read_at ?? new Date()).toDateString();
   const isDuplicate = existing.some(
     (r) =>
       Number(r.amount) === data.amount &&
-      new Date(r.read_at).toDateString() === today,
+      new Date(r.read_at).toDateString() === targetDay,
   );
 
   if (isDuplicate) return null;
