@@ -64,7 +64,6 @@ import type { ActiveInstallment } from '@/core/services/installment.service';
 import { getCards } from '@/core/services/card.service';
 import {
   getReadings,
-  getReadingsInRange,
   getAllReadings,
   deleteReading,
 } from '@/core/services/cardReading.service';
@@ -558,26 +557,41 @@ export default function Dashboard() {
       // valendo pro acompanhamento semanal mostrado em agosto; filtrar só
       // por month_id (getReadings) as esconderia assim que o mês virasse.
       if (primary && cycleRangeForPrimary) {
-        // Leituras do ciclo por DUAS vias, unidas: por data (pega o rabo do
-        // ciclo que cai no mês seguinte) e por competência (pega a leitura
-        // lançada na véspera da virada, quando a fatura nova já nasce com as
-        // parcelas do mês). Só por data, aquela véspera sumia do cálculo — e
-        // com uma leitura só sobrando, ela virava linha de base e o gasto da
-        // semana dava R$ 0,00.
-        const [inRange, byCompetence] = await Promise.all([
-          getReadingsInRange(
-            primary.id,
-            cycleRangeForPrimary.start,
-            cycleRangeForPrimary.end,
-          ),
-          getReadings(month.id, primary.id),
-        ]);
+        const byCompetence = await getReadings(month.id, primary.id);
 
         if (isStale()) return;
 
+        // Leitura da competência ANTERIOR lançada na VÉSPERA deste ciclo (só
+        // o dia anterior ao início — a fatura nova já nasce com as parcelas
+        // do mês, mas o usuário ainda não tinha trocado o mês selecionado em
+        // Cartões). A janela é estreita de propósito: qualquer leitura mais
+        // antiga que isso já pertence ao ciclo ANTERIOR e não tem nada a ver
+        // com este (incluí-la floodaria a semana 1 com o histórico inteiro do
+        // ciclo passado). E uma leitura da competência anterior datada DEPOIS
+        // do início deste ciclo é a confirmação do FECHAMENTO daquela fatura
+        // (o total do ciclo inteiro anterior), não gasto deste ciclo — antes
+        // isso vinha de uma busca por intervalo de datas sem olhar pra
+        // `month_id`, e essa confirmação tardia entrava como se fosse a
+        // primeira leitura deste ciclo, inflando a semana 1 com o valor cheio
+        // da fatura já fechada.
+        const cycleEve = new Date(cycleRangeForPrimary.start);
+        cycleEve.setDate(cycleEve.getDate() - 1);
+
+        const previousMonthEveReadings = previousReadings.filter((r) => {
+          const readAt = new Date(r.read_at).getTime();
+          return (
+            r.card_id === primary.id &&
+            readAt >= cycleEve.getTime() &&
+            readAt < cycleRangeForPrimary.start.getTime()
+          );
+        });
+
         const cycleReadings = [
           ...new Map(
-            [...inRange, ...byCompetence].map((r) => [r.id, r]),
+            [...previousMonthEveReadings, ...byCompetence].map((r) => [
+              r.id,
+              r,
+            ]),
           ).values(),
         ];
 
