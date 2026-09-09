@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
@@ -22,12 +22,16 @@ export default function LayoutShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userEmail, setUserEmail] = useState('');
 
   const isAuthPage =
-    pathname.startsWith('/login') || pathname.startsWith('/register');
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/register') ||
+    pathname.startsWith('/forgot-password') ||
+    pathname.startsWith('/reset-password');
 
   useEffect(() => {
     const saved = localStorage.getItem('sidebar-collapsed');
@@ -44,17 +48,25 @@ export default function LayoutShell({
     setMobileOpen(false);
   }, [pathname]);
 
+  // Sem isso, uma sessão que morre (refresh token revogado/expirado — em
+  // qualquer aba, não só a que fez a ação) deixava a página logada
+  // renderizando quebrada, com os serviços rejeitando com "Usuário não
+  // autenticado" em vez de mandar pra tela de login.
   useEffect(() => {
     const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
         setUserEmail(session?.user?.email ?? '');
+
+        if (event === 'SIGNED_OUT' && !isAuthPage) {
+          router.push('/login');
+        }
       },
     );
 
     return () => {
       listener.subscription.unsubscribe();
     };
-  }, []);
+  }, [isAuthPage, router]);
 
   if (isAuthPage) {
     return <main className="min-h-screen">{children}</main>;

@@ -84,6 +84,13 @@ export default function LoginPage() {
         </button>
 
         <button
+          onClick={() => router.push('/forgot-password')}
+          className="text-zinc-400 text-sm hover:text-white transition"
+        >
+          Esqueceu a senha?
+        </button>
+
+        <button
           onClick={() => router.push('/register')}
           className="text-zinc-400 text-sm hover:text-white transition"
         >
