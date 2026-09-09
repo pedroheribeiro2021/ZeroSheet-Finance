@@ -53,7 +53,12 @@ export default function ResetPasswordPage() {
         return;
       }
 
-      await supabase.auth.signOut();
+      // scope: 'local' — só encerra ESTA sessão de recuperação. O padrão do
+      // supabase-js é 'global', que revoga o refresh token de TODAS as
+      // sessões do usuário (qualquer outra aba/dispositivo logado); usado
+      // aqui isso derrubava sessões que não tinham nada a ver com a troca de
+      // senha, quebrando o app nelas assim que tentassem renovar o token.
+      await supabase.auth.signOut({ scope: 'local' });
       router.push('/login');
     } catch (err) {
       setError(
