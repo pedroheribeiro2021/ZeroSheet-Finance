@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   ArrowLeftRight,
@@ -43,14 +43,16 @@ export default function Sidebar({
   onCloseMobile,
 }: SidebarProps) {
   const pathname = usePathname();
-  const router = useRouter();
   const { showToast } = useToast();
 
+  // O redirect pra /login é responsabilidade única do listener de
+  // SIGNED_OUT no LayoutShell — chamar router.push/refresh aqui também
+  // competia com aquele redirect (às vezes forçando um remount da página
+  // atual ANTES da navegação terminar, com o efeito de carregamento dela
+  // rodando de novo já sem sessão e estourando "Usuário não autenticado").
   const handleLogout = async () => {
     await supabase.auth.signOut();
     showToast('Sessão encerrada');
-    router.push('/login');
-    router.refresh();
   };
 
   const showLabels = !collapsed || mobileOpen;
