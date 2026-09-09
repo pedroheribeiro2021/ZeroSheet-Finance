@@ -26,6 +26,7 @@ export default function LayoutShell({
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userEmail, setUserEmail] = useState('');
+  const [userName, setUserName] = useState('');
 
   const isAuthPage =
     pathname.startsWith('/login') ||
@@ -56,6 +57,7 @@ export default function LayoutShell({
     const { data: listener } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setUserEmail(session?.user?.email ?? '');
+        setUserName(session?.user?.user_metadata?.full_name ?? '');
 
         if (event === 'SIGNED_OUT' && !isAuthPage) {
           router.push('/login');
@@ -102,6 +104,7 @@ export default function LayoutShell({
         <Topbar
           pageTitle={pageTitle}
           userEmail={userEmail}
+          userName={userName}
           onMenuClick={() => setMobileOpen(true)}
         />
 
