@@ -27,7 +27,10 @@ export default function LayoutShell({
   const [userEmail, setUserEmail] = useState('');
 
   const isAuthPage =
-    pathname.startsWith('/login') || pathname.startsWith('/register');
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/register') ||
+    pathname.startsWith('/forgot-password') ||
+    pathname.startsWith('/reset-password');
 
   useEffect(() => {
     const saved = localStorage.getItem('sidebar-collapsed');

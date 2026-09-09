@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
+import ChangePasswordForm from '@/components/settings/ChangePasswordForm';
 import PaydayForm from '@/components/settings/PaydayForm';
 import PageLoading from '@/components/ui/PageLoading';
 import { PaydaySettings } from '@/core/engine/payday';
@@ -45,6 +46,8 @@ export default function SettingsView() {
           setConfigured(true);
         }}
       />
+
+      <ChangePasswordForm />
     </div>
   );
 }
