@@ -1823,12 +1823,14 @@ export default function Dashboard() {
                   ))}
                   <div className="surface-row p-3 flex justify-between border-white/10">
                     <span className="text-white font-bold">
-                      Sobra projetada
+                      {defaultAccountProjection.projected < 0
+                        ? 'Falta projetada'
+                        : 'Sobra projetada'}
                     </span>
                     <span
                       className={`font-bold ${defaultAccountProjection.projected < 0 ? 'text-red-400' : 'text-green-400'}`}
                     >
-                      {formatCurrency(defaultAccountProjection.projected)}
+                      {formatCurrency(Math.abs(defaultAccountProjection.projected))}
                     </span>
                   </div>
                 </div>
