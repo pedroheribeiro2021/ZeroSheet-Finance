@@ -29,6 +29,7 @@ import {
   toPaydaySettings,
 } from '@/core/services/settings.service';
 import {
+  budgetForWeekDiff,
   cycleLengthInWeeks,
   getCycleRange,
   getWeeksInMonth,
@@ -39,6 +40,7 @@ import {
 import { getWeekBudgets, freezeWeekBudget } from '@/core/services/week.service';
 import {
   calculateCycleSpend,
+  clampProvisionSpend,
   CycleCharge,
   CycleSpend,
 } from '@/core/engine/cycleSpend';
@@ -577,6 +579,38 @@ export default function Dashboard() {
           (r) => r.card_id === primary.id,
         );
 
+        // Teto do mês por categoria provisionada (Gasolina, Mercado etc.) —
+        // já reservado do `total`/`weeklyBudget` em `calculateSummary`, então
+        // a compra real só pode ser descontada aqui até esse teto.
+        const provisionPlanned = new Map<string, number>();
+        for (const t of transactionsMapped) {
+          if (t.skipped || t.type !== 'expense' || !t.isProvision) continue;
+          const cat = normalizeCategory(t.category);
+          provisionPlanned.set(cat, (provisionPlanned.get(cat) ?? 0) + t.amount);
+        }
+
+        // Compra real, no cartão principal, de categoria que tem provisão —
+        // clampada ao que resta do teto do mês (`clampProvisionSpend`), pra
+        // gasolina/mercado não contarem como gasto livre duas vezes.
+        const provisionCharges = clampProvisionSpend(
+          transactionsMapped
+            .filter(
+              (t) =>
+                !t.skipped &&
+                t.type === 'expense' &&
+                !t.isProvision &&
+                !t.isReserve &&
+                t.card === primary.id &&
+                provisionPlanned.has(normalizeCategory(t.category)),
+            )
+            .map((t) => ({
+              category: normalizeCategory(t.category),
+              amount: t.amount,
+              date: new Date(t.createdAt),
+            })),
+          provisionPlanned,
+        );
+
         // Parcela entra na virada do ciclo (não tem dia próprio — nasce com a
         // fatura); assinatura entra no dia da renovação.
         const charges: CycleCharge[] = [
@@ -585,6 +619,7 @@ export default function Dashboard() {
               (t) =>
                 !t.skipped &&
                 t.type === 'expense' &&
+                !t.isProvision &&
                 t.card === primary.id &&
                 (t.isFixed || t.isRecurring),
             )
@@ -601,6 +636,7 @@ export default function Dashboard() {
               amount: Number(i.installment_amount),
               kind: 'installment' as const,
             })),
+          ...provisionCharges,
         ];
 
         setCycleSpend(
@@ -890,6 +926,15 @@ export default function Dashboard() {
     !!activeMonth &&
     activeMonth.month === now.getMonth() + 1 &&
     activeMonth.year === now.getFullYear();
+
+  // Semana em curso agora mesmo — só existe enquanto a competência exibida é
+  // a atual (`cycleRange` foi resolvido a partir de "hoje" só nesse caso; ver
+  // `cycleReferenceDate` em `loadMonthData`). É o que diz pra `budgetForWeekDiff`
+  // qual semana não pode usar o orçamento congelado.
+  const currentWeekIndex =
+    isCurrentMonth && primaryCard?.closing_day != null
+      ? weekIndexInCycle(now, primaryCard.closing_day)
+      : null;
 
   const dueTodayItems = isCurrentMonth
     ? getDueItems(transactions, now).filter((i) => i.status === 'today')
@@ -1310,13 +1355,25 @@ export default function Dashboard() {
                 );
 
                 // Orçamento CONGELADO no início da semana, quando existir —
-                // é contra ele que a diferença faz sentido (senão o "sobrou/
-                // faltou" de uma semana já passada muda toda vez que uma
-                // fatura nova é lançada). Sem congelamento ainda (semana que
-                // nunca foi "a atual"), cai no recalculado como estimativa.
+                // exibido como referência ("orçamento inicial"). Sem
+                // congelamento ainda (semana que nunca foi "a atual"), cai no
+                // recalculado como estimativa.
                 const frozenBudget = frozenWeekBudgets.get(week.index) ?? null;
                 const initialBudget = frozenBudget ?? summary.weeklyBudget;
-                const diff = initialBudget - week.spent;
+
+                // O "sobrou/faltou" (`diff`) NÃO pode usar o congelado pra
+                // semana em curso — ele fica parado no valor do dia em que a
+                // semana começou e passa a mentir assim que o saldo do mês
+                // muda depois disso (`budgetForWeekDiff` em `core/engine/weekly.ts`).
+                // Semana já fechada continua usando o congelado, de propósito:
+                // o veredito dela não deve mudar com fatura de dias depois.
+                const diff =
+                  budgetForWeekDiff(
+                    week.index,
+                    currentWeekIndex,
+                    frozenBudget,
+                    summary.weeklyBudget,
+                  ) - week.spent;
 
                 // `cycleRange.start` (já resolvido pra competência exibida,
                 // não "hoje") garante que as datas de cada semana batem com
@@ -1380,14 +1437,15 @@ export default function Dashboard() {
                               (a fatura subiu{' '}
                               {formatCurrency(entry.invoiceDelta)}, sendo{' '}
                               {formatCurrency(entry.appliedCharges)} de
-                              assinaturas/parcelas já lançadas)
+                              assinaturas/parcelas/categorias já
+                              provisionadas)
                             </span>
                           )}
                           {entry.unappliedCharges > 0 && (
                             <span className="text-amber-400 text-xs">
                               ⚠️ {formatCurrency(entry.unappliedCharges)} de
                               cobranças conhecidas não couberam no que a fatura
-                              subiu — confira o dia cadastrado
+                              subiu — confira a data lançada
                             </span>
                           )}
                         </>

@@ -13,7 +13,7 @@ import { toCurrency } from '../utils/number';
  * acumulado da fatura naquele instante, e a diferença entre leituras
  * consecutivas é o quanto entrou no intervalo.
  *
- * Três regras de posicionamento, todas aprendidas de dados reais:
+ * Quatro regras de posicionamento, todas aprendidas de dados reais:
  *
  * 1. **O ciclo nasce zerado.** Quando a fatura fecha, a seguinte começa do
  *    zero. Se o app já vinha lendo o cartão no ciclo anterior, ele SABE que a
@@ -30,6 +30,16 @@ import { toCurrency } from '../utils/number';
  *    ciclo atravessa a virada do mês (04/08–03/09), então uma assinatura de dia
  *    2 pertence a 02/09, não a 02/08 — esta última caiu no ciclo anterior.
  *
+ * 4. **Categoria provisionada entra na data da compra, até o teto do mês.**
+ *    Gasolina/Mercado com orçamento mensal fixo (`is_provision`) já têm o
+ *    valor planejado reservado do `total` em `calculateSummary` — descontar a
+ *    compra real de novo aqui puniria a mesma despesa duas vezes. Mas ao
+ *    contrário de assinatura/parcela, provisão é elástica: o usuário pode
+ *    gastar mais ou menos que o planejado. Por isso só o que couber no teto
+ *    do mês é descontado (`clampProvisionSpend`, em ordem cronológica); o que
+ *    estourar o orçamento da categoria continua contando como gasto livre de
+ *    verdade — senão o estouro ficaria invisível no acompanhamento semanal.
+ *
  * E uma trava contra mascarar gasto: o desconto nunca passa do quanto a fatura
  * de fato subiu na semana. O que não couber vira `unappliedCharges`, para a UI
  * conseguir dizer que descontou menos do que devia em vez de exibir um R$ 0,00
@@ -41,7 +51,7 @@ export type CycleReading = {
   read_at: string;
 };
 
-export type CycleChargeKind = 'installment' | 'subscription';
+export type CycleChargeKind = 'installment' | 'subscription' | 'provision';
 
 export type CycleCharge = {
   label: string;
@@ -52,7 +62,70 @@ export type CycleCharge = {
    * virada do ciclo, não num dia do mês.
    */
   day?: number | null;
+  /**
+   * Data da compra real, só para `provision` — quando o gasto de uma
+   * categoria já orçada (ex.: Gasolina, Mercado) foi lançado no cartão. Sem
+   * dia fixo como assinatura nem virada única como parcela: é o dia em que o
+   * usuário de fato gastou.
+   */
+  date?: Date | null;
 };
+
+export type ProvisionSpend = {
+  /** Categoria já normalizada (`normalizeCategory`) — precisa bater com a chave de `plannedByCategory`. */
+  category: string;
+  amount: number;
+  date: Date;
+};
+
+/**
+ * Clampa gasto realizado em categoria provisionada (envelope com orçamento
+ * mensal, ex.: Gasolina R$ 350/mês) ao que ainda resta do teto planejado —
+ * em ordem cronológica, quem gastou primeiro consome a provisão primeiro.
+ *
+ * Sem isso, uma categoria provisionada seria descontada duas vezes do
+ * dinheiro disponível: uma vez porque `calculateSummary` já reserva o valor
+ * planejado inteiro do `total` (e portanto do `weeklyBudget`), e de novo
+ * porque a compra real aumenta a fatura e apareceria inteira como gasto livre
+ * da semana — a mesma dupla contagem que a exclusão de assinatura/parcela já
+ * evita (ver comentário no topo do arquivo).
+ *
+ * O que ultrapassa o teto planejado NÃO é clampado: continua contando como
+ * gasto livre de verdade. Isso é proposital — sem essa trava, estourar uma
+ * categoria provisionada ficaria invisível no acompanhamento semanal, dando
+ * a falsa impressão de que ainda sobra orçamento quando na verdade não sobra.
+ */
+export function clampProvisionSpend(
+  spends: ProvisionSpend[],
+  plannedByCategory: Map<string, number>,
+): CycleCharge[] {
+  const remaining = new Map(plannedByCategory);
+
+  const sorted = [...spends].sort(
+    (a, b) => a.date.getTime() - b.date.getTime(),
+  );
+
+  const charges: CycleCharge[] = [];
+
+  for (const s of sorted) {
+    if (!(s.amount > 0)) continue;
+
+    const cap = remaining.get(s.category) ?? 0;
+    if (cap <= 0) continue;
+
+    const applied = Math.min(s.amount, cap);
+    remaining.set(s.category, toCurrency(cap - applied));
+
+    charges.push({
+      label: s.category,
+      amount: applied,
+      kind: 'provision',
+      date: s.date,
+    });
+  }
+
+  return charges;
+}
 
 export type CycleWeek = {
   weekIndex: number;
@@ -211,6 +284,10 @@ export function calculateCycleSpend(input: CycleSpendInput): CycleSpend {
     if (charge.kind === 'installment') {
       // Regra 2: parcela nasce com a fatura.
       when = input.cycle.start;
+    } else if (charge.kind === 'provision') {
+      // Categoria provisionada: não tem dia fixo, vale a data real da compra.
+      if (!charge.date) continue;
+      when = charge.date;
     } else {
       if (charge.day == null) continue;
       when = occurrenceInCycle(charge.day, input.cycle);

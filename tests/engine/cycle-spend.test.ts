@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   calculateCycleSpend,
+  clampProvisionSpend,
   occurrenceInCycle,
   weekIndexFromCycleStart,
   CycleCharge,
@@ -248,6 +249,100 @@ describe('trava contra mascarar gasto', () => {
     });
 
     expect(r.weeks.every((w) => w.spent >= 0)).toBe(true);
+  });
+});
+
+describe('clampProvisionSpend', () => {
+  it('desconta a compra real até o teto planejado da categoria', () => {
+    const charges = clampProvisionSpend(
+      [{ category: 'gasolina', amount: 239.35, date: new Date(2026, 8, 15) }],
+      new Map([['gasolina', 350]]),
+    );
+
+    expect(charges).toEqual([
+      {
+        label: 'gasolina',
+        amount: 239.35,
+        kind: 'provision',
+        date: new Date(2026, 8, 15),
+      },
+    ]);
+  });
+
+  it('estouro da provisão não é clampado — sobra como gasto livre', () => {
+    // Duas compras de gasolina no mês (60 + 70), mas só R$ 100 foram
+    // planejados. Em ordem cronológica, a primeira consome 60 do teto,
+    // sobrando 40 para a segunda — os R$ 30 que excedem continuam de fora.
+    const charges = clampProvisionSpend(
+      [
+        { category: 'gasolina', amount: 70, date: new Date(2026, 8, 20) },
+        { category: 'gasolina', amount: 60, date: new Date(2026, 8, 10) },
+      ],
+      new Map([['gasolina', 100]]),
+    );
+
+    expect(charges).toEqual([
+      {
+        label: 'gasolina',
+        amount: 60,
+        kind: 'provision',
+        date: new Date(2026, 8, 10),
+      },
+      {
+        label: 'gasolina',
+        amount: 40,
+        kind: 'provision',
+        date: new Date(2026, 8, 20),
+      },
+    ]);
+  });
+
+  it('categoria sem provisão planejada não gera desconto', () => {
+    const charges = clampProvisionSpend(
+      [{ category: 'lazer', amount: 50, date: new Date(2026, 8, 10) }],
+      new Map([['gasolina', 350]]),
+    );
+
+    expect(charges).toEqual([]);
+  });
+});
+
+/**
+ * Cenário real de setembro/2026 que motivou a mudança: Gasolina tem R$ 350
+ * provisionados no mês; o usuário lançou uma compra real de R$ 239,35 no
+ * cartão e, antes disso, já tinha R$ 595,14 de gasto bruto aparecendo na
+ * semana 2 — o dobro do que devia, porque a provisão já reserva o dinheiro em
+ * `calculateSummary` e não era descontada aqui.
+ */
+describe('provisão de categoria — cenário de setembro/2026', () => {
+  const ciclo = { start: new Date(2026, 8, 4), end: new Date(2026, 9, 3) };
+
+  const readings = [
+    { amount: 847.43, read_at: '2026-09-04T18:51:57Z' },
+    { amount: 1339.96, read_at: '2026-09-09T18:59:04Z' },
+    { amount: 1398.69, read_at: '2026-09-11T18:26:26Z' },
+    { amount: 1935.1, read_at: '2026-09-15T13:52:51Z' },
+  ];
+
+  const provisionCharges = clampProvisionSpend(
+    [{ category: 'gasolina', amount: 239.35, date: new Date(2026, 8, 15) }],
+    new Map([['gasolina', 350]]),
+  );
+
+  const result = calculateCycleSpend({
+    cycle: ciclo,
+    totalWeeks: 5,
+    readings,
+    charges: provisionCharges,
+    startsAtZero: true,
+  });
+
+  it('semana 2 sobe R$ 595,14 de bruto, mas desconta a gasolina provisionada', () => {
+    const semana2 = result.weeks[1];
+
+    expect(semana2.invoiceDelta).toBe(595.14);
+    expect(semana2.appliedCharges).toBe(239.35);
+    expect(semana2.spent).toBe(355.79);
   });
 });
 
