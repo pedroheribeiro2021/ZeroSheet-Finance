@@ -299,6 +299,35 @@ export function getWeeksRemainingInCycle(
   return Math.max(1, Math.min(total, total - current + 1));
 }
 
+/**
+ * Orçamento contra o qual medir "sobrou/faltou" (`+diff`) de uma semana.
+ *
+ * A semana EM CURSO usa sempre o valor recalculado hoje — é o único que já
+ * sabe de tudo que aconteceu no mês até agora (leituras, provisões, etc) e
+ * por isso é o único em que "quanto ainda dá pra gastar sem estourar o mês"
+ * é verdade. Usar o congelado aqui era a armadilha: ele fica parado no valor
+ * do dia em que a semana começou, então uma semana que já mostrou R$ 507,55
+ * de orçamento no dia 1 continuava dizendo "sobram R$ 203" mesmo depois do
+ * saldo do mês cair pra R$ 430,28 de orçamento — dava a impressão de mais
+ * folga do que realmente havia.
+ *
+ * Semana já FECHADA (índice menor que o atual) usa o congelado — o
+ * "sobrou/faltou" dela é veredito de um período que já passou, e não deve
+ * ficar mudando toda vez que uma fatura de dias depois é lançada.
+ */
+export function budgetForWeekDiff(
+  weekIndex: number,
+  currentWeekIndex: number | null,
+  frozenBudget: number | null,
+  recalculatedBudget: number,
+): number {
+  if (currentWeekIndex != null && weekIndex === currentWeekIndex) {
+    return recalculatedBudget;
+  }
+
+  return frozenBudget ?? recalculatedBudget;
+}
+
 export type KnownCharge = {
   /** Valor da assinatura/parcela conhecida (já é compromisso fixo). */
   amount: number;
