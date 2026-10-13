@@ -41,7 +41,8 @@ function flagLabelsFor(t: Transaction): string[] {
 
   if (t.isProvision) labels.push('provisao');
   if (t.isReserve) labels.push('reserva');
-  if (t.isReimbursement) labels.push('reembolso');
+  if (t.isReimbursement)
+    labels.push(t.type === 'expense' ? 'reembolsavel' : 'reembolso');
   if (t.isFixed) labels.push('fixo');
 
   return labels;
@@ -487,7 +488,7 @@ export default function TransactionList({
                   )}
                   {t.isReimbursement && (
                     <span className="badge bg-zinc-600/30 text-zinc-300">
-                      Reembolso
+                      {t.type === 'expense' ? 'Reembolsável' : 'Reembolso'}
                     </span>
                   )}
                   {t.isFixed && (
