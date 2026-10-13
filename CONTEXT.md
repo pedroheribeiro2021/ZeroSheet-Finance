@@ -35,163 +35,111 @@ Variáveis de ambiente esperadas em `.env.local` (não commitado):
 ## 3. Estrutura de pastas
 
 ```
-app/                          Rotas (Next.js App Router)
-  page.tsx                    "/" → redirect para /dashboard
-  layout.tsx                  Root layout, monta <LayoutShell>
-  login/page.tsx               Tela de login
-  register/page.tsx            Tela de cadastro
-  dashboard/page.tsx            Wrapper fino → components/dashboard/Dashboard
-  transactions/page.tsx         CRUD de transações
-  installments/page.tsx         CRUD de parcelamentos
-  cards/page.tsx                 Cadastro de cartões + lançamento de fatura (snapshot)
-  globals.css
+app/                          Rotas (Next.js App Router) — páginas finas que montam components/*
+  dashboard/  transactions/  installments/  cards/  accounts/  settings/
+  login/  register/  forgot-password/  reset-password/
+  layout.tsx, manifest.ts     Root layout (LayoutShell) + manifest PWA
 
 components/
-  dashboard/Dashboard.tsx       Tela principal: busca dados, calcula resumo, renderiza cards/semanas/modal
-  transactions/
-    TransactionForm.tsx
-    TransactionList.tsx
-  installments/
-    InstallmentForm.tsx
-    InstallmentList.tsx
-  cards/
-    CardForm.tsx                Criar/editar cartão (nome, slug, cor, limite, dia de fechamento/vencimento)
-    CardList.tsx
-    CardSnapshotForm.tsx         Lançar valor da fatura do mês para um cartão
-  layout/
-    LayoutShell.tsx              Decide se mostra sidebar/topbar (oculto em /login e /register)
-    Sidebar.tsx                  Navegação principal + logout
-    Topbar.tsx
-  modals/
-    EditTransactionModal.tsx
-  ui/
-    Card.tsx                     Card de métrica clicável (usado no dashboard)
-    Modal.tsx
+  dashboard/                  Dashboard.tsx (tela principal), WeeklyBarChart, CategoryBarChart,
+                              DueDatesPanel (vencimentos), InsightsPanel
+  transactions/               TransactionForm, TransactionList, TransactionsView,
+                              CategoryField (seletor de categoria padrão + do usuário)
+  installments/               InstallmentForm/List/View
+  cards/                      CardForm/List, CardsView, CardSnapshotForm (fatura),
+                              CardReadingsList (leituras do ciclo), PendingInvoiceForm
+  accounts/                   Contas (saldo) e transferências
+  settings/                   SettingsView, PaydayForm (dia do salário), ChangePasswordForm
+  modals/                     Edit{Transaction,Installment,Card,Account}Modal
+  layout/                     LayoutShell (guarda de rota + sessão), Sidebar, Topbar
+  ui/                         Card, Modal, MonthSelect, PageLoading, ToastProvider
 
-core/                          Camada de domínio (services, regras de negócio, tipos)
-  services/                    Toda a comunicação com Supabase vive aqui
-    auth.service.ts             getCurrentUser()
-    month.service.ts            getMonths/createMonth (cria mês e copia transações recorrentes do mês anterior)
-    transaction.service.ts      CRUD de transações + copyRecurringTransactions
-    week.service.ts             CRUD de semanas (orçamento semanal por mês)
-    card.service.ts             CRUD de cartões (tabela `cards`, dinâmica por usuário)
-    cardSnapshot.service.ts     Upsert/get de fatura do cartão no mês (tabela `card_snapshots`, FK `card_id`)
-    installment.service.ts      CRUD de parcelamentos + filtro de parcelas ativas no mês
-  engine/                      Funções puras de cálculo (sem I/O), são as mais testáveis
-    calculations.ts             calculateSummary() — agrega receitas, custos fixos, provisões, cartões, parcelas
-    weekly.ts                   calculateWeekly() — divide o orçamento do mês em semanas (snapshots > transações)
-    installments.ts             getInstallmentsForMonth() — ⚠️ placeholder simplificado, não é o usado em produção
-  models/
-    mappers.ts                  Converte tipos DB (snake_case) → tipos de domínio (camelCase)
-  types/
-    database.ts                  Tipos das tabelas Supabase (DBTransaction, DBMonth, DBWeek)
-    finance.ts                    Tipos de domínio (Transaction, Week, CardSnapshot)
-  utils/
-    normalize.ts / category.ts    normalizeCategory() — duplicada em dois arquivos (ver §5)
-    groupTransactions.ts          Agrupa transações por categoria com total/contagem
-    number.ts                     toCurrency() etc.
-  constants/
-    categories.ts                 DEFAULT_CATEGORIES (lista estática curta)
-  auth/
-    getUser.ts                    Helper de auth (ver duplicação com lib/auth.ts em §5)
+core/
+  services/                   Toda a comunicação com Supabase (uma por tabela/domínio)
+  engine/                     Funções puras (sem I/O) — onde ficam as regras de negócio:
+    calculations.ts            calculateSummary(): saldo do mês, envelopes de provisão, cartões, parcelas
+    cycleSpend.ts              Gasto livre por semana do ciclo da fatura (leituras − cobranças conhecidas)
+    weekly.ts                  Ciclo da fatura, semanas restantes, orçamento da semana
+    categories.ts              Opções do seletor de categoria (padrão + histórico do usuário)
+    coverage.ts / payday.ts    "Cobertura até o salário" e resolução do dia do salário
+    dueDates.ts / invoices.ts  Vencimentos e faturas
+    accounts.ts, insights.ts, month.ts, recurrence.ts, installments.ts, split.ts
+  hooks/useActiveMonth.ts     Mês ativo compartilhado entre as telas
+  models/mappers.ts           DB (snake_case) → domínio (camelCase)
+  types/                      database.ts (tabelas) e finance.ts (domínio)
+  constants/categories.ts     Categorias padrão por tipo de lançamento
+  utils/                      normalize, number, groupTransactions
 
-lib/
-  supabase.ts                   Client Supabase (browser, usa env vars públicas)
-  auth.ts                       signIn/signOut/getUser/getCurrentUserId
-
-tests/
-  engine/calculations.test.ts   Único arquivo de teste hoje — cobre calculateSummary()
+lib/                          Client Supabase + helpers de auth
+supabase/migrations/          SQL versionado (aplicado manualmente — ver §7)
+supabase/functions/           Edge function send-due-notifications (push de vencimentos)
+tests/engine/, tests/services/  Vitest
 ```
 
-### Modelo de dados (Supabase / Postgres, todas as tabelas com RLS por `user_id`)
+### Modelo de dados (Supabase / Postgres, RLS por `user_id` em todas as tabelas)
 
-- `months` (month, year, user_id)
-- `weeks` (month_id, index, budget, spent, remaining)
-- `transactions` (month_id, type, category, amount, is_fixed, is_provision, is_recurring, card,
-  is_reimbursement, is_reserve, recurring_until)
-- `cards` (name, slug, color, limit_amount, closing_day, due_day, user_id, `is_primary` ⚠️)
-- `card_snapshots` (month_id, card_id, amount, user_id) — fatura do cartão naquele mês
-- `card_readings` ⚠️ (user_id, month_id→months, card_id→cards, amount, read_at, created_at)
-  — leituras parciais da fatura para o loop semanal; RLS owner
+- `months` (month, year)
+- `transactions` (month_id, type, category, description, amount, card, is_fixed, is_provision,
+  is_recurring, due_day, recurring_until, is_reimbursement, is_reserve, paid_at, skipped)
+  - `is_reimbursement`: em **entrada** marca reembolso; em **despesa no cartão** marca
+    compra que será reembolsada (fora do gasto livre da semana).
+- `cards` (name, slug, color, limit_amount, closing_day, due_day, is_primary)
+- `card_snapshots` (month_id, card_id, amount, paid_at) — fatura fechada do cartão no mês
+- `card_readings` (month_id, card_id, amount, read_at) — leituras parciais da fatura (gasto semanal)
 - `installments` (description, card_id, total_amount, installment_amount, total_installments,
-  current_installment, start_month_id, user_id)
-
-⚠️ = coluna/tabela ainda não existe em produção (migration pendente — ver §7).
+  current_installment, start_month_id, billing_day)
+- `accounts`, `account_readings`, `transfers` — contas e movimentações entre elas
+- `user_settings` (payday_mode, payday_day), `push_subscriptions`, `weeks` (orçamento semanal congelado)
 
 ## 4. Fluxo de autenticação e navegação
 
-- Supabase Auth (email/senha) via `lib/auth.ts` e `core/services/auth.service.ts`.
-- `LayoutShell` esconde sidebar/topbar em `/login` e `/register`; nas demais
-  rotas mostra `Sidebar` (Dashboard, Transações, Parcelamentos, Cartões) e
-  `Topbar`.
-- Logout é feito direto na `Sidebar` (`supabase.auth.signOut()` + redirect).
-- Cada service de domínio chama `getCurrentUser()` e lança erro
-  `'Usuário não autenticado'` se não houver sessão — não há um guard central
-  de rota (proteção acontece a nível de chamada de dados + RLS no banco).
+- Supabase Auth (email/senha), com cadastro, "esqueci a senha" e troca de senha.
+- `LayoutShell` é a guarda de rota: sem sessão, redireciona para `/login`; esconde
+  sidebar/topbar nas telas de auth. O topbar mostra o nome do usuário.
+- Sidebar: Dashboard, Transações, Parcelamentos, Cartões, Contas, Configurações.
+- Services chamam `getCurrentUser()` e filtram por `user_id`; a RLS no banco é a
+  barreira final (políticas "allow all" removidas em 2026-09-09).
 
 ## 5. Estado atual do desenvolvimento
 
-Branch atual: `develop` (sincronizada com `origin/develop`; é a branch base
-para as `feature/*` — `main` recebe merges a partir dela).
+Branch base: `develop` (deploy automático na Vercel em
+https://zerosheet-finance.vercel.app). Todo trabalho vai por branch + PR para
+`develop`; `main` recebe merges a partir dela.
 
-### O que está pronto e funcionando
-- Autenticação multiusuário (login/registro) com isolamento de dados por RLS.
-- CRUD completo de transações, parcelamentos e cartões.
-- Cartões e suas faturas (`card_snapshots`) usam a tabela dinâmica `cards` por
-  usuário (sem mais valores mockados/hardcoded de Nubank, C6 etc.).
-- **Bug de matching cartão↔fatura corrigido**: `Dashboard.tsx` agora casa
-  snapshot e cartão via `snapshot.card_id === card.id`, igual ao resto do app
-  (`fix(cards): match card snapshots by card_id instead of legacy slug`).
-- Dashboard agrega receitas, custos fixos, provisões (planejado vs. realizado),
-  gasto em cartões e parcelas, e quebra o orçamento do mês em semanas.
-- Recorrência: ao criar um novo mês, transações marcadas `is_recurring` são
-  copiadas automaticamente do mês anterior (sem suporte a dia de vencimento —
-  ver TODO.md).
-- `core/engine/installments.ts` deixou de ser placeholder: agora exporta
-  `filterActiveInstallments()`, função pura testada
-  (`tests/engine/installments.test.ts`) e efetivamente usada por
-  `core/services/installment.service.ts:getInstallments`.
-- `core/utils/category.ts` (duplicata de `normalizeCategory`) e o código morto
-  de `core/models/mappers.ts` foram removidos
-  (`chore: remove dead code left from cards normalization migration`).
-- CI configurado em `.github/workflows/ci.yml`: typecheck (`tsc --noEmit`),
-  `vitest run`, lint (`continue-on-error: true`) e `next build` em PRs/pushes
-  para `develop` e `main`.
-- Cobertura de testes: 10 arquivos / 76 testes (`npx vitest run` → 76 passed,
-  `npx tsc --noEmit` limpo). Inclui `july-2026.test.ts` — contrato financeiro
-  de julho que fixa os números de referência do orçamento.
-- **Loop semanal** implementado e no `develop` (PR #55):
-  - `cards.is_primary` + `setPrimaryCard()` — toggle de cartão principal.
-  - `getWeeksInCycle(closingDay)` — semanas pelo ciclo do cartão principal.
-  - `card_readings` / `weeklySpendFromReadings` — delta entre leituras semanais.
-  - Não-interferência: transação com `card` que tem snapshot não entra em outros
-    buckets (`fixedCosts`, envelope etc.) — evita dupla contagem.
-  - Seção "Acompanhamento semanal" no Dashboard com campo de lançamento.
-  - **Tudo inerte em produção** até migrations serem aplicadas (ver §7).
+### Principais regras de negócio (detalhes nos comentários de `core/engine/*`)
+- **Saldo do mês** (`calculateSummary`): entradas − fixos − cartões (fatura ou gasto
+  pendente) − envelopes de provisão (maior entre planejado e realizado) − parcelas −
+  reserva. Reembolso soma nas entradas e anula a despesa que cobre.
+- **Acompanhamento semanal**: semanas do ciclo da fatura do cartão principal; gasto
+  da semana = quanto a fatura subiu entre leituras, menos cobranças já comprometidas
+  (parcelas na virada, assinaturas no dia da renovação, provisões até o teto, despesas
+  reembolsáveis na primeira leitura após a compra). Orçamento semanal = saldo ÷
+  semanas restantes; semana em curso compara com o recalculado, semana fechada com o
+  congelado.
+- **Categorias**: padrão + as que o usuário já usou (derivadas do histórico, sem tabela).
+- Vencimentos com "pago", push (Web Push/VAPID), cobertura até o salário, contas e
+  transferências, virada de mês com cópia de recorrentes.
 
-### Trabalho em andamento / inconsistências conhecidas
-- **Migrations pendentes (ver §7):** loop semanal, `is_reimbursement`,
-  `is_reserve` e `is_primary` estão implementados no código mas inertes até
-  as migrations serem aplicadas manualmente. Dados históricos precisam de
-  UPDATE pós-migration (documentado nos arquivos `.sql`).
-- Tipagem solta: `any[]`/`any` ainda generalizado em `Dashboard.tsx`,
-  `transaction.service.ts`, `week.service.ts`, `groupTransactions.ts` e na
-  maioria dos componentes. Várias áreas têm
-  `/* eslint-disable @typescript-eslint/no-explicit-any */`.
-- Cobertura de testes cobre apenas `core/engine/*` (funções puras) — services,
-  hooks e componentes continuam sem teste (exceto os dois services de month/
-  transaction testados em `tests/services/`).
-- Deploy em produção: https://zerosheet-finance.vercel.app (branch `develop`
-  conectada à Vercel; env vars configuradas).
+### Qualidade
+- CI (`.github/workflows/ci.yml`): `tsc --noEmit`, `vitest run`, lint e `next build`.
+- 31 arquivos de teste / 355 testes (2026-10-13), concentrados em `core/engine/*`
+  com contratos de meses reais (`july-2026`, `agosto-2026`).
+
+### Inconsistências conhecidas
+- Tipagem solta (`any`) em `Dashboard.tsx` e em alguns services/componentes.
+- Componentes e hooks sem teste; services só `month` e `transaction`.
+- `Dashboard.tsx` concentra muita orquestração (~76 KB).
+- Pendências de produto: ver `TODO.md` (seção "Pendentes").
 
 ### Histórico recente (mais novo primeiro)
-PR #55 `feature/loop-semanal`: is_primary, getWeeksInCycle, card_readings +
-weeklySpendFromReadings, não-interferência em calculateSummary →
-PR #54 `feat/dashboard-charts`: WeeklyBarChart + CategoryBarChart (Recharts) →
-PR #53 `chore/drop-card-check-constraint`: remove CHECK legado de
-transactions.card → PR #49 `feature/paridade-planilha-engine`: envelope,
-reembolso, reserva, getWeeksInMonth → PR #47 `feature/toasts-card-fields-and-auth-fix`:
-toasts, campos de cartão, onAuthStateChange.
+- 2026-10-13 PR #95 — despesa reembolsável fora do gasto livre + categorias do usuário.
+- 2026-09-15 PR #94 — provisão descontada do gasto semanal; orçamento recalculado na semana atual.
+- 2026-09-09 PRs #87–#93 — RLS sem "allow all", troca/recuperação de senha, guarda de
+  rota/logout, ajustes de fatura e nome no topbar.
+- 2026-08 PRs #79–#85 — virada de mês, vencimento da fatura, ciclo da fatura, semanas restantes.
+- 2026-07 PRs #55–#78 — loop semanal, push, vencimentos, contas, cobertura até o salário.
+
+O registro detalhado de cada sessão fica em `TODO.md` ("Feitos em …").
 
 ## 6. Como rodar
 
@@ -205,17 +153,12 @@ npm run test:coverage
 npm run build && npm start
 ```
 
-Requer um projeto Supabase configurado com as tabelas do §3 e RLS habilitada
-por `user_id`, mais as variáveis em `.env.local` (§2).
+Requer um projeto Supabase com as tabelas do §3 e RLS por `user_id`, mais as
+variáveis em `.env.local` (§2).
 
 ## 7. Migrations
 
-**Todas aplicadas em produção** (verificado em 2026-07-03 via MCP do Supabase):
-`20260629_01` (cards.is_primary), `20260629_02` (card_readings),
-`20260629_03` (is_reimbursement/is_reserve) e
-`20260703_01` (transactions.recurring_until — duração da recorrência).
-O backfill de julho/2026 também foi aplicado (reserva, reembolso e categoria
-"Gasolina (Provisão)" → "Gasolina").
-
-Falta apenas ação de interface: marcar o cartão principal (★ no CardList)
-para ativar o acompanhamento semanal do dashboard.
+Arquivos em `supabase/migrations/`, aplicados manualmente no projeto Supabase.
+**Todas aplicadas em produção** (conferido em 2026-10-13 via MCP do Supabase:
+colunas `is_primary`, `billing_day`, `card_snapshots.paid_at`, tabelas de contas,
+`user_settings`, `push_subscriptions` e nenhuma política "allow all" restante).
