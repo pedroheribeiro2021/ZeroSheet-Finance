@@ -51,8 +51,9 @@ texto livre com o mesmo valor ao mesmo tempo; e a categoria criada em
   difere da padrão só em acento/maiúscula não vira categoria nova; entre
   grafias da mesma categoria vale a mais recente.
 
-**Ajuste de dados (com aval do usuário):** apagar o parcelamento "Seguro
-Prius" e relançar como despesa no C6 marcada "Será reembolsada".
+**Ajuste de dados (feito em 2026-10-13, com aval do usuário):** parcelamento
+"Seguro Prius" apagado e relançado como despesa no C6 (categoria "Seguro",
+10/10, `is_reimbursement = true`). O reembolso de entrada ficou como estava.
 
 ## Feitos em 2026-07-14 — Semana do ciclo zerando por cobrança futura ainda não lançada
 
