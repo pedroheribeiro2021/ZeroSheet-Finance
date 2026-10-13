@@ -1,6 +1,6 @@
 # TODO — Zerosheet
 
-Atualizado em 2026-07-12. Checkbox marcado = já implementado (commit/PR
+Atualizado em 2026-10-13. Checkbox marcado = já implementado (commit/PR
 indicado entre parênteses). Itens novos vão sempre no topo da seção
 "Pendentes" da categoria correta.
 
