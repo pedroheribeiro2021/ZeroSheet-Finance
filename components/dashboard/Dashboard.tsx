@@ -600,6 +600,7 @@ export default function Dashboard() {
                 t.type === 'expense' &&
                 !t.isProvision &&
                 !t.isReserve &&
+                !t.isReimbursement &&
                 t.card === primary.id &&
                 provisionPlanned.has(normalizeCategory(t.category)),
             )
@@ -620,6 +621,7 @@ export default function Dashboard() {
                 !t.skipped &&
                 t.type === 'expense' &&
                 !t.isProvision &&
+                !t.isReimbursement &&
                 t.card === primary.id &&
                 (t.isFixed || t.isRecurring),
             )
@@ -637,6 +639,22 @@ export default function Dashboard() {
               kind: 'installment' as const,
             })),
           ...provisionCharges,
+          // Compra no cartão que vai ser reembolsada: o reembolso (entrada) já
+          // anula o valor no saldo do mês, então ela não é gasto livre.
+          ...transactionsMapped
+            .filter(
+              (t) =>
+                !t.skipped &&
+                t.type === 'expense' &&
+                t.isReimbursement &&
+                t.card === primary.id,
+            )
+            .map((t) => ({
+              label: t.description || t.category,
+              amount: t.amount,
+              kind: 'reimbursable' as const,
+              date: new Date(t.createdAt),
+            })),
         ];
 
         setCycleSpend(

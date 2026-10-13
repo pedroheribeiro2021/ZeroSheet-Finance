@@ -379,3 +379,96 @@ describe('linha de base', () => {
     expect(r.weeks[1].spent).toBe(150);
   });
 });
+
+describe('calculateCycleSpend — despesa reembolsável', () => {
+  /** Ciclo do C6 de outubro: 04/10–03/11, 5 semanas. */
+  const cicloOutubro = {
+    start: new Date(2026, 9, 4),
+    end: new Date(2026, 10, 3),
+  };
+
+  // Leituras reais: 902,25 em 06/10 (semana 1) e 3.758,61 em 13/10 (semana 2).
+  const leiturasOutubro = [
+    { amount: '902.25', read_at: '2026-10-06T10:13:16Z' },
+    { amount: '3758.61', read_at: '2026-10-13T13:10:38Z' },
+  ];
+
+  const seguro = (date: Date): CycleCharge => ({
+    label: 'Seguro Prius',
+    amount: 2510.61,
+    kind: 'reimbursable',
+    date,
+  });
+
+  it('entra na primeira leitura do dia da compra em diante, não na semana da compra', () => {
+    // Seguro pago em 10/10 (semana 1), mas a fatura só o mostrou na leitura
+    // de 13/10 (semana 2) — é ali que ele precisa ser descontado.
+    const result = calculateCycleSpend({
+      cycle: cicloOutubro,
+      totalWeeks: 5,
+      readings: leiturasOutubro,
+      charges: [seguro(new Date(2026, 9, 10))],
+      startsAtZero: true,
+    });
+
+    expect(result.weeks[0].spent).toBe(902.25);
+    expect(result.weeks[1].invoiceDelta).toBe(2856.36);
+    expect(result.weeks[1].appliedCharges).toBe(2510.61);
+    expect(result.weeks[1].spent).toBe(345.75);
+    expect(result.totalSpent).toBe(1248);
+    expect(result.totalUnapplied).toBe(0);
+  });
+
+  it('compra no mesmo dia de uma leitura entra nessa leitura', () => {
+    const result = calculateCycleSpend({
+      cycle: cicloOutubro,
+      totalWeeks: 5,
+      readings: leiturasOutubro,
+      charges: [seguro(new Date(2026, 9, 13))],
+      startsAtZero: true,
+    });
+
+    expect(result.weeks[1].spent).toBe(345.75);
+  });
+
+  it('compra que nenhuma leitura viu ainda não é descontada', () => {
+    const result = calculateCycleSpend({
+      cycle: cicloOutubro,
+      totalWeeks: 5,
+      readings: leiturasOutubro,
+      charges: [seguro(new Date(2026, 9, 15))],
+      startsAtZero: true,
+    });
+
+    expect(result.totalApplied).toBe(0);
+    expect(result.totalUnapplied).toBe(0);
+    expect(result.weeks[1].spent).toBe(2856.36);
+  });
+
+  it('compra já dentro da linha de base não é descontada', () => {
+    // Primeira leitura do cartão: 902,25 já contém a compra de 05/10 e não
+    // é gasto — não há delta de onde tirá-la.
+    const result = calculateCycleSpend({
+      cycle: cicloOutubro,
+      totalWeeks: 5,
+      readings: leiturasOutubro,
+      charges: [{ ...seguro(new Date(2026, 9, 5)), amount: 500 }],
+      startsAtZero: false,
+    });
+
+    expect(result.totalApplied).toBe(0);
+    expect(result.weeks[1].spent).toBe(2856.36);
+  });
+
+  it('sem data, é ignorada', () => {
+    const result = calculateCycleSpend({
+      cycle: cicloOutubro,
+      totalWeeks: 5,
+      readings: leiturasOutubro,
+      charges: [{ ...seguro(new Date()), date: null }],
+      startsAtZero: true,
+    });
+
+    expect(result.totalApplied).toBe(0);
+  });
+});

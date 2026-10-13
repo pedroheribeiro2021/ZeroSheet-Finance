@@ -5,14 +5,11 @@ import { createTransaction } from '@/core/services/transaction.service';
 import { getCards } from '@/core/services/card.service';
 import { DBCard } from '@/core/types/database';
 import { parseCurrencyInput, sanitizeAmountInput } from '@/core/utils/number';
-import {
-  EXPENSE_CATEGORIES,
-  INCOME_CATEGORIES,
-  RESERVE_CATEGORIES,
-} from '@/core/constants/categories';
+import { RESERVE_CATEGORIES } from '@/core/constants/categories';
 import { useToast } from '@/components/ui/ToastProvider';
 import { resolveSplitAmount } from '@/core/engine/split';
 import { recurringUntilFromMonths } from '@/core/engine/recurrence';
+import CategoryField from './CategoryField';
 
 type Kind = 'income' | 'expense' | 'reserve';
 
@@ -49,8 +46,9 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
    */
   const [isSplit, setIsSplit] = useState(false);
 
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [customCategory, setCustomCategory] = useState('');
+  const [category, setCategory] = useState('');
+  /** Remonta o campo de categoria ao salvar: limpa e recarrega a lista. */
+  const [categoryFieldKey, setCategoryFieldKey] = useState(0);
 
   const [isFixed, setIsFixed] = useState(false);
   const [isProvision, setIsProvision] = useState(false);
@@ -64,24 +62,16 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
   const [recurrenceUntil, setRecurrenceUntil] = useState('');
   const [dueDay, setDueDay] = useState('');
 
-  const isCustom = selectedCategory === '__custom__';
-
   useEffect(() => {
     getCards()
       .then(setCards)
       .catch(() => setCards([]));
   }, []);
 
-  const categories =
-    kind === 'income'
-      ? INCOME_CATEGORIES
-      : kind === 'reserve'
-        ? RESERVE_CATEGORIES
-        : EXPENSE_CATEGORIES;
-
   const changeKind = (k: Kind) => {
     setKind(k);
-    setSelectedCategory(k === 'reserve' ? RESERVE_CATEGORIES[0] : '');
+    setCategory(k === 'reserve' ? RESERVE_CATEGORIES[0] : '');
+    setCategoryFieldKey((n) => n + 1);
     setIsFixed(false);
     setIsProvision(false);
     setIsReimbursement(false);
@@ -122,7 +112,7 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
         return;
       }
 
-      const finalCategory = isCustom ? customCategory : selectedCategory;
+      const finalCategory = category.trim();
 
       if (!finalCategory) {
         showToast('Informe uma categoria', 'error');
@@ -151,7 +141,11 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
         is_recurring: isRecurring,
         is_provision: kind === 'expense' && isProvision,
         is_reserve: kind === 'reserve',
-        is_reimbursement: kind === 'income' && isReimbursement,
+        // Despesa reembolsável só faz sentido no cartão: é a fatura que mede o
+        // gasto livre da semana, e é dele que ela precisa ser descontada.
+        is_reimbursement:
+          isReimbursement &&
+          (kind === 'income' || (kind === 'expense' && !!cardId)),
         recurring_until: computeRecurringUntil(),
         due_day: isRecurring && dueDay ? Number(dueDay) : null,
         description: description || null,
@@ -162,8 +156,8 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
       setDescription('');
       setCardId('');
       setAmount('');
-      setSelectedCategory(kind === 'reserve' ? RESERVE_CATEGORIES[0] : '');
-      setCustomCategory('');
+      setCategory(kind === 'reserve' ? RESERVE_CATEGORIES[0] : '');
+      setCategoryFieldKey((n) => n + 1);
       setIsFixed(false);
       setIsProvision(false);
       setIsReimbursement(false);
@@ -250,21 +244,12 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
       */}
 
       {/* CATEGORIA */}
-      <select
-        value={selectedCategory}
-        onChange={(e) => setSelectedCategory(e.target.value)}
-        className="field"
-      >
-        <option value="">Selecione uma categoria</option>
-
-        {categories.map((cat) => (
-          <option key={cat} value={cat}>
-            {cat}
-          </option>
-        ))}
-
-        <option value="__custom__">Outra...</option>
-      </select>
+      <CategoryField
+        key={`${kind}-${categoryFieldKey}`}
+        kind={kind}
+        value={category}
+        onChange={setCategory}
+      />
 
       {kind === 'expense' && cards.length > 0 && (
         <label className="grid gap-1 text-sm text-zinc-400">
@@ -282,16 +267,6 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
             ))}
           </select>
         </label>
-      )}
-
-      {isCustom && (
-        <input
-          type="text"
-          placeholder="Digite a categoria"
-          value={customCategory}
-          onChange={(e) => setCustomCategory(e.target.value)}
-          className="field"
-        />
       )}
 
       {/* FLAGS */}
@@ -328,6 +303,18 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
             />
             Reembolso (soma nas entradas — só não é usado para descobrir o dia
             do salário)
+          </label>
+        )}
+
+        {kind === 'expense' && cardId && (
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={isReimbursement}
+              onChange={(e) => setIsReimbursement(e.target.checked)}
+            />
+            Será reembolsada (não conta como gasto livre da semana — lance o
+            reembolso como entrada)
           </label>
         )}
 

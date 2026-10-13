@@ -2,6 +2,7 @@
 import { getCurrentUser } from './auth.service';
 import { supabase } from '@/lib/supabase';
 import { isRecurrenceActive } from '@/core/engine/recurrence';
+import type { UsedCategory } from '@/core/engine/categories';
 
 export async function getTransactions(monthId: string) {
   const user = await getCurrentUser();
@@ -20,6 +21,29 @@ export async function getTransactions(monthId: string) {
   if (error) throw error;
 
   return data;
+}
+
+/**
+ * Categorias que o usuário já usou, em todos os meses, da mais recente para a
+ * mais antiga — é daqui que saem as categorias próprias dele no seletor (ver
+ * `core/engine/categories.ts`).
+ */
+export async function getUsedCategories(): Promise<UsedCategory[]> {
+  const user = await getCurrentUser();
+
+  if (!user) {
+    throw new Error('Usuário não autenticado');
+  }
+
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('category, type, is_reserve')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+
+  return data ?? [];
 }
 
 export async function createTransaction(data: any) {

@@ -13,7 +13,7 @@ import { toCurrency } from '../utils/number';
  * acumulado da fatura naquele instante, e a diferença entre leituras
  * consecutivas é o quanto entrou no intervalo.
  *
- * Quatro regras de posicionamento, todas aprendidas de dados reais:
+ * Cinco regras de posicionamento, todas aprendidas de dados reais:
  *
  * 1. **O ciclo nasce zerado.** Quando a fatura fecha, a seguinte começa do
  *    zero. Se o app já vinha lendo o cartão no ciclo anterior, ele SABE que a
@@ -40,6 +40,16 @@ import { toCurrency } from '../utils/number';
  *    estourar o orçamento da categoria continua contando como gasto livre de
  *    verdade — senão o estouro ficaria invisível no acompanhamento semanal.
  *
+ * 5. **Despesa reembolsável entra na primeira leitura do dia da compra em
+ *    diante.** Compra no cartão que vai ser devolvida (seguro pago à vista e
+ *    coberto depois, por exemplo) não é gasto livre: o reembolso lançado como
+ *    entrada já anula o valor no Saldo do Mês. Diferente de provisão, a data
+ *    da compra sozinha não serve — o que põe o valor numa semana é a leitura
+ *    que o enxergou pela primeira vez. Compra de 10/10 com leituras em 06/10
+ *    e 13/10 só aparece no delta de 13/10; descontá-la na semana de 10/10
+ *    apagaria gasto real daquela semana e deixaria o seguro inteiro como
+ *    gasto livre na seguinte.
+ *
  * E uma trava contra mascarar gasto: o desconto nunca passa do quanto a fatura
  * de fato subiu na semana. O que não couber vira `unappliedCharges`, para a UI
  * conseguir dizer que descontou menos do que devia em vez de exibir um R$ 0,00
@@ -51,7 +61,11 @@ export type CycleReading = {
   read_at: string;
 };
 
-export type CycleChargeKind = 'installment' | 'subscription' | 'provision';
+export type CycleChargeKind =
+  | 'installment'
+  | 'subscription'
+  | 'provision'
+  | 'reimbursable';
 
 export type CycleCharge = {
   label: string;
@@ -63,7 +77,7 @@ export type CycleCharge = {
    */
   day?: number | null;
   /**
-   * Data da compra real, só para `provision` — quando o gasto de uma
+   * Data da compra real, para `provision` e `reimbursable` — quando o gasto de uma
    * categoria já orçada (ex.: Gasolina, Mercado) foi lançado no cartão. Sem
    * dia fixo como assinatura nem virada única como parcela: é o dia em que o
    * usuário de fato gastou.
@@ -288,6 +302,18 @@ export function calculateCycleSpend(input: CycleSpendInput): CycleSpend {
       // Categoria provisionada: não tem dia fixo, vale a data real da compra.
       if (!charge.date) continue;
       when = charge.date;
+    } else if (charge.kind === 'reimbursable') {
+      // Regra 5: entra na primeira leitura do dia da compra em diante.
+      if (!charge.date) continue;
+      const day = startOfDay(charge.date).getTime();
+      const index = sorted.findIndex(
+        (r) => startOfDay(r.readAt).getTime() >= day,
+      );
+      // Nenhuma leitura viu a compra ainda: não há o que descontar.
+      if (index === -1) continue;
+      // Viu só na linha de base: o valor já está nela, nunca vira delta.
+      if (!input.startsAtZero && index === 0) continue;
+      when = sorted[index].readAt;
     } else {
       if (charge.day == null) continue;
       when = occurrenceInCycle(charge.day, input.cycle);

@@ -7,11 +7,7 @@ import { DBCard } from '@/core/types/database';
 import { parseCurrencyInput, sanitizeAmountInput } from '@/core/utils/number';
 import { useToast } from '@/components/ui/ToastProvider';
 import Modal from '@/components/ui/Modal';
-import {
-  EXPENSE_CATEGORIES,
-  INCOME_CATEGORIES,
-  RESERVE_CATEGORIES,
-} from '@/core/constants/categories';
+import CategoryField from '@/components/transactions/CategoryField';
 
 type Kind = 'income' | 'expense' | 'reserve';
 
@@ -53,17 +49,6 @@ export default function EditTransactionModal({
     transaction.dueDay != null ? String(transaction.dueDay) : '',
   );
 
-  const allCategories = Array.from(
-    new Set([
-      ...(kind === 'income'
-        ? INCOME_CATEGORIES
-        : kind === 'reserve'
-          ? RESERVE_CATEGORIES
-          : EXPENSE_CATEGORIES),
-      category,
-    ]),
-  ).filter(Boolean);
-
   const handleSave = async () => {
     try {
       const parsedAmount = parseCurrencyInput(amount);
@@ -73,15 +58,23 @@ export default function EditTransactionModal({
         return;
       }
 
+      if (!category.trim()) {
+        showToast('Informe uma categoria', 'error');
+        return;
+      }
+
       await updateTransaction(transaction.id, {
         amount: Math.abs(parsedAmount),
-        category,
+        category: category.trim(),
         type: kind === 'reserve' ? 'expense' : kind,
         is_fixed: kind === 'expense' && isFixed,
         is_recurring: isRecurring,
         is_provision: kind === 'expense' && isProvision,
         is_reserve: kind === 'reserve',
-        is_reimbursement: kind === 'income' && isReimbursement,
+        // Despesa reembolsável só faz sentido no cartão (ver TransactionForm).
+        is_reimbursement:
+          isReimbursement &&
+          (kind === 'income' || (kind === 'expense' && !!cardId)),
         recurring_until:
           isRecurring && recurringUntil ? `${recurringUntil}-01` : null,
         due_day: isRecurring && dueDay ? Number(dueDay) : null,
@@ -126,26 +119,11 @@ export default function EditTransactionModal({
           className="field"
         />
 
-        <select
-          value={allCategories.includes(category) ? category : '__custom__'}
-          onChange={(e) => {
-            if (e.target.value !== '__custom__') setCategory(e.target.value);
-          }}
-          className="field"
-        >
-          {allCategories.map((cat) => (
-            <option key={cat} value={cat}>
-              {cat}
-            </option>
-          ))}
-          <option value="__custom__">Outra...</option>
-        </select>
-
-        <input
+        <CategoryField
+          key={kind}
+          kind={kind}
           value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          placeholder="Categoria"
-          className="field"
+          onChange={setCategory}
         />
 
         {kind === 'expense' && cards.length > 0 && (
@@ -198,6 +176,18 @@ export default function EditTransactionModal({
               />
               Reembolso (soma nas entradas — só não é usado para descobrir o dia
               do salário)
+            </label>
+          )}
+
+          {kind === 'expense' && cardId && (
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={isReimbursement}
+                onChange={(e) => setIsReimbursement(e.target.checked)}
+              />
+              Será reembolsada (não conta como gasto livre da semana — lance o
+              reembolso como entrada)
             </label>
           )}
 

@@ -12,6 +12,48 @@ indicado entre parênteses). Itens novos vão sempre no topo da seção
       lançando os gastos reais na mesma categoria (o envelope abate sozinho).
 - [ ] Ordenação por arrastar (drag-and-drop) na lista de transações — por ora
       há seletor de ordenação (entradas primeiro/recentes/valor/categoria).
+- [ ] Permitir "apagar" uma categoria própria do seletor — hoje ela some só
+      recategorizando os lançamentos que a usam (ver 2026-10-13).
+
+## Feitos em 2026-10-13 — Despesa reembolsável + categorias do usuário
+
+**Despesa reembolsável fora do gasto livre.** Caso real: seguro do carro
+(R$ 2.510,61) pago à vista no C6 em 10/10 e reembolsado. Lançado como
+parcelamento 1x, ia para a semana 1 (parcela entra na virada do ciclo,
+regra 2 de `cycleSpend.ts`), mas a fatura só o mostrou na leitura de 13/10
+(semana 2): a trava limitou o desconto ao delta da semana 1 (902,25 → R$ 0,00
+de gasto livre) e a semana 2 ficou com o seguro inteiro como gasto livre
+(2.856,36 em vez de 345,75). O saldo do mês já estava certo — despesa e
+reembolso se anulam em `calculateSummary`.
+- `is_reimbursement` agora vale também para **despesa no cartão**
+  ("Será reembolsada" no formulário e no modal de edição; badge
+  "Reembolsável" na lista). Sem cartão a opção não aparece nem é gravada:
+  quem mede o gasto livre da semana é a fatura.
+- Novo tipo de cobrança `reimbursable` em `calculateCycleSpend` (regra 5):
+  entra na **primeira leitura do dia da compra em diante** — é a leitura
+  que põe o valor numa semana, não a data da compra. Compra que nenhuma
+  leitura viu ainda, ou que já estava na linha de base, não é descontada.
+- Dashboard: despesa reembolsável sai das listas de assinatura e provisão
+  (não desconta duas vezes).
+- Testes: 5 casos novos em `tests/engine/cycle-spend.test.ts` com os números
+  reais de outubro.
+
+**Categorias do usuário.** O modal de edição mostrava o seletor e um campo de
+texto livre com o mesmo valor ao mesmo tempo; e a categoria criada em
+"Outra..." ("Mercado / Alimentação") tinha que ser digitada de novo todo mês.
+- `components/transactions/CategoryField.tsx`: campo único usado no
+  formulário e no modal. Texto livre só em "Outra... (criar categoria)";
+  categorias já usadas aparecem no grupo "Suas categorias".
+- Decisão: **sem tabela nova** — as categorias do usuário saem do próprio
+  histórico de transações (`getUsedCategories`, por `user_id`/RLS), em
+  `core/engine/categories.ts` (`categoryOptions`, testado). Usou uma vez,
+  aparece dali em diante, em qualquer mês, só para aquele usuário. Grafia que
+  difere da padrão só em acento/maiúscula não vira categoria nova; entre
+  grafias da mesma categoria vale a mais recente.
+
+**Ajuste de dados (feito em 2026-10-13, com aval do usuário):** parcelamento
+"Seguro Prius" apagado e relançado como despesa no C6 (categoria "Seguro",
+10/10, `is_reimbursement = true`). O reembolso de entrada ficou como estava.
 
 ## Feitos em 2026-07-14 — Semana do ciclo zerando por cobrança futura ainda não lançada
 
