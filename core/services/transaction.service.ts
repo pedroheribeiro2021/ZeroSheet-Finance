@@ -167,6 +167,7 @@ export async function copyRecurringTransactions(
     is_provision: t.is_provision,
     is_reimbursement: t.is_reimbursement ?? false,
     is_reserve: t.is_reserve ?? false,
+    is_reserve_funded: t.is_reserve_funded ?? false,
     due_day: t.due_day ?? null,
     recurring_until: t.recurring_until ?? null,
     card: t.card ?? null,

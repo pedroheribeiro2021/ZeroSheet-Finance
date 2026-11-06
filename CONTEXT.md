@@ -83,6 +83,8 @@ tests/engine/, tests/services/  Vitest
   is_recurring, due_day, recurring_until, is_reimbursement, is_reserve, paid_at, skipped)
   - `is_reimbursement`: em **entrada** marca reembolso; em **despesa no cartão** marca
     compra que será reembolsada (fora do gasto livre da semana).
+  - `is_reserve_funded`: despesa **no cartão** paga com dinheiro de uma reserva (viagem,
+    por ex.) — está na fatura, mas não abate o Saldo do Mês nem o gasto livre da semana.
 - `cards` (name, slug, color, limit_amount, closing_day, due_day, is_primary)
 - `card_snapshots` (month_id, card_id, amount, paid_at) — fatura fechada do cartão no mês
 - `card_readings` (month_id, card_id, amount, read_at) — leituras parciais da fatura (gasto semanal)

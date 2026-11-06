@@ -25,6 +25,12 @@ export type Transaction = {
   /** Reserva/poupança: abate do total, mas separado de custos fixos. */
   isReserve?: boolean;
 
+  /**
+   * Despesa no cartão paga com dinheiro de uma reserva (ex.: viagem). Está na
+   * fatura, mas não abate o Saldo do Mês nem conta como gasto livre da semana.
+   */
+  isReserveFunded?: boolean;
+
   /** Vencimento do mês pago (controle de vencimento); null/undefined = não pago. */
   paidAt?: string | null;
 

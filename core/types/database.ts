@@ -29,6 +29,9 @@ export type DBTransaction = {
   /** Idem is_reimbursement: ainda não existe no schema (item 3). */
   is_reserve?: boolean | null;
 
+  /** Despesa no cartão paga com a reserva (migration 20261106_01). */
+  is_reserve_funded?: boolean | null;
+
   /** Controle de vencimento: quando o vencimento do mês foi pago; null = não pago. */
   paid_at?: string | null;
 

@@ -97,6 +97,7 @@ describe('copyRecurringTransactions', () => {
         is_provision: false,
         is_reimbursement: false,
         is_reserve: false,
+        is_reserve_funded: false,
         due_day: 10,
         recurring_until: null,
         card: null,

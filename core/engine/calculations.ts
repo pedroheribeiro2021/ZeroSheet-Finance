@@ -19,6 +19,13 @@ export function calculateSummary(
   let reimbursementIncome = 0;
   let reserveSpending = 0;
   /**
+   * Despesa no cartão paga com dinheiro da reserva (viagem, por ex.). Ela está
+   * dentro da fatura (snapshot ou `pendingCardSpending`) — o banco cobra —, mas
+   * quem a cobre é a reserva, não o mês. Volta para o total como contrapartida,
+   * igual ao reembolso faz com a passagem paga no cartão (ver bloco de income).
+   */
+  let reserveFundedSpending = 0;
+  /**
    * Gasto lançado num cartão que ainda NÃO tem fatura registrada nesta
    * competência. Não está dentro de nenhum snapshot, então precisa ser somado
    * ao `cardSpending` por fora — senão o dinheiro simplesmente sumia do mês.
@@ -115,6 +122,14 @@ export function calculateSummary(
     if (t.card) {
       if (!cardCoveredBySnapshot(t.card)) {
         pendingCardSpending += t.amount;
+      }
+
+      // Paga com reserva: conta na fatura (acima), volta como contrapartida no
+      // total e não consome envelope — uma passagem de viagem na categoria
+      // "Transporte" não pode comer a provisão de gasolina do mês.
+      if (t.isReserveFunded) {
+        reserveFundedSpending += t.amount;
+        continue;
       }
 
       // Provisão/reserva lançada em cartão é meta, não gasto realizado.
@@ -220,7 +235,8 @@ export function calculateSummary(
       cardSpending -
       envelopeSpending -
       installmentSpending -
-      reserveSpending,
+      reserveSpending +
+      reserveFundedSpending,
   );
 
   const weeklyBudgetBase =
@@ -246,6 +262,8 @@ export function calculateSummary(
     pendingCardSpending: toCurrency(pendingCardSpending),
     reimbursementIncome,
     reserveSpending,
+    /** Parte de `cardSpending` paga com a reserva — não abate o total. */
+    reserveFundedSpending: toCurrency(reserveFundedSpending),
 
     provisionPlanned: plannedTotal,
     provisionUsed: usedTotal,
