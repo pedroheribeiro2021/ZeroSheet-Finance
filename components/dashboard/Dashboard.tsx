@@ -601,6 +601,7 @@ export default function Dashboard() {
                 !t.isProvision &&
                 !t.isReserve &&
                 !t.isReimbursement &&
+                !t.isReserveFunded &&
                 t.card === primary.id &&
                 provisionPlanned.has(normalizeCategory(t.category)),
             )
@@ -622,6 +623,7 @@ export default function Dashboard() {
                 t.type === 'expense' &&
                 !t.isProvision &&
                 !t.isReimbursement &&
+                !t.isReserveFunded &&
                 t.card === primary.id &&
                 (t.isFixed || t.isRecurring),
             )
@@ -640,13 +642,16 @@ export default function Dashboard() {
             })),
           ...provisionCharges,
           // Compra no cartão que vai ser reembolsada: o reembolso (entrada) já
-          // anula o valor no saldo do mês, então ela não é gasto livre.
+          // anula o valor no saldo do mês, então ela não é gasto livre. Paga com
+          // reserva é o mesmo caso visto pela semana — o dinheiro não é do mês —
+          // e usa a mesma regra de posição (regra 5 de `cycleSpend.ts`): entra
+          // na primeira leitura que enxergou a compra.
           ...transactionsMapped
             .filter(
               (t) =>
                 !t.skipped &&
                 t.type === 'expense' &&
-                t.isReimbursement &&
+                (t.isReimbursement || t.isReserveFunded) &&
                 t.card === primary.id,
             )
             .map((t) => ({
@@ -1746,6 +1751,17 @@ export default function Dashboard() {
                 label: 'Reserva / Investimentos',
                 value: -summary.reserveSpending,
               },
+              // Só aparece quando existe: devolve ao saldo o que está nas
+              // faturas acima mas é pago com dinheiro da reserva (viagem etc.).
+              ...(summary.reserveFundedSpending > 0
+                ? [
+                    {
+                      label: 'Pago com reserva (dentro das faturas)',
+                      value: summary.reserveFundedSpending,
+                      note: 'Compras no cartão cobertas pela reserva — não saem do mês',
+                    },
+                  ]
+                : []),
             ].map((row) => (
               <div key={row.label} className="surface-row p-3 grid gap-1">
                 <div className="flex justify-between">

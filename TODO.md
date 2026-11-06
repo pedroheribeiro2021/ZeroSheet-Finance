@@ -15,6 +15,29 @@ indicado entre parênteses). Itens novos vão sempre no topo da seção
 - [ ] Permitir "apagar" uma categoria própria do seletor — hoje ela some só
       recategorizando os lançamentos que a usam (ver 2026-10-13).
 
+## Feitos em 2026-11-06 — Despesa no cartão paga com reserva (viagem)
+
+**Pedido:** separar os gastos de cartão da viagem a Foz/Argentina (nov/2026,
+controlados no app Rumo) dos gastos mensais. A viagem foi paga com dinheiro
+juntado antes numa reserva, então não pode pesar no Saldo do Mês nem no gasto
+livre da semana.
+
+**Decisão:** nova flag `is_reserve_funded` na despesa de cartão ("Paga com
+reserva"), em vez de reaproveitar "Será reembolsada" + entrada de reembolso
+casada. O saldo dá o mesmo (testado), mas com um lançamento só e sem inflar
+as entradas com um reembolso que não existiu.
+- `calculateSummary`: a compra continua em `cardSpending` (a fatura contém),
+  volta ao total como contrapartida (`reserveFundedSpending`) e não consome
+  envelope de provisão da mesma categoria.
+- Acompanhamento semanal: entra como cobrança conhecida com a mesma regra de
+  posição da reembolsável (regra 5 de `cycleSpend.ts`).
+- UI: opção no formulário e no modal de edição (só com cartão, exclusiva com
+  "Será reembolsada"), badge "Paga com reserva" na lista e linha própria no
+  detalhamento do Saldo do Mês.
+- Migration `20261106_01_transactions_reserve_funded.sql` — **aplicar antes do
+  merge** (o insert passa a mandar a coluna).
+- Testes: `tests/engine/paga-com-reserva.test.ts` (5 casos).
+
 ## Feitos em 2026-10-13 — Despesa reembolsável + categorias do usuário
 
 **Despesa reembolsável fora do gasto livre.** Caso real: seguro do carro

@@ -53,6 +53,7 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
   const [isFixed, setIsFixed] = useState(false);
   const [isProvision, setIsProvision] = useState(false);
   const [isReimbursement, setIsReimbursement] = useState(false);
+  const [isReserveFunded, setIsReserveFunded] = useState(false);
 
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurrenceMode, setRecurrenceMode] = useState<
@@ -75,6 +76,7 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
     setIsFixed(false);
     setIsProvision(false);
     setIsReimbursement(false);
+    setIsReserveFunded(false);
     setIsSplit(false);
   };
 
@@ -146,6 +148,9 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
         is_reimbursement:
           isReimbursement &&
           (kind === 'income' || (kind === 'expense' && !!cardId)),
+        // Paga com reserva também é só de cartão: fora do cartão a despesa
+        // simplesmente não deveria ser lançada no mês.
+        is_reserve_funded: isReserveFunded && kind === 'expense' && !!cardId,
         recurring_until: computeRecurringUntil(),
         due_day: isRecurring && dueDay ? Number(dueDay) : null,
         description: description || null,
@@ -161,6 +166,7 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
       setIsFixed(false);
       setIsProvision(false);
       setIsReimbursement(false);
+      setIsReserveFunded(false);
       setIsRecurring(false);
       setRecurrenceMode('forever');
       setRecurrenceUntil('');
@@ -311,10 +317,28 @@ export default function TransactionForm({ monthId, month, onCreated }: Props) {
             <input
               type="checkbox"
               checked={isReimbursement}
-              onChange={(e) => setIsReimbursement(e.target.checked)}
+              onChange={(e) => {
+                setIsReimbursement(e.target.checked);
+                if (e.target.checked) setIsReserveFunded(false);
+              }}
             />
             Será reembolsada (não conta como gasto livre da semana — lance o
             reembolso como entrada)
+          </label>
+        )}
+
+        {kind === 'expense' && cardId && (
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={isReserveFunded}
+              onChange={(e) => {
+                setIsReserveFunded(e.target.checked);
+                if (e.target.checked) setIsReimbursement(false);
+              }}
+            />
+            Paga com reserva (viagem etc. — fica na fatura, mas não abate o saldo
+            do mês nem o gasto livre da semana)
           </label>
         )}
 

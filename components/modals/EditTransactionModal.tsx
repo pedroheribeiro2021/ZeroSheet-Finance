@@ -41,6 +41,9 @@ export default function EditTransactionModal({
   const [isReimbursement, setIsReimbursement] = useState(
     !!transaction.isReimbursement,
   );
+  const [isReserveFunded, setIsReserveFunded] = useState(
+    !!transaction.isReserveFunded,
+  );
   const [isRecurring, setIsRecurring] = useState(!!transaction.isRecurring);
   const [recurringUntil, setRecurringUntil] = useState(
     transaction.recurringUntil ? transaction.recurringUntil.slice(0, 7) : '',
@@ -75,6 +78,9 @@ export default function EditTransactionModal({
         is_reimbursement:
           isReimbursement &&
           (kind === 'income' || (kind === 'expense' && !!cardId)),
+        // Paga com reserva também é só de cartão: fora do cartão a despesa
+        // simplesmente não deveria ser lançada no mês.
+        is_reserve_funded: isReserveFunded && kind === 'expense' && !!cardId,
         recurring_until:
           isRecurring && recurringUntil ? `${recurringUntil}-01` : null,
         due_day: isRecurring && dueDay ? Number(dueDay) : null,
@@ -184,10 +190,28 @@ export default function EditTransactionModal({
               <input
                 type="checkbox"
                 checked={isReimbursement}
-                onChange={(e) => setIsReimbursement(e.target.checked)}
+                onChange={(e) => {
+                  setIsReimbursement(e.target.checked);
+                  if (e.target.checked) setIsReserveFunded(false);
+                }}
               />
               Será reembolsada (não conta como gasto livre da semana — lance o
               reembolso como entrada)
+            </label>
+          )}
+
+          {kind === 'expense' && cardId && (
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={isReserveFunded}
+                onChange={(e) => {
+                  setIsReserveFunded(e.target.checked);
+                  if (e.target.checked) setIsReimbursement(false);
+                }}
+              />
+              Paga com reserva (viagem etc. — fica na fatura, mas não abate o saldo
+              do mês nem o gasto livre da semana)
             </label>
           )}
 

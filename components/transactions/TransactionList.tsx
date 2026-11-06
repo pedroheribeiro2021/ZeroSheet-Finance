@@ -43,6 +43,7 @@ function flagLabelsFor(t: Transaction): string[] {
   if (t.isReserve) labels.push('reserva');
   if (t.isReimbursement)
     labels.push(t.type === 'expense' ? 'reembolsavel' : 'reembolso');
+  if (t.isReserveFunded) labels.push('paga com reserva');
   if (t.isFixed) labels.push('fixo');
 
   return labels;
@@ -489,6 +490,11 @@ export default function TransactionList({
                   {t.isReimbursement && (
                     <span className="badge bg-zinc-600/30 text-zinc-300">
                       {t.type === 'expense' ? 'Reembolsável' : 'Reembolso'}
+                    </span>
+                  )}
+                  {t.isReserveFunded && (
+                    <span className="badge bg-sky-500/15 text-sky-400">
+                      Paga com reserva
                     </span>
                   )}
                   {t.isFixed && (
