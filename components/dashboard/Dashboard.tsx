@@ -152,6 +152,7 @@ const MODAL_TITLES: Record<string, string> = {
   fixed: 'Custos Fixos',
   subscriptions: 'Assinaturas',
   reserve: 'Reserva / Investimentos',
+  'reserve-funded': 'A cobrir com a reserva',
   balance: 'Saldo do Mês',
   'weekly-budget': 'Orçamento Semanal',
   cash: 'Caixa — até o salário e até o fim do mês',
@@ -257,6 +258,12 @@ export default function Dashboard() {
 
       case 'reserve':
         filtered = active.filter((t) => t.isReserve);
+        break;
+
+      case 'reserve-funded':
+        filtered = active
+          .filter((t) => t.type === 'expense' && t.isReserveFunded)
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
         break;
 
       default:
@@ -1319,6 +1326,19 @@ export default function Dashboard() {
           className="border-l-2 border-l-sky-500"
         />
 
+        {/* Só aparece no mês que tem compra paga com reserva: é o lembrete de
+            quanto resgatar antes de pagar a fatura. Sem isso o valor só
+            existia escondido no detalhamento do Saldo do Mês. */}
+        {summary.reserveFundedSpending > 0 && (
+          <Card
+            title="A cobrir com a reserva"
+            value={formatCurrency(summary.reserveFundedSpending)}
+            subtitle="Compras no cartão pagas com a reserva — resgate esse valor antes de pagar a fatura"
+            onClick={() => handleCardClick('reserve-funded')}
+            className="border-l-2 border-l-amber-500"
+          />
+        )}
+
         <Card
           title="Saldo do Mês"
           value={formatCurrency(summary.total)}
@@ -1937,6 +1957,44 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {selectedCard === 'reserve-funded' && (
+          <div className="grid gap-2">
+            {filteredTransactions.length === 0 && (
+              <p className="text-zinc-400">Nenhum registro</p>
+            )}
+            {filteredTransactions.map((t) => {
+              const card = cards.find((c) => c.id === t.card);
+              return (
+                <div
+                  key={t.id}
+                  className="surface-row p-3 flex justify-between items-center gap-3"
+                >
+                  <div className="min-w-0">
+                    <p className="text-white font-bold truncate">
+                      {t.description || t.category}
+                    </p>
+                    <p className="text-zinc-400 text-sm">
+                      {new Date(t.createdAt).toLocaleDateString('pt-BR')}
+                      {card ? ` • 💳 ${card.name}` : ''}
+                    </p>
+                  </div>
+                  <p className="text-white font-bold shrink-0">
+                    {formatCurrency(Number(t.amount))}
+                  </p>
+                </div>
+              );
+            })}
+            {filteredTransactions.length > 0 && (
+              <div className="surface-row p-3 flex justify-between">
+                <span className="text-white font-bold">Total a resgatar</span>
+                <span className="text-white font-bold">
+                  {formatCurrency(summary.reserveFundedSpending)}
+                </span>
+              </div>
+            )}
           </div>
         )}
 

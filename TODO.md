@@ -15,6 +15,13 @@ indicado entre parênteses). Itens novos vão sempre no topo da seção
 - [ ] Permitir "apagar" uma categoria própria do seletor — hoje ela some só
       recategorizando os lançamentos que a usam (ver 2026-10-13).
 
+## Feitos em 2026-11-07 — Card "A cobrir com a reserva" no dashboard
+
+O valor das compras "Paga com reserva" só aparecia no detalhamento do Saldo
+do Mês. Agora há um card próprio (só nos meses que têm essas compras) com o
+total a resgatar da reserva antes de pagar a fatura; clicando, lista cada
+compra com data e cartão. Usa `summary.reserveFundedSpending`, sem cálculo novo.
+
 ## Feitos em 2026-11-06 — Despesa no cartão paga com reserva (viagem)
 
 **Pedido:** separar os gastos de cartão da viagem a Foz/Argentina (nov/2026,
